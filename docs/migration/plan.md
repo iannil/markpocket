@@ -327,6 +327,7 @@ teable 里 markpocket **不做**：
 - features：`base / table / field / record`
 - 完整 CRUD（不含 view）+ 基础字段类型（text/number/boolean/date/select）
 - 简单 Grid 页面展示与编辑
+- Grid 交互向品类惯例靠拢（archived teable 作只读参考）；附"核心交互清单"（Enter/Tab 导航、双击/F2 编辑、Ctrl+C/V、Shift 多选、字段菜单等）作验收标准
 
 **Phase 2 — 视图（~2 周）**
 - features：`view`
@@ -359,7 +360,7 @@ teable 里 markpocket **不做**：
 
 1. ~~读时求值性能~~（已废止，见 ADR-0003 修订）：改为写时物化后，读路径不再有求值开销。残余风险：每次 cell 写入多 N 次同 record 求值，需在 Phase 4 对"高密度 expression 字段表"做写入吞吐基准。
 2. **Row-per-cell 行数膨胀**：1 万 record × 30 字段 = 30 万行 cells。在 <10 万 record 约束下仍可控，但若未来放宽量级，需重新评估（届时可加 record-level JSONB 回退）。
-3. **LWW 在弱网下的用户感知**：并发编辑同 Cell 时后写覆盖前写，可能让用户感到数据丢失。UI 需在冲突时提示。是否升级为字段级 OT 是 v2 议题。
+3. **LWW 在弱网下的用户感知**：并发编辑同 Cell 时后写覆盖前写。缓解：客户端在收到同 cell 时间戳更晚的 ChangeEvent（自己的写被覆盖）时，对该格瞬时高亮 + 一次性 toast"你的编辑被 X 覆盖"；无 modal、无合并 UI（LWW 不合并）。是否升级为字段级 OT 是 v2 议题。
 4. ~~better-auth 与 Next.js App Router 兼容性~~（已查证 2026-06-30，基本消险）：better-auth 对 App Router / RSC / Server Actions 是**一等支持**——`/api/auth/[...all]` handler、RSC 与 server action 内 `auth.api.getSession`、`nextCookies` 插件处理 server action 写 cookie、Next.js 16 proxy 兼容。Phase 0 仅需常规联通验证，非技术风险。**原备选 Lucia 已失效**（v3 于 2025-03 官方废弃、npm 不再维护；社区推荐的继任者正是 better-auth）。故 v1 不设 fallback；若将来真要换，候选为 Auth.js（NextAuth v5）或托管型（Clerk / WorkOS）。
 5. ~~Link 字段完整性~~（已解决，见设计要点 8）：删除被引用 record 时**级联清空**引用方 cell 的死 id + 写历史。策略统一适用于 link / select-option / user。
-6. **teable UI/交互的复用**：本方案默认全新 UI。若产品上要求"用起来像 teable"，需在 Phase 1 前对齐 UX 期望。
+6. ~~teable UI/交互的复用~~（已解决）：走**品类惯例 + teable 只读参考**——核心编辑语法（Grid 单元格编辑 / 键盘导航 / 字段配置 / 视图切换 / 表达式栏）向已收敛的品类标准（Airtable/teable/Smartsheet）靠拢；UI 外壳、被砍功能面、渲染层（DOM/SVG，非 teable 的 canvas）markpocket 自定。archived teable 前端作**只读交互参考**（抄交互不抄代码，不违背 §6）。Phase 1 Grid 需附"核心交互清单"作验收标准。
