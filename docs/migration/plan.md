@@ -139,7 +139,19 @@ fields(
 
 -- 视图（同一 table 的不同呈现）
 views(id, table_id, type, name, options JSONB, order_index)
--- options 内含 filter / sort / group / hiddenFields / columnWidth 等
+-- options AST（Notion/Airtable 式）：
+--   filter:  { op:"and"|"or", conditions:[ {fieldId,operator,operand} | {op,conditions:[...]} ] }
+--   sort:    [ {fieldId, direction:"asc"|"desc"} ]   -- 多键依次
+--   group:   [ {fieldId} ]                            -- 多级分组
+--   hiddenFields: [fieldId];  columnWidth: {fieldId: px}
+-- 操作符按 type：text/long-text→equals|contains|startsWith|empty|notEmpty；
+--   number→=|!=|>|<|>=|<=|empty|notEmpty；boolean→is(true|false)；
+--   date→=|before|after|between|empty|notEmpty；
+--   single/multi-select→anyOf|noneOf|empty|notEmpty(operand=option id)；
+--   user→is|empty|notEmpty(operand=user id)；
+--   link→contains|empty|notEmpty(operand=record id，走 GIN)；
+--   expression→沿用其结果类型操作符；{__error} 哨兵不匹配值过滤、排序归一组。
+-- 执行：filter/sort 由查询路径 SQL 阶段一承担（AST→cells 上的 WHERE/ORDER BY）。
 
 -- 记录（瘦行）
 records(id, table_id, created_at, updated_at, created_by, updated_by)
@@ -149,13 +161,21 @@ cells(
   id,
   record_id,
   field_id,
-  value          JSONB,         -- 类型相关：text→string、number→number、
-                                -- multi-select→string[]、link→recordId[]…
+  value          JSONB,         -- 按 fields.type 分形（详见设计要点 6）：
+                                -- text/long-text→string；number→number(float64，
+                                --   显示精度由 options.precision/scale 控)；boolean→boolean；
+                                -- date→ISO 8601 string(TZ-aware instant 或 naive YYYY-MM-DD，
+                                --   由 options.includeTime 区分)；
+                                -- single-select→option id(string)；multi-select→option id[](有序)；
+                                -- attachment→attachment id[](引用 attachments 表)；
+                                -- user→user id(string)；link→record id[](有序，单一事实源)；
+                                -- expression→结果原生值(number/string/boolean/…) 或 {__error:string} 哨兵
   updated_at,
   UNIQUE(record_id, field_id)
 )
 CREATE INDEX ON cells(field_id) INCLUDE(value);
 CREATE INDEX ON cells(record_id);
+CREATE INDEX ON cells USING GIN (value);   -- 反向 link 查询（value @> '["rec_x"]'）；按需启用
 
 -- 字段级历史（追加写）
 cell_history(
@@ -171,23 +191,25 @@ attachments(
   uploaded_by, created_at
 )
 
--- 链接（反向查询用；正向值存在 cells.value 的 recordId 数组里）
-links(
-  from_field_id, from_record_id, to_record_id,
-  PRIMARY KEY(from_field_id, from_record_id, to_record_id)
-)
+-- 反向 link 查询不设独立表：link 值单一事实源在 cells.value 的 recordId[]，
+-- 反查靠 cells.value 的 GIN 包含索引。详见设计要点 7。
 
 -- 权限
 base_members(base_id, user_id, role)   -- role: owner|editor|viewer
 base_shares(id, base_id, view_id, mode, token, expires_at)
 ```
 
-**设计要点**：
+**设计要点**（查询/完整性操作契约详见 ADR-0005）：
 
 1. **Row-per-cell 而非 row-per-record**：每个 Cell 单独一行，使字段级历史天然成为 cells 变更的旁路表；按字段筛选/索引也直接。代价是行数 = records × fields，但单表 <10 万行约束下完全可接受。
 2. **JSONB `value`**：类型由 `fields.type` 决定，应用层做序列化/校验（zod）。查询特定字段值用 `cells.value->>'x'` 或专门的 GIN 索引，仅在确有查询需求时加。
 3. **不使用动态 DDL**：彻底消除 teable 的 schema 同步、`db-data-prisma`、aggregator。
 4. **Link 不引入外键约束**：跨表引用完整性由应用层校验（避免删除被引用 record 时的级联复杂度）。
+5. **空 Cell = 无行**：未赋值的 Cell 在 `cells` 表里不存在行（absence = empty），稀疏数据不占空行，直接服务于"<10 万行"约束。清空 = `DELETE` cell 行，但在同事务内先追加一行 `cell_history(old_value, new_value=null)`。建 record 时：field 有非空 default 才写带 default 的 cell 行，否则无行；空集合（multi-select / link）同样以无行表示空。
+6. **字段值形态（value schema）**：见 `cells.value` 注释。关键决策：number 存 float64 + `options.precision/scale` 控显示精度（金额级精确升 string 再做）；date 存 ISO 8601（TZ-aware instant 或 naive `YYYY-MM-DD`，由 `options.includeTime` 区分）；single/multi-select 按 option id（稳定，改名不断，改名只动 `field.options` 不动 cells）；multi-select/attachment/link 为有序 id 数组。
+7. **Link 单一事实源**：link 字段值**只**存在 `cells.value` 的 `recordId[]`，**不设独立 `links` 表**。反向查询（"谁引用了 rec_x"）靠 `cells.value` 上的 GIN 包含索引（`WHERE value @> '["rec_x"]'`）。代价：GIN 须为 JSONB 数组建索引；收益：无双写同步、单一事实源。性能不济时再加派生索引表（纯加法，不破坏数据）。
+8. **引用完整性策略（级联清空）**：link 目标 record、select option、被引用 user 被删时，统一**级联清空**引用方 cell 中的死 id（同事务反查并移除；数组空则遵循要点 5 删行），各写一行 `cell_history`。不阻止删除、不留墓碑；历史兜底信息不丢。link 反查用要点 7 的 GIN 索引；select 反查按 `field_id` 过滤；user 字段选择器限定为 `base_members` 成员，级联清空为兜底。
+9. **View 查询语义**：filter 支持**嵌套 AND/OR**（递归组），非扁平。sort/group 在 v1 **不支持 link 字段**（按 link 数组排序语义模糊，实为 Lookup/Rollup，v2）；filter by link（contains/empty）支持，走要点 7 的 GIN。group by multi-select 支持（按 option 分组有意义）。
 
 ## 6. teable → markpocket 模块映射
 
@@ -222,27 +244,27 @@ base_shares(id, base_id, view_id, mode, token, expires_at)
 
 ## 7. Expression Field 策略
 
-**目标**：用户能在表里写 `单价 * 数量` 这类计算字段，但**不引入 teable 式依赖图与级联重算**。
+**目标**：用户能在表里写 `单价 * 数量` 这类计算字段，但**不引入 teable 式依赖图与跨 record 级联重算**。详见 ADR-0003。
 
 **方案**：
 
-- **存储**：Expression Field 的 `fields.options = { expression: "单价 * 数量", dependsOn: ["fld_x", "fld_y"] }`。**不**预存计算结果到 cells（避免重算一致性）。
-- **求值时机**：**读取时求值**（read-time eval）。查询 record 时，若含 Expression Field，服务端拉取依赖 Cell 的值，调用表达式库求值后注入响应。
-  - 备选：**写入时求值**（write-time），依赖 Cell 写入触发重算。本方案不选，因为它需要事件链，破坏"无级联"原则。
-- **求值库**：优先 `@odoo/yaml-expression` / `hot-formula-parser` / `formula-parser` 之一；若需 JS 函数（SUM/IF/DATE），用 `isolated-vm` 跑受控 JS 子集。**禁止自研 DSL parser。**
-- **跨表引用**：v1 **不支持**（即表达式只能引用本 record 内字段）。跨表聚合（SUM 另一张表的字段）= Rollup，推迟 v2。
-- **依赖循环**：因无跨字段链式，仅在 Expression 依赖的 Field 被删除时校验报错。
+- **存储与求值时机**：**写时求值（同 record 内重算）**。Expression Field 的 `fields.options = { expression: "{fld_x} * {fld_y}", dependsOn: ["fld_x", "fld_y"] }`（用户在编辑器看到的是 `单价 * 数量` 的 chip 形式，存储为 token-canonical）；写入同一 record 的任一 Cell 时，在同一事务内重算该 record 的所有 Expression Field，结果物化到 `cells.value`。
+  - 关键约束：表达式**只能引用本 record 内的基础字段**（不可引用另一个 Expression Field、不可跨表）。因此依赖闭包永远是"本行其它 cell"，无依赖图、无跨 record 级联。这也使 Expression 字段在 `cells` 表有行，View 的 SQL filter/sort/group 对其与普通字段统一生效（见 §5、View 查询两阶段路径）。
+- **求值库**：优先 `hot-formula-parser` / `formula-parser` 之一；若需 JS 函数（SUM/IF/DATE），用 `isolated-vm` 跑受控 JS 子集。**禁止自研 DSL parser。**
+- **跨表引用**：v1 **不支持**。跨表聚合（SUM 另一张表的字段）= Rollup，推迟 v2。
+- **依赖维护**：`dependsOn` 在字段保存时由 token 扫描一次性派生并存储；字段引用以 token-chip 形式编写（非自由文本），故抽取无歧义。当被依赖的基础 Field 被删除时校验报错。
 
-**显式放弃的 teable 能力**：依赖图、增量重算、跨表引用、公式字段类型推导、公式错误级联。
+**显式放弃的 teable 能力**：依赖图、增量重算、跨表引用、表达式套娃（引用另一 Expression）、公式字段类型推导、公式错误级联。
 
 ## 8. Soft Real-time 策略
 
-- **传输**：单一 Next.js 进程挂 WebSocket server（`ws` 库，或 `socket.io` 若需要房间抽象）。生产单实例足够；多实例时引入 Redis pubsub（v2）。
+- **传输**：单一 Next.js 进程挂 WebSocket server（`ws` 库，或 `socket.io` 若需要房间抽象）。**需 custom server**（ws 挂在 Node HTTP server 上，不能用默认 `next start`、不能 serverless；与 ADR-0004 Docker 长驻 Node 一致）。生产单实例足够；多实例时引入 Redis pubsub（v2）。
 - **频道**：每个 Base 一个频道 `base:{baseId}`。客户端进入 Base 时订阅。
 - **事件**：服务端在任何 record/cell/field/view 写入后，构造 `ChangeEvent`（type + 变更 payload）广播。
 - **冲突解决**：Cell 写入带客户端 `updatedAt` 时间戳；服务端用 **LWW**（服务端时间戳为准）。**不合并**、**不分叉**。客户端收到变更事件后直接覆盖本地状态。
 - **presence**（谁在线、光标在哪个 Cell）：可选，v1 仅"在线成员列表"，不做光标级。
-- **不实现**：op-log 持久化、断线重连的 op 回放（客户端断线后全量重拉当前 Base 状态）、并发同字段合并。
+- **结构变更并发**：field/table 删除走级联清空（§5 要点 8，事务内删 cell 行）；迟到的 cell 写若目标字段/记录已不存在，在 mutation 校验阶段拒绝并向客户端回推"字段/记录已删除"错误，不产生僵尸 cell。
+- **不实现**：op-log 持久化、断线重连的 op 回放（客户端断线后**重拉激活 view 的可见数据集 + 该 view 配置**——非整个 base；客户端本就只持有当前可见数据，故重拉天然有界）、并发同字段合并。
 
 ## 9. 字段级历史策略
 
@@ -256,6 +278,7 @@ base_shares(id, base_id, view_id, mode, token, expires_at)
 - **better-auth**：管理 users / sessions / email-password；通过插件支持 OIDC（对接企业 SSO）。
 - **三层角色**（base 粒度）：`owner`（含 base 设置、成员管理）/ `editor`（CRUD 数据与结构）/ `viewer`（只读）。
 - **公开分享**：`base_shares` 表发 token，支持 read-only 公开访问某个 view。无编辑分享。
+- **公开分享投影**：token 公开端点**严格 view 作用域**——服务端投影到该 view 的 filter∩可见字段，只返回结果数据；隐藏字段、其它 view、其它表、以及 filter AST 一律不外泄。token per-view、只读、可过期。
 - **不做**：行级 / 字段级权限（v1 不做）、组织级 SSO 强制。
 
 ## 11. 附件存储
@@ -264,7 +287,18 @@ base_shares(id, base_id, view_id, mode, token, expires_at)
 - 实现：`LocalStorage`（默认，写本地 FS，路径配置化，Docker 挂 volume）、`S3Storage`（v1 后期或按需）。
 - 上传走 tRPC mutation（v1 不做分片 / 直传签名 URL）。
 
-## 12. 显式丢弃清单（避免遗漏）
+## 12. 导入导出（CSV）
+
+v1 仅 CSV。value 形态见 §5 设计要点 6；CSV 是扁平文本，复杂类型按下列规则：
+
+- **标量直白**：text/long-text 原样（含 CSV 转义）；number 按 `options.precision` 输出 locale 无关小数串；boolean → `true`/`false`；date → ISO 8601 字符串。
+- **single-select**：导出 option **name**（人读）；导入按 name 匹配，不存在则自动建 option。
+- **multi-select**：`|`（或换行）定界拼接，避开 CSV 逗号冲突；导入按 name 匹配/建。
+- **link / attachment / user**：recordId / attachmentId / userId 在 CSV 中无意义且无法可靠反解——**导出尽力而为的人读渲染**（linked record 的主字段、附件文件名列表、user 邮箱），**导入忽略这些列**。
+
+**已知限制**：CSV 只保证标量数据可靠往返；关系/附件字段为"导出降级、导入跳过"。需要保真导入导出时走 v2 的 JSON 结构化格式。
+
+## 13. 显式丢弃清单（避免遗漏）
 
 teable 里 markpocket **不做**：
 
@@ -280,7 +314,7 @@ teable 里 markpocket **不做**：
 - 多语言界面（v1 仅英文）
 - OpenAPI / SDK 包对外发布
 
-## 13. 分阶段里程碑
+## 14. 分阶段里程碑
 
 每个阶段都是可独立交付的状态。
 
@@ -321,11 +355,11 @@ teable 里 markpocket **不做**：
 
 **v2 候选**（不在本方案）：Lookup / Rollup、多实例 Redis pubsub、Calendar 视图、S3 storage、i18n、行/字段级权限。
 
-## 14. 风险与开放问题
+## 15. 风险与开放问题
 
-1. **读时求值性能**：Expression Field 在大 record 集合上读时求值会放大查询成本。缓解：限制单次查询 record 数（分页）、对高频表达式缓存。需在 Phase 4 做基准测试。
+1. ~~读时求值性能~~（已废止，见 ADR-0003 修订）：改为写时物化后，读路径不再有求值开销。残余风险：每次 cell 写入多 N 次同 record 求值，需在 Phase 4 对"高密度 expression 字段表"做写入吞吐基准。
 2. **Row-per-cell 行数膨胀**：1 万 record × 30 字段 = 30 万行 cells。在 <10 万 record 约束下仍可控，但若未来放宽量级，需重新评估（届时可加 record-level JSONB 回退）。
 3. **LWW 在弱网下的用户感知**：并发编辑同 Cell 时后写覆盖前写，可能让用户感到数据丢失。UI 需在冲突时提示。是否升级为字段级 OT 是 v2 议题。
-4. **better-auth 与 Next.js App Router 兼容性**：better-auth 对 RSC 支持持续演进，Phase 0 需做技术验证；备选 Lucia v2。
-5. **Link 字段完整性**：删除被引用 record 时如何处理（清空 link / 阻止删除 / 软删）。需 Phase 5 确定策略。
+4. ~~better-auth 与 Next.js App Router 兼容性~~（已查证 2026-06-30，基本消险）：better-auth 对 App Router / RSC / Server Actions 是**一等支持**——`/api/auth/[...all]` handler、RSC 与 server action 内 `auth.api.getSession`、`nextCookies` 插件处理 server action 写 cookie、Next.js 16 proxy 兼容。Phase 0 仅需常规联通验证，非技术风险。**原备选 Lucia 已失效**（v3 于 2025-03 官方废弃、npm 不再维护；社区推荐的继任者正是 better-auth）。故 v1 不设 fallback；若将来真要换，候选为 Auth.js（NextAuth v5）或托管型（Clerk / WorkOS）。
+5. ~~Link 字段完整性~~（已解决，见设计要点 8）：删除被引用 record 时**级联清空**引用方 cell 的死 id + 写历史。策略统一适用于 link / select-option / user。
 6. **teable UI/交互的复用**：本方案默认全新 UI。若产品上要求"用起来像 teable"，需在 Phase 1 前对齐 UX 期望。
