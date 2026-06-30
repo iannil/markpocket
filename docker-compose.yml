@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: markpocket-postgres
+    environment:
+      POSTGRES_USER: markpocket
+      POSTGRES_PASSWORD: markpocket_dev_password
+      POSTGRES_DB: markpocket
+    ports:
+      # Host 5432 is taken by another project (hintcard-postgres); use 5433 on the host.
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U markpocket -d markpocket']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    container_name: markpocket-web
+    environment:
+      DATABASE_URL: postgresql://markpocket:markpocket_dev_password@postgres:5432/markpocket
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: http://localhost:3000
+      NODE_ENV: production
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

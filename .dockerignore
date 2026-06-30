@@ -1,0 +1,17 @@
+# 50MB teable archive — reference only, must never enter the image
+archived/
+
+**/node_modules/
+**/.next/
+**/dist/
+**/.turbo/
+.git/
+.gitignore
+
+# local env (compose injects real values)
+**/.env
+**/.env*.local
+
+*.log
+.DS_Store
+.playwright-mcp/
