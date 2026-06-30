@@ -21,10 +21,10 @@ export default function LoginPage() {
     const res = await authClient.signIn.email({ email, password });
     setLoading(false);
     if (res.error) {
-      setError(res.error.message ?? 'Sign in failed');
+      setError('邮箱或密码错误'); // generic message to avoid user enumeration
       return;
     }
-    router.push('/dashboard/todos');
+    router.push('/bases');
     router.refresh();
   }
 

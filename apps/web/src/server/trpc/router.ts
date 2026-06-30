@@ -1,10 +1,20 @@
 import { router } from './init';
 import { authRouter } from './routers/auth';
-import { todoRouter } from './routers/todo';
+import { baseRouter } from './routers/base';
+import { cellRouter } from './routers/cell';
+import { fieldRouter } from './routers/field';
+import { recordRouter } from './routers/record';
+import { tableRouter } from './routers/table';
+import { workspaceRouter } from './routers/workspace';
 
 export const appRouter = router({
   auth: authRouter,
-  todo: todoRouter,
+  workspace: workspaceRouter,
+  base: baseRouter,
+  table: tableRouter,
+  field: fieldRouter,
+  record: recordRouter,
+  cell: cellRouter,
 });
 
 export type AppRouter = typeof appRouter;

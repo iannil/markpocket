@@ -22,10 +22,10 @@ export default function RegisterPage() {
     const res = await authClient.signUp.email({ email, password, name });
     setLoading(false);
     if (res.error) {
-      setError(res.error.message ?? 'Registration failed');
+      setError('注册失败，请重试'); // generic; detailed errors logged server-side
       return;
     }
-    router.push('/dashboard/todos');
+    router.push('/bases');
     router.refresh();
   }
 
@@ -53,6 +53,7 @@ export default function RegisterPage() {
         <input
           type="password"
           required
+          minLength={8}
           placeholder="Password (min 8)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
