@@ -1,4 +1,4 @@
-import { count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm';
 
 import { cell, record, workspace } from '@/server/db/schema';
 import { db } from '@/server/db';
@@ -14,14 +14,26 @@ export async function ensureDefaultWorkspace() {
   return created;
 }
 
-// Two-stage query (ADR-0005 / Q1): SQL paginates record ids, then we batch-fetch
-// their cells and pivot to wide rows. Missing cell = empty (Q4: empty = no row).
-export async function listRecordsPivoted(tableId: string, offset = 0, limit = 100) {
+// Two-stage query (ADR-0005 / Q1): SQL paginates record ids with the view's
+// filter/sort injected as raw SQL fragments, then we batch-fetch cells and pivot.
+// Missing cell = empty (Q4: empty = no row).
+export async function listRecordsPivoted(
+  tableId: string,
+  opts: { where?: SQL | null; orderBy?: SQL | null },
+  offset = 0,
+  limit = 100,
+) {
+  const conds: SQL[] = [eq(record.tableId, tableId)];
+  if (opts.where) conds.push(opts.where);
+  const orderBys: SQL[] = [];
+  if (opts.orderBy) orderBys.push(opts.orderBy);
+  orderBys.push(desc(record.createdAt));
+
   const records = await db
     .select()
     .from(record)
-    .where(eq(record.tableId, tableId))
-    .orderBy(desc(record.createdAt))
+    .where(and(...conds))
+    .orderBy(...orderBys)
     .limit(limit)
     .offset(offset);
 
@@ -41,7 +53,12 @@ export async function listRecordsPivoted(tableId: string, offset = 0, limit = 10
   return records.map((r) => ({ id: r.id, cells: cellsByRecord.get(r.id) ?? {} }));
 }
 
-export async function countRecords(tableId: string) {
-  const [row] = await db.select({ value: count() }).from(record).where(eq(record.tableId, tableId));
+export async function countRecords(tableId: string, where?: SQL | null) {
+  const conds: SQL[] = [eq(record.tableId, tableId)];
+  if (where) conds.push(where);
+  const [row] = await db
+    .select({ value: count() })
+    .from(record)
+    .where(and(...conds));
   return row?.value ?? 0;
 }

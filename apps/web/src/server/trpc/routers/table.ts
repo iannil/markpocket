@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { table } from '../../db/schema';
+import { table, view } from '../../db/schema';
 import { db } from '../../db';
 import { protectedProcedure, router } from '../init';
 
@@ -15,11 +15,20 @@ export const tableRouter = router({
   create: protectedProcedure
     .input(z.object({ baseId: z.string(), name: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      const [row] = await db
-        .insert(table)
-        .values({ id: randomUUID(), baseId: input.baseId, name: input.name })
-        .returning();
-      return row;
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(table)
+          .values({ id: randomUUID(), baseId: input.baseId, name: input.name })
+          .returning();
+        // Each new table ships with one default Grid view.
+        await tx.insert(view).values({
+          id: randomUUID(),
+          tableId: row!.id,
+          type: 'grid',
+          name: 'Grid',
+        });
+        return row;
+      });
     }),
 
   rename: protectedProcedure

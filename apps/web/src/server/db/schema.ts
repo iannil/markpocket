@@ -33,6 +33,18 @@ export const table = pgTable('table', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const view = pgTable('view', {
+  id: text('id').primaryKey(),
+  tableId: text('table_id')
+    .notNull()
+    .references(() => table.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'grid' (Form/Kanban/Gallery later)
+  name: text('name').notNull(),
+  options: jsonb('options').notNull().default({}),
+  orderIndex: integer('order_index').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const field = pgTable('field', {
   id: text('id').primaryKey(),
   tableId: text('table_id')
