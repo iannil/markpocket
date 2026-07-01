@@ -135,8 +135,10 @@ markpocket/
 │       ├── server/        # trpc · features · realtime · auth · db · storage
 │       └── components/    # UI 组件
 ├── docs/
-│   ├── migration/plan.md  # 迁移方案（teable → markpocket）
-│   └── adr/               # 架构决策记录（0001–0005）
+│   ├── STATUS.md           # 项目状态总览（v1 + 重设计进度）
+│   ├── migration/plan.md   # 迁移方案（teable → markpocket）
+│   ├── adr/                # 架构决策记录（0001–0005）
+│   └── redesign/           # Paper & Ink 设计 spec + 实施计划 + 进度
 ├── CONTEXT.md             # 领域术语表
 ├── docker-compose.yml     # 生产式 compose（web + postgres）
 ├── dev.sh                 # 一键开发环境
@@ -172,4 +174,10 @@ pnpm format:check        # prettier 检查
 
 ## 状态
 
-markpocket 处于 **v1 收尾** 阶段：Phase 0–7（骨架、数据、视图、实时、表达式、富字段、历史、CSV/分享/角色）均已落地。尚未发布到任何 registry，也没有打 tag release。在首个 release 之前，请把 `master` 分支视作 unstable。
+markpocket 处于 **v1 功能完成 + Paper & Ink 重设计中** 阶段。
+
+- ✅ **v1 核心功能（Phase 0–7）**：骨架、数据、视图、实时、表达式、富字段、历史、CSV/分享/角色 — 全部落地。
+- 🔄 **Paper & Ink 重设计**：App Shell（Topbar / Sidebar / Statusbar / Breadcrumb）已合并；Login、Bases 列表、Base 详情、Grid Editor UI 待重新换皮。
+- 📊 完整状态跟踪：[`docs/STATUS.md`](docs/STATUS.md)（项目全景）和 [`docs/redesign/status.md`](docs/redesign/status.md)（设计实施进度）。
+
+尚未发布到任何 registry，也没有打 tag release。在首个 release 之前，请把 `master` 分支视作 unstable。

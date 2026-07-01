@@ -1,0 +1,143 @@
+# Paper & Ink 重设计 — 实施进度跟踪
+
+> **最后更新**：2026-07-01
+> 本文件跟踪 `docs/redesign/2026-07-01-paper-ink-plan.md` 中 8 个 Phase、16+ Tasks 的实际完成状态。
+> SDD 进度参见 `.superpowers/sdd/progress.md`（逐步弃用中）。
+
+---
+
+## 总览
+
+| Phase | 内容 | 工期 | 状态 | 完成 Task / 总计 Task |
+|---|---|---|---|---|
+| 0 | 设计 Token 落地 | 0.5d | ✅ Complete | 1/1 |
+| 1 | App Shell | 1d | 🔄 In Progress | 6/9 |
+| 2 | Login / Register 重设计 | 0.5d | ⏳ Not Started | 0/1 |
+| 3 | Bases 列表重设计 | 0.5d | ⏳ Not Started | 0/1 |
+| 4 | Base 详情 + Tabs | 0.5d | ⏳ Not Started | 0/1 |
+| 5 | Grid Editor | 3d | ⏳ Not Started | 0/4 |
+| 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
+| 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
+| **合计** | | **7d** | **~22%** | **8/19** |
+
+---
+
+## Phase 0 · 设计 Token 落地 ✅
+
+| Step | 说明 | 文件 | 状态 | Commit |
+|---|---|---|---|---|
+| 0.1 | 落地 Paper & Ink token 与字体 | `globals.css`, `layout.tsx`, `package.json` | ✅ Done | `cfa83ab`, `c7ffb39` |
+
+**验收**：页面整体白底（Light-first），shadcn 默认按钮变墨黑底白字，typecheck + lint 通过。
+
+---
+
+## Phase 1 · App Shell 🔄
+
+Progress: **6/9 Tasks Complete**
+
+### Task 1.1 — sidebar 折叠 hook + Breadcrumb ✅
+- [x] `use-sidebar-collapsed.ts` — localStorage + mobile 1024px 自动折叠
+- [x] `BreadcrumbContext` — provider + setter
+- [x] `<Breadcrumb>` 组件
+
+### Task 1.2 — Topbar 组件 + 在线头像堆叠 ✅
+- [x] `<Topbar>` — 40px, breadcrumb + online avatars + user menu + ⌘K
+- [x] `<OnlineAvatars>` — 堆叠头像 + 绿点在线
+
+### Task 1.3 — Sidebar 组件 ✅
+- [x] `<Sidebar>` — 240px 展开 / 48px icon rail 折叠
+- [x] current base 高亮（2px ink 竖条 + bg-muted）
+
+### Task 1.4 — Statusbar 组件 ✅
+- [x] `<Statusbar>` — 24px, online count + saved time + LWW 冲突提示 + 键盘 hint
+
+### Task 1.5 — AppShell 接入 bases layout ✅
+- [x] `<AppShell>` — 三层 shell 容器
+- [x] 替换旧 sidebar-nav
+
+### Task 1.6 — Sidebar 接入真实 base 列表 ✅
+- [x] trpc base.list 数据接入
+- [x] 折叠/展开状态持久化
+
+### Task 1.7 — Login/Register 重设计 ❌ Pending
+- 居中卡片 360px，1px hairline
+- inline 错误（input 下方 ink 红字）
+- 演示账号（if `BETTER_AUTH_DEMO=1`）
+- **注意**：git 当前有 uncommitted changes 涉及 login/register page
+
+### Task 1.8 — Bases 列表重设计 ❌ Pending
+- 一行一个 base，72px 高
+- hover bg-muted
+- 空状态 + 排序
+
+### Task 1.9 — Base 详情 + Tabs ❌ Pending
+- redirect 逻辑（有 tables → 第一条 table 的 grid）
+- Tables / Members / Settings / History 四个 tab 外壳
+- Members / Settings / History 壳内容留 Phase 4 详细实现
+
+---
+
+## Phase 2 · Login / Register ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 2.1 | Login 页重设计 | `login/page.tsx` | ❌ Pending |
+| 2.2 | Register 页重设计 | `register/page.tsx` | ❌ Pending |
+
+---
+
+## Phase 3 · Bases 列表 ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 3.1 | Bases 列表重设计 | `bases/page.tsx` | ❌ Pending |
+
+---
+
+## Phase 4 · Base 详情 + Tabs ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 4.1 | Base 详情 redirect + Tabs 外壳 | `bases/[baseId]/page.tsx` | ❌ Pending |
+| 4.2 | Members / Settings / History 详细实现 | `bases/[baseId]/settings/page.tsx` | ❌ Pending |
+
+---
+
+## Phase 5 · Grid Editor ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 5.1 | ViewTabs + FilterBar + grid 外壳 | `view-tabs.tsx`, `filter-bar.tsx`, `chip.tsx`, `grid-editor.tsx` | ❌ Pending |
+| 5.2 | Cell 类型渲染（11 种字段） | `cell-renderers.tsx` | ❌ Pending |
+| 5.3 | Inline 编辑 + 键盘导航 | `grid-editor.tsx` | ❌ Pending |
+| 5.4 | Cell 历史 dock | `cell-history-dock.tsx` | ❌ Pending |
+
+**注意**：当前 `grid-editor.tsx`（596 行）是旧 Carbon & Citrus 风格，含完整数据加载与交互。Phase 5 需**保留数据加载逻辑**，只替换 JSX 外壳。
+
+---
+
+## Phase 6 · 公开分享页 ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 6.1 | 公开分享页重设计 | `share/[token]/page.tsx` | ❌ Pending |
+
+---
+
+## Phase 7 · 收尾 ⏳
+
+| Step | 说明 | 文件 | 状态 |
+|---|---|---|---|
+| 7.1 | 404/500/loading 页 | `not-found.tsx`, `error.tsx`, `loading.tsx` | ❌ Pending |
+| 7.2 | Toast 系统 | `toaster.tsx` | ❌ Pending |
+| 7.3 | ⌘K 占位 | `command-palette.tsx` | ❌ Pending |
+| 7.4 | 截图存档 | — | ❌ Pending |
+
+---
+
+## 已知阻塞项
+
+1. **Grid Editor (Phase 5) 是最大工作项**：原计划 3 天，分 4 步。grid-editor.tsx 596 行包含数据/状态/交互/渲染混在一起，重构需谨慎。
+2. **旧 view-config 组件未清理**：`view-tabs.tsx` / `filter-panel.tsx` / `sort-menu.tsx` 在 Phase 5 完成前仍需保留（grid-editor 依赖）。
+3. **Login/Register 页有 uncommitted changes**：`f84a0da` 和 `99218a7` 两个 fix commit 涉及 login/register 调整，需确认是否与 Paper & Ink Phase 2 的设计冲突。

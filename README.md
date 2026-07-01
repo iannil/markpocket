@@ -139,8 +139,10 @@ markpocket/
 │       ├── server/        # trpc · features · realtime · auth · db · storage
 │       └── components/    # UI
 ├── docs/
-│   ├── migration/plan.md  # The full rewrite plan (teable → markpocket)
-│   └── adr/               # Architecture Decision Records (0001–0005)
+│   ├── STATUS.md           # Project status overview (v1 + redesign progress)
+│   ├── migration/plan.md   # The full rewrite plan (teable → markpocket)
+│   ├── adr/                # Architecture Decision Records (0001–0005)
+│   └── redesign/           # Paper & Ink design spec + implementation plan + progress
 ├── CONTEXT.md             # Domain glossary (what words mean here)
 ├── docker-compose.yml     # web + postgres (production-style)
 ├── dev.sh                 # one-shot dev environment
@@ -176,4 +178,10 @@ PRs welcome. The project follows a strict "no premature abstraction" rule (only 
 
 ## Status
 
-markpocket is at **v1 wrap-up**: Phases 0–7 (skeleton, data, views, realtime, expressions, rich fields, history, CSV/share/roles) are landed. It is not yet published to a registry and has no tagged release. Treat the `master` branch as unstable until the first release.
+markpocket is at **v1 complete + Paper & Ink redesign in progress**.
+
+- ✅ **v1 Core (Phases 0–7)**: skeleton, data, views, realtime, expressions, rich fields, history, CSV/share/roles — all landed.
+- 🔄 **Paper & Ink redesign**: App Shell (Topbar / Sidebar / Statusbar / Breadcrumb) merged; Login, Bases List, Base Details, and Grid Editor UI ready for re-skinning.
+- 📊 Full status tracking: [`docs/STATUS.md`](docs/STATUS.md) (project-wide) and [`docs/redesign/status.md`](docs/redesign/status.md) (design implementation).
+
+It is not yet published to a registry and has no tagged release. Treat the `master` branch as unstable until the first release.
