@@ -13,6 +13,8 @@ export const FieldType = {
   Date: 'date',
   SingleSelect: 'single-select',
   Expression: 'expression',
+  MultiSelect: 'multi-select',
+  User: 'user',
 } as const;
 
 export type FieldType = (typeof FieldType)[keyof typeof FieldType];
@@ -24,6 +26,8 @@ export const FIELD_TYPES = [
   FieldType.Date,
   FieldType.SingleSelect,
   FieldType.Expression,
+  FieldType.MultiSelect,
+  FieldType.User,
 ] as const;
 
 // --- option schemas ---
@@ -52,6 +56,10 @@ const optionsSchemas = {
     expression: z.string(),
     dependsOn: z.array(z.string()),
   }),
+  [FieldType.MultiSelect]: z.object({
+    choices: z.array(selectOptionSchema),
+  }),
+  [FieldType.User]: z.object({}),
 } as const;
 
 export type FieldOptions = Record<string, unknown>;
@@ -71,6 +79,10 @@ export function defaultOptions(type: FieldType): FieldOptions {
       return { choices: [] as SelectOption[] };
     case FieldType.Expression:
       return { expression: '', dependsOn: [] };
+    case FieldType.MultiSelect:
+      return { choices: [] as SelectOption[] };
+    case FieldType.User:
+      return {};
     default:
       return {};
   }
@@ -78,7 +90,7 @@ export function defaultOptions(type: FieldType): FieldOptions {
 
 // --- cell value normalization (Q4 + Q5) ---
 
-export type CellValue = string | number | boolean;
+export type CellValue = string | number | boolean | string[];
 
 export type NormalizedCell = { empty: true } | { value: CellValue } | { error: string };
 
@@ -118,6 +130,20 @@ export function normalizeCellValue(
     }
     case FieldType.Expression:
       return { error: 'Expression fields are computed, not user-editable' };
+    case FieldType.MultiSelect: {
+      if (raw == null) return { empty: true };
+      const arr = Array.isArray(raw) ? raw.map(String) : raw === '' ? [] : [String(raw)];
+      if (arr.length === 0) return { empty: true };
+      const choices = (options.choices as SelectOption[] | undefined) ?? [];
+      if (!arr.every((id) => choices.some((c) => c.id === id))) {
+        return { error: 'Unknown select option' };
+      }
+      return { value: arr };
+    }
+    case FieldType.User: {
+      if (raw == null || raw === '') return { empty: true };
+      return { value: String(raw) };
+    }
   }
 }
 
@@ -130,4 +156,6 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; description: st
   [FieldType.Date]: { label: 'Date', description: 'Date or datetime' },
   [FieldType.SingleSelect]: { label: 'Select', description: 'Pick one from options' },
   [FieldType.Expression]: { label: 'Expression', description: 'Computed from other fields' },
+  [FieldType.MultiSelect]: { label: 'Multi-Select', description: 'Pick multiple from options' },
+  [FieldType.User]: { label: 'User', description: 'Reference to a user' },
 };

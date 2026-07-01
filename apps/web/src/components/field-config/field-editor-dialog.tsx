@@ -75,7 +75,7 @@ export function FieldEditorDialog({
     if (!name.trim()) return;
     if (editing && field) {
       rename.mutate({ id: field.id, name });
-      if (field.type === FieldType.SingleSelect) {
+      if (field.type === FieldType.SingleSelect || field.type === FieldType.MultiSelect) {
         updateOptions.mutate({ id: field.id, options: { choices } });
       } else if (field.type === FieldType.Expression) {
         updateOptions.mutate({
@@ -86,7 +86,7 @@ export function FieldEditorDialog({
       onOpenChange(false);
     } else {
       const options =
-        type === FieldType.SingleSelect
+        type === FieldType.SingleSelect || type === FieldType.MultiSelect
           ? { choices }
           : type === FieldType.Expression
             ? { expression, dependsOn: extractDependsOn(expression) }
@@ -115,7 +115,7 @@ export function FieldEditorDialog({
             <Label>Type</Label>
             <FieldTypePicker value={type} onChange={setType} disabled={editing} />
           </div>
-          {type === FieldType.SingleSelect && (
+          {(type === FieldType.SingleSelect || type === FieldType.MultiSelect) && (
             <div className="space-y-1">
               <Label>Options</Label>
               <SelectOptionsEditor choices={choices} onChange={setChoices} />

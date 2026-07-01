@@ -12,6 +12,7 @@ import { ViewFieldsMenu } from '@/components/view-config/view-fields-menu';
 import { ViewTabs } from '@/components/view-config/view-tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { formatNumberToString } from '@/lib/format-number';
 import { FieldType, type SelectOption } from '@/lib/field-types';
@@ -45,6 +46,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
   const utils = trpc.useUtils();
   const { data: fieldsData } = trpc.field.list.useQuery({ tableId });
   const { data: viewsData } = trpc.view.list.useQuery({ tableId });
+  const { data: usersData } = trpc.auth.listUsers.useQuery();
   const fields = (fieldsData ?? []) as FieldLike[];
   const views = (viewsData ?? []) as ViewLike[];
 
@@ -218,6 +220,67 @@ export function GridEditor({ tableId }: { tableId: string }) {
           <div className="flex h-7 w-full items-center px-2 text-left">
             {formatNumberToString(v as number, field.options as { precision?: number })}
           </div>
+        );
+      }
+      case FieldType.MultiSelect: {
+        const choices = (field.options.choices as SelectOption[] | undefined) ?? [];
+        const selectedIds = (value as string[] | undefined) ?? [];
+        const selectedNames = choices
+          .filter((c) => selectedIds.includes(c.id))
+          .map((c) => c.name)
+          .join(', ');
+        function toggle(id: string) {
+          const next = selectedIds.includes(id)
+            ? selectedIds.filter((x) => x !== id)
+            : [...selectedIds, id];
+          upsertCell.mutate({ recordId: rec.id, fieldId: field.id, value: next });
+        }
+        return (
+          <Popover>
+            <PopoverTrigger className="flex h-7 w-full items-center px-2 text-left text-sm">
+              {selectedNames || <span className="text-muted-foreground">—</span>}
+            </PopoverTrigger>
+            <PopoverContent className="w-56">
+              {choices.map((c) => (
+                <label key={c.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(c.id)}
+                    onChange={() => toggle(c.id)}
+                  />
+                  {c.name}
+                </label>
+              ))}
+            </PopoverContent>
+          </Popover>
+        );
+      }
+      case FieldType.User: {
+        const users = usersData ?? [];
+        const selected = users.find((u) => u.id === (value as string | undefined));
+        return (
+          <Select
+            value={(value as string | undefined) ?? ''}
+            onValueChange={(v) => {
+              if (!v) return;
+              upsertCell.mutate({ recordId: rec.id, fieldId: field.id, value: v });
+            }}
+          >
+            <SelectTrigger className="h-7 w-full">
+              {selected ? (
+                (selected.name ?? selected.email)
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name ?? u.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         );
       }
       case FieldType.Number:
