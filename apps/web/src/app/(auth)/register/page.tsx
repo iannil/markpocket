@@ -1,105 +1,101 @@
 'use client';
 
-import type { FormEvent } from 'react';
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (password !== confirm) {
+      setError('passwords do not match');
+      return;
+    }
     setLoading(true);
     const res = await authClient.signUp.email({ email, password, name });
     setLoading(false);
     if (res.error) {
-      setError('注册失败，请重试');
+      setError(res.error.message ?? 'Sign up failed');
       return;
     }
     router.push('/bases');
-    router.refresh();
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center">
-          <span className="text-3xl font-bold text-primary">◈</span>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight">markpocket</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Create your account</p>
-        </div>
-        <form onSubmit={onSubmit} className="space-y-4">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">
-              Name
-            </Label>
-            <Input
-              id="name"
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="border-border bg-card"
-              placeholder="Your name"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-              Email
-            </Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="border-border bg-card"
-              placeholder="you@example.com"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">
-              Password
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="border-border bg-card"
-              placeholder="At least 8 characters"
-            />
-          </div>
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Creating…' : 'Create account'}
-          </Button>
-        </form>
-        <p className="text-center text-sm text-muted-foreground">
-          Have an account?{' '}
-          <Link href="/login" className="font-medium text-primary hover:underline">
-            Sign in
-          </Link>
-        </p>
+    <main className="min-h-screen flex flex-col items-center justify-center px-6">
+      <div className="mb-8 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">markpocket</h1>
+        <p className="text-sm text-muted-foreground mt-1">the airtable you own</p>
       </div>
-    </div>
+
+      <form onSubmit={onSubmit} className="w-[360px] space-y-3">
+        <label className="block">
+          <span className="text-xs text-muted-foreground">name</span>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">email</span>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">password</span>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-muted-foreground">confirm password</span>
+          <input
+            type="password"
+            required
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+
+        {error && <p className="text-xs text-destructive">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full h-8 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+        >
+          {loading ? '···' : 'register'}
+        </button>
+      </form>
+
+      <p className="mt-6 text-xs text-muted-foreground">
+        already have an account?{' '}
+        <Link href="/login" className="text-foreground underline underline-offset-2">
+          sign in
+        </Link>
+      </p>
+    </main>
   );
 }
