@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { formatNumberToString } from '@/lib/format-number';
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { LinkCell } from './link-cell';
+import { CellHistory } from '@/components/history/cell-history';
 import { trpc } from '@/lib/trpc/client';
 import type { ViewOptions } from '@/lib/view-ast';
 
@@ -543,8 +544,11 @@ export function GridEditor({ tableId }: { tableId: string }) {
                       </button>
                     </td>
                     {displayedFields.map((f) => (
-                      <td key={f.id} className="border-b border-l p-0">
+                      <td key={f.id} className="group relative border-b border-l p-0">
                         {renderCell(rec, f)}
+                        <div className="absolute right-0 top-0">
+                          <CellHistory recordId={rec.id} fieldId={f.id} />
+                        </div>
                       </td>
                     ))}
                     <td className="border-b border-l" />
