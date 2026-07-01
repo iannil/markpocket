@@ -1,9 +1,9 @@
 'use client';
 
-import type { FormEvent } from 'react';
+import { Hash, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,47 +17,73 @@ export default function BasePage() {
   const create = trpc.table.create.useMutation({
     onSuccess: () => utils.table.list.invalidate({ baseId }),
   });
+  const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     create.mutate({ baseId, name: name.trim() });
+    setAdding(false);
     setName('');
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-bold">{base?.name ?? 'Base'}</h1>
+    <div className="flex-1 overflow-auto p-6">
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{base?.name ?? 'Base'}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {tables?.length ?? 0} table{(tables?.length ?? 0) !== 1 ? 's' : ''}
+          </p>
+        </div>
 
-      <form onSubmit={onSubmit} className="flex gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New table name"
-          className="max-w-xs"
-        />
-        <Button type="submit" disabled={create.isPending || !name.trim()}>
-          Create table
-        </Button>
-      </form>
-
-      <ul className="divide-y rounded border">
-        {tables?.map((t) => (
-          <li key={t.id}>
+        <div className="space-y-2">
+          {tables?.map((t) => (
             <Link
+              key={t.id}
               href={`/bases/${baseId}/tables/${t.id}`}
-              className="flex items-center justify-between p-3 hover:bg-muted/50"
+              className="group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-all hover:border-primary/40 hover:shadow-md hover:shadow-primary/5"
             >
-              <span>{t.name}</span>
-              <span className="text-sm text-muted-foreground">grid →</span>
+              <Hash className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
+              <span className="font-medium">{t.name}</span>
+              <span className="ml-auto text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                Open →
+              </span>
             </Link>
-          </li>
-        ))}
-        {tables?.length === 0 && (
-          <li className="p-4 text-sm text-muted-foreground">No tables yet.</li>
-        )}
-      </ul>
+          ))}
+          {tables?.length === 0 && !adding && (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              No tables yet. Create one below.
+            </div>
+          )}
+        </div>
+
+        <div>
+          {adding ? (
+            <form onSubmit={onSubmit} className="flex gap-2">
+              <Input
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => {
+                  setAdding(false);
+                  setName('');
+                }}
+                placeholder="Table name"
+                className="max-w-xs border-border bg-card"
+              />
+              <Button type="submit" size="sm">
+                Create
+              </Button>
+            </form>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New table
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

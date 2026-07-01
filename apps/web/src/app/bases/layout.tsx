@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { SidebarNav } from '@/components/sidebar-nav';
 import { api } from '@/server/trpc/caller';
 
 export default async function BasesLayout({ children }: { children: ReactNode }) {
@@ -12,16 +12,9 @@ export default async function BasesLayout({ children }: { children: ReactNode })
   }
 
   return (
-    <div className="min-h-screen">
-      <nav className="border-b p-4">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <Link href="/bases" className="font-bold">
-            markpocket
-          </Link>
-          <span className="text-sm text-muted-foreground">{session.user.email}</span>
-        </div>
-      </nav>
-      <main className="mx-auto max-w-5xl p-4">{children}</main>
+    <div className="flex h-screen overflow-hidden bg-background">
+      <SidebarNav />
+      <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

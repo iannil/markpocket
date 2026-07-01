@@ -17,9 +17,11 @@ export default function BaseLayout({ children }: { children: ReactNode }) {
   }, [baseId, subscribe, unsubscribe]);
 
   return (
-    <div className="space-y-2">
-      <PresenceBar baseId={baseId} />
-      {children}
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex items-center border-b border-border px-4 py-1.5">
+        <PresenceBar baseId={baseId} />
+      </div>
+      <div className="flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }

@@ -354,7 +354,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="h-full space-y-3 overflow-auto p-4">
       <ViewTabs
         tableId={tableId}
         views={views}
@@ -422,7 +422,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
       )}
 
       <div className="overflow-auto rounded border">
-        <table className="border-collapse text-sm">
+        <table className="markpocket-grid border-collapse text-sm">
           <colgroup>
             <col style={{ width: 40 }} />
             {displayedFields.map((f) => (

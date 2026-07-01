@@ -5,6 +5,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { authClient } from '@/lib/auth-client';
 
 export default function RegisterPage() {
@@ -22,7 +25,7 @@ export default function RegisterPage() {
     const res = await authClient.signUp.email({ email, password, name });
     setLoading(false);
     if (res.error) {
-      setError('注册失败，请重试'); // generic; detailed errors logged server-side
+      setError('注册失败，请重试');
       return;
     }
     router.push('/bases');
@@ -30,49 +33,73 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold">Create account</h1>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <input
-          type="text"
-          required
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full rounded border p-2"
-        />
-        <input
-          type="email"
-          required
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded border p-2"
-        />
-        <input
-          type="password"
-          required
-          minLength={8}
-          placeholder="Password (min 8)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded border p-2"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-black p-2 text-white disabled:opacity-50"
-        >
-          {loading ? 'Creating…' : 'Register'}
-        </button>
-        <p className="text-center text-sm">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm space-y-8">
+        <div className="text-center">
+          <span className="text-3xl font-bold text-primary">◈</span>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight">markpocket</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Create your account</p>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-4">
+          {error && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">
+              Name
+            </Label>
+            <Input
+              id="name"
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="border-border bg-card"
+              placeholder="Your name"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+              Email
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="border-border bg-card"
+              placeholder="you@example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">
+              Password
+            </Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="border-border bg-card"
+              placeholder="At least 8 characters"
+            />
+          </div>
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading ? 'Creating…' : 'Create account'}
+          </Button>
+        </form>
+        <p className="text-center text-sm text-muted-foreground">
           Have an account?{' '}
-          <Link href="/login" className="underline">
+          <Link href="/login" className="font-medium text-primary hover:underline">
             Sign in
           </Link>
         </p>
-      </form>
-    </main>
+      </div>
+    </div>
   );
 }
