@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { formatNumberToString } from '@/lib/format-number';
 import { FieldType, type SelectOption } from '@/lib/field-types';
+import { LinkCell } from './link-cell';
 import { trpc } from '@/lib/trpc/client';
 import type { ViewOptions } from '@/lib/view-ast';
 
@@ -281,6 +282,59 @@ export function GridEditor({ tableId }: { tableId: string }) {
               ))}
             </SelectContent>
           </Select>
+        );
+      }
+      case FieldType.Link: {
+        const targetTableId = field.options.targetTableId as string | undefined;
+        const linkedIds = (value as string[] | undefined) ?? [];
+        // Resolve linked record primary field values via a query hook
+        return (
+          <LinkCell
+            recordIds={linkedIds}
+            targetTableId={targetTableId}
+            onChange={(ids) =>
+              upsertCell.mutate({ recordId: rec.id, fieldId: field.id, value: ids })
+            }
+          />
+        );
+      }
+      case FieldType.Attachment: {
+        const attIds = (value as string[] | undefined) ?? [];
+        return (
+          <div className="flex h-7 items-center gap-1 px-2">
+            {attIds.map((id) => (
+              <a
+                key={id}
+                href={`/api/files/${id}`}
+                target="_blank"
+                className="rounded bg-secondary px-1.5 py-0.5 text-xs hover:bg-accent"
+              >
+                📎
+              </a>
+            ))}
+            <label className="cursor-pointer rounded px-1 text-xs text-muted-foreground hover:text-foreground">
+              +upload
+              <input
+                type="file"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                  const json = await res.json();
+                  if (json.id) {
+                    upsertCell.mutate({
+                      recordId: rec.id,
+                      fieldId: field.id,
+                      value: [...attIds, json.id],
+                    });
+                  }
+                }}
+              />
+            </label>
+          </div>
         );
       }
       case FieldType.Number:

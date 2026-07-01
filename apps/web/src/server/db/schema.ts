@@ -97,3 +97,13 @@ export const cellHistory = pgTable('cell_history', {
   changedBy: text('changed_by'),
   changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const attachment = pgTable('attachment', {
+  id: text('id').primaryKey(),
+  filename: text('filename').notNull(),
+  mime: text('mime').notNull(),
+  size: integer('size').notNull(),
+  storageKey: text('storage_key').notNull(),
+  uploadedBy: text('uploaded_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

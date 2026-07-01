@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { trpc } from '@/lib/trpc/client';
 import { extractDependsOn } from '@/lib/expression-eval';
 import { FieldType, type SelectOption } from '@/lib/field-types';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { FieldTypePicker } from './field-type-picker';
 import { SelectOptionsEditor } from './select-options-editor';
 
@@ -23,6 +24,43 @@ export interface FieldEditorTarget {
   name: string;
   type: FieldType;
   options: Record<string, unknown>;
+}
+
+function FieldEditorDialogTablePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [tables, setTables] = useState<Array<{ id: string; name: string }>>([]);
+  const basesQ = trpc.base.list.useQuery();
+  const tableListQ = trpc.table.list.useQuery(
+    { baseId: basesQ.data?.[0]?.id ?? '' },
+    { enabled: !!basesQ.data?.length },
+  );
+  // Flatten all tables from all bases — simple approach for v1
+  const allTables = tables.length > 0 ? tables : [];
+  if (basesQ.data && allTables.length === 0) {
+    // Lazy gather — for v1 just show first base's tables
+    if (tableListQ.data) {
+      setTables(tableListQ.data);
+    }
+  }
+  return (
+    <Select value={value} onValueChange={(v) => v && onChange(v)}>
+      <SelectTrigger className="w-full">
+        {allTables.find((t) => t.id === value)?.name ?? 'Select table'}
+      </SelectTrigger>
+      <SelectContent>
+        {allTables.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            {t.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function FieldEditorDialog({
@@ -82,6 +120,8 @@ export function FieldEditorDialog({
           id: field.id,
           options: { expression, dependsOn: extractDependsOn(expression) },
         });
+      } else if (field.type === FieldType.Link) {
+        updateOptions.mutate({ id: field.id, options: { targetTableId: expression } });
       }
       onOpenChange(false);
     } else {
@@ -90,7 +130,9 @@ export function FieldEditorDialog({
           ? { choices }
           : type === FieldType.Expression
             ? { expression, dependsOn: extractDependsOn(expression) }
-            : {};
+            : type === FieldType.Link
+              ? { targetTableId: expression }
+              : {};
       create.mutate({ tableId, name, type, options });
     }
   }
@@ -133,6 +175,15 @@ export function FieldEditorDialog({
               <p className="text-xs text-muted-foreground">
                 Use {'{fieldId}'} tokens. Arithmetic on number fields only.
               </p>
+            </div>
+          )}
+          {type === FieldType.Link && (
+            <div className="space-y-1">
+              <Label>Link to table</Label>
+              <FieldEditorDialogTablePicker
+                value={(field?.options as { targetTableId?: string })?.targetTableId ?? ''}
+                onChange={(id) => setExpression(id)}
+              />
             </div>
           )}
         </div>

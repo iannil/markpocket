@@ -15,6 +15,8 @@ export const FieldType = {
   Expression: 'expression',
   MultiSelect: 'multi-select',
   User: 'user',
+  Link: 'link',
+  Attachment: 'attachment',
 } as const;
 
 export type FieldType = (typeof FieldType)[keyof typeof FieldType];
@@ -28,6 +30,8 @@ export const FIELD_TYPES = [
   FieldType.Expression,
   FieldType.MultiSelect,
   FieldType.User,
+  FieldType.Link,
+  FieldType.Attachment,
 ] as const;
 
 // --- option schemas ---
@@ -60,6 +64,10 @@ const optionsSchemas = {
     choices: z.array(selectOptionSchema),
   }),
   [FieldType.User]: z.object({}),
+  [FieldType.Link]: z.object({
+    targetTableId: z.string(),
+  }),
+  [FieldType.Attachment]: z.object({}),
 } as const;
 
 export type FieldOptions = Record<string, unknown>;
@@ -82,6 +90,10 @@ export function defaultOptions(type: FieldType): FieldOptions {
     case FieldType.MultiSelect:
       return { choices: [] as SelectOption[] };
     case FieldType.User:
+      return {};
+    case FieldType.Link:
+      return { targetTableId: '' };
+    case FieldType.Attachment:
       return {};
     default:
       return {};
@@ -144,6 +156,18 @@ export function normalizeCellValue(
       if (raw == null || raw === '') return { empty: true };
       return { value: String(raw) };
     }
+    case FieldType.Link: {
+      if (raw == null) return { empty: true };
+      const arr = Array.isArray(raw) ? raw.map(String) : raw === '' ? [] : [String(raw)];
+      if (arr.length === 0) return { empty: true };
+      return { value: arr };
+    }
+    case FieldType.Attachment: {
+      if (raw == null) return { empty: true };
+      const arr = Array.isArray(raw) ? raw.map(String) : raw === '' ? [] : [String(raw)];
+      if (arr.length === 0) return { empty: true };
+      return { value: arr };
+    }
   }
 }
 
@@ -158,4 +182,6 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; description: st
   [FieldType.Expression]: { label: 'Expression', description: 'Computed from other fields' },
   [FieldType.MultiSelect]: { label: 'Multi-Select', description: 'Pick multiple from options' },
   [FieldType.User]: { label: 'User', description: 'Reference to a user' },
+  [FieldType.Link]: { label: 'Link', description: 'Link to another table' },
+  [FieldType.Attachment]: { label: 'Attachment', description: 'File upload' },
 };

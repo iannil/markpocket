@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { type FieldOptions } from '@/lib/field-types';
@@ -64,7 +64,26 @@ export const recordRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.string(), tableId: z.string() }))
     .mutation(async ({ input }) => {
-      await db.delete(record).where(eq(record.id, input.id));
+      // Q6 cascade-clear: find all link cells referencing this record id and remove it.
+      await db.transaction(async (tx) => {
+        // GIN scan: cells whose value (JSONB array) contains this record id.
+        const linked = await tx.execute(
+          sql`SELECT id, value FROM cell WHERE value @> ${JSON.stringify([input.id])}::jsonb`,
+        );
+        for (const row of linked as unknown as Array<{ id: string; value: unknown }>) {
+          const arr = Array.isArray(row.value) ? row.value : [];
+          const next = arr.filter((v: unknown) => v !== input.id);
+          if (next.length === 0) {
+            await tx.execute(sql`DELETE FROM cell WHERE id = ${row.id}`);
+          } else {
+            await tx.execute(
+              sql`UPDATE cell SET value = ${JSON.stringify(next)}::jsonb, updated_at = now() WHERE id = ${row.id}`,
+            );
+          }
+        }
+        // Delete the record (FK cascade clears its cells).
+        await tx.delete(record).where(eq(record.id, input.id));
+      });
       void publishTableChange(input.tableId);
       return { ok: true };
     }),
