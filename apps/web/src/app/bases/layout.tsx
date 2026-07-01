@@ -1,20 +1,32 @@
+// apps/web/src/app/bases/layout.tsx
 import { redirect } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { headers } from 'next/headers';
+import { AppShell } from '@/components/app-shell';
+import { auth } from '@/server/auth';
 
-import { SidebarNav } from '@/components/sidebar-nav';
-import { api } from '@/server/trpc/caller';
+export default async function BasesLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user) redirect('/login');
 
-export default async function BasesLayout({ children }: { children: ReactNode }) {
-  const caller = await api();
-  const session = await caller.auth.getSession();
-  if (!session) {
-    redirect('/login');
-  }
+  // TODO Task 1.6: 真实 bases 列表 + online presence 从 realtime 取
+  const bases: never[] = [];
+  const onlineUsers: never[] = [];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <SidebarNav />
-      <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
-    </div>
+    <AppShell
+      currentUser={
+        session.user
+          ? {
+              id: session.user.id,
+              name: session.user.name ?? session.user.email ?? 'me',
+              avatarUrl: session.user.image ?? null,
+            }
+          : undefined
+      }
+      bases={bases}
+      onlineUsers={onlineUsers}
+    >
+      {children}
+    </AppShell>
   );
 }
