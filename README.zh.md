@@ -1,6 +1,10 @@
 # MARKPOCKET
 
 <p>
+  <strong>中文</strong> | <a href="README.md">English</a>
+</p>
+
+<p>
   <strong>面向小团队的自托管数据库 —— 你真正拥有的 Airtable。</strong>
 </p>
 

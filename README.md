@@ -1,6 +1,10 @@
 # MARKPOCKET
 
 <p>
+  <a href="README.zh.md">中文</a> | <strong>English</strong>
+</p>
+
+<p>
   <strong>Self-hosted database for small teams — the Airtable you actually own.</strong>
 </p>
 
