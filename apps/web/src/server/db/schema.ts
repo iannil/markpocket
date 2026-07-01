@@ -107,3 +107,23 @@ export const attachment = pgTable('attachment', {
   uploadedBy: text('uploaded_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const baseShare = pgTable('base_share', {
+  id: text('id').primaryKey(),
+  baseId: text('base_id')
+    .notNull()
+    .references(() => base.id, { onDelete: 'cascade' }),
+  viewId: text('view_id'),
+  token: text('token').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const baseMember = pgTable('base_member', {
+  baseId: text('base_id')
+    .notNull()
+    .references(() => base.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull(),
+  role: text('role').notNull().default('editor'), // owner | editor | viewer
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

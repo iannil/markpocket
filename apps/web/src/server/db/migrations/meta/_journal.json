@@ -43,6 +43,13 @@
       "when": 1782890266767,
       "tag": "0005_chief_clea",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782904751420,
+      "tag": "0006_lame_cargill",
+      "breakpoints": true
     }
   ]
 }
