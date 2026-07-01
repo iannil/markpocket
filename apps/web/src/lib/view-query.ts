@@ -11,8 +11,15 @@ function scalarRaw(): SQL {
   return sql.raw("c.value #>> '{}'");
 }
 
+// Escape ILIKE wildcards so a user-supplied operand can't broaden a contains/startsWith
+// match (e.g. "100%" shouldn't match everything). Paired with `ESCAPE '\'` in the SQL.
+function escapeLike(str: string): string {
+  return str.replace(/[\\%_]/g, (m) => '\\' + m);
+}
+
 function valueOp(type: string, operator: string, operand: unknown): SQL | null {
   const s = scalarRaw();
+  const escape = sql.raw("ESCAPE '\\'");
   switch (operator) {
     case 'equals':
       return type === FieldType.Number
@@ -23,9 +30,9 @@ function valueOp(type: string, operator: string, operand: unknown): SQL | null {
         ? sql`(${s})::numeric <> ${Number(operand)}`
         : sql`${s} <> ${String(operand)}`;
     case 'contains':
-      return sql`${s} ILIKE ${`%${String(operand)}%`}`;
+      return sql`${s} ILIKE ${`%${escapeLike(String(operand))}%`} ${escape}`;
     case 'startsWith':
-      return sql`${s} ILIKE ${`${String(operand)}%`}`;
+      return sql`${s} ILIKE ${`${escapeLike(String(operand))}%`} ${escape}`;
     case 'gt':
       return sql`(${s})::numeric > ${Number(operand)}`;
     case 'lt':
