@@ -14,7 +14,7 @@
   <img alt="status: v1 wrap-up" src="https://img.shields.io/badge/status-v1%20wrap--up-blue" />
   <img alt="Node" src="https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white" />
   <img alt="Postgres" src="https://img.shields.io/badge/postgres-16-4169E1?logo=postgresql&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/license-TBD-lightgrey" />
+  <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
   <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" />
 </p>
 
