@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { table, view } from '../../db/schema';
 import { db } from '../../db';
+import { publishBaseChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const tableRouter = router({
@@ -27,6 +28,7 @@ export const tableRouter = router({
           type: 'grid',
           name: 'Grid',
         });
+        void publishBaseChange(input.baseId);
         return row;
       });
     }),
@@ -39,12 +41,15 @@ export const tableRouter = router({
         .set({ name: input.name })
         .where(eq(table.id, input.id))
         .returning();
+      if (row) void publishBaseChange(row.baseId);
       return row;
     }),
 
   delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const [existing] = await db.select().from(table).where(eq(table.id, input.id)).limit(1);
     // FK cascade clears fields → cells and records.
     await db.delete(table).where(eq(table.id, input.id));
+    if (existing) void publishBaseChange(existing.baseId);
     return { ok: true };
   }),
 });

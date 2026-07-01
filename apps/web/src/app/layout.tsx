@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { TRPCProvider } from '@/lib/trpc/client';
 import './globals.css';
 import { Geist } from 'next/font/google';
@@ -17,7 +18,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={cn('font-sans', geist.variable)}>
       <body>
-        <TRPCProvider>{children}</TRPCProvider>
+        <TRPCProvider>
+          <RealtimeProvider>{children}</RealtimeProvider>
+        </TRPCProvider>
       </body>
     </html>
   );

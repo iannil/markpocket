@@ -402,7 +402,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                     <td className="border-b p-1 text-center">
                       <button
                         className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                        onClick={() => deleteRecord.mutate({ id: rec.id })}
+                        onClick={() => deleteRecord.mutate({ id: rec.id, tableId })}
                         title="Delete record"
                       >
                         ×

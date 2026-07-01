@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { view } from '../../db/schema';
 import { db } from '../../db';
+import { publishTableChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const viewRouter = router({
@@ -34,6 +35,7 @@ export const viewRouter = router({
           name: input.name,
         })
         .returning();
+      void publishTableChange(input.tableId);
       return row;
     }),
 
@@ -45,6 +47,7 @@ export const viewRouter = router({
         .set({ name: input.name })
         .where(eq(view.id, input.id))
         .returning();
+      if (row) void publishTableChange(row.tableId);
       return row;
     }),
 
@@ -56,11 +59,14 @@ export const viewRouter = router({
         .set({ options: input.options })
         .where(and(eq(view.id, input.id)))
         .returning();
+      if (row) void publishTableChange(row.tableId);
       return row;
     }),
 
   delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
     await db.delete(view).where(eq(view.id, input.id));
+    if (existing) void publishTableChange(existing.tableId);
     return { ok: true };
   }),
 });

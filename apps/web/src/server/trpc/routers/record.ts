@@ -9,6 +9,7 @@ import { applyGroup, compileFilter, compileSort } from '@/lib/view-query';
 import { parseViewOptions } from '@/lib/view-ast';
 import { field, record, view } from '../../db/schema';
 import { db } from '../../db';
+import { publishTableChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const recordRouter = router({
@@ -56,12 +57,15 @@ export const recordRouter = router({
           createdBy: ctx.session.user.id,
         })
         .returning();
+      void publishTableChange(input.tableId, ctx.session.user.id);
       return row;
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    // FK cascade clears the record's cells.
-    await db.delete(record).where(eq(record.id, input.id));
-    return { ok: true };
-  }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.string(), tableId: z.string() }))
+    .mutation(async ({ input }) => {
+      await db.delete(record).where(eq(record.id, input.id));
+      void publishTableChange(input.tableId);
+      return { ok: true };
+    }),
 });

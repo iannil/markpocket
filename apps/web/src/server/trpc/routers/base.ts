@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { base } from '../../db/schema';
 import { db } from '../../db';
 import { ensureDefaultWorkspace } from '@/lib/db-queries';
+import { publishBaseChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const baseRouter = router({
@@ -43,12 +44,14 @@ export const baseRouter = router({
         .set({ name: input.name })
         .where(eq(base.id, input.id))
         .returning();
+      void publishBaseChange(input.id);
       return row;
     }),
 
   delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
     // FK cascade clears tables → fields → cells → records.
     await db.delete(base).where(eq(base.id, input.id));
+    void publishBaseChange(input.id);
     return { ok: true };
   }),
 });

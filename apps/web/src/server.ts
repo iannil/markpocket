@@ -16,7 +16,11 @@ const port = Number(process.env.PORT ?? 3000);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+  // Dynamically import so auth/db inside the gateway resolve env after loadEnvFile
+  // (ESM top-level imports would hoist before the .env load above).
+  const { handleUpgrade } = await import('./server/realtime/gateway');
+
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url ?? '/', true);
     handle(req, res, parsedUrl).catch((err) => {
@@ -26,9 +30,14 @@ app.prepare().then(() => {
     });
   });
 
-  // Phase 3: the WebSocket gateway attaches to this same HTTP server.
-  //   import { WebSocketServer } from 'ws';
-  //   new WebSocketServer({ server });
+  // Route only /realtime upgrades to the ws gateway; leave others (e.g. Next dev
+  // HMR) to their own handlers.
+  server.on('upgrade', (req, socket, head) => {
+    const { pathname } = parse(req.url ?? '', true);
+    if (pathname === '/realtime') {
+      void handleUpgrade(req, socket, head);
+    }
+  });
 
   server.listen(port, () => {
     console.log(`> markpocket ready on http://localhost:${port} (dev=${dev})`);

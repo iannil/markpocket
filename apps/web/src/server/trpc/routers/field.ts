@@ -13,6 +13,7 @@ import {
 } from '@/lib/field-types';
 import { field } from '../../db/schema';
 import { db } from '../../db';
+import { publishTableChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const fieldRouter = router({
@@ -45,6 +46,7 @@ export const fieldRouter = router({
           options,
         })
         .returning();
+      void publishTableChange(input.tableId);
       return row;
     }),
 
@@ -56,6 +58,7 @@ export const fieldRouter = router({
         .set({ name: input.name })
         .where(eq(field.id, input.id))
         .returning();
+      if (row) void publishTableChange(row.tableId);
       return row;
     }),
 
@@ -74,12 +77,15 @@ export const fieldRouter = router({
         .set({ options })
         .where(eq(field.id, input.id))
         .returning();
+      if (row) void publishTableChange(row.tableId);
       return row;
     }),
 
   delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
     // FK cascade clears cells; cell_history rows persist (no FK on cellId).
     await db.delete(field).where(eq(field.id, input.id));
+    if (existing) void publishTableChange(existing.tableId);
     return { ok: true };
   }),
 });

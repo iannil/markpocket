@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { FieldType, FieldOptions, normalizeCellValue } from '@/lib/field-types';
 import { cell, cellHistory, field, record } from '../../db/schema';
 import { db } from '../../db';
+import { publishTableChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const cellRouter = router({
@@ -91,5 +92,7 @@ export const cellRouter = router({
         await tx.update(record).set({ updatedAt: new Date() }).where(eq(record.id, input.recordId));
         return { value: newValue };
       });
+      // Broadcast the cell change to other subscribers on this table's base.
+      void publishTableChange(fld.tableId, ctx.session.user.id);
     }),
 });
