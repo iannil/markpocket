@@ -22,11 +22,11 @@ function valueOp(type: string, operator: string, operand: unknown): SQL | null {
   const escape = sql.raw("ESCAPE '\\'");
   switch (operator) {
     case 'equals':
-      return type === FieldType.Number
+      return type === FieldType.Number || type === FieldType.Expression
         ? sql`(${s})::numeric = ${Number(operand)}`
         : sql`${s} = ${String(operand)}`;
     case 'ne':
-      return type === FieldType.Number
+      return type === FieldType.Number || type === FieldType.Expression
         ? sql`(${s})::numeric <> ${Number(operand)}`
         : sql`${s} <> ${String(operand)}`;
     case 'contains':
@@ -91,7 +91,7 @@ export function compileSort(sort: SortSpec[] | undefined, fields: FieldMap): SQL
     const field = fields.get(spec.fieldId);
     const rawText = "c.value #>> '{}'";
     let expr: SQL;
-    if (field?.type === FieldType.Number) {
+    if (field?.type === FieldType.Number || field?.type === FieldType.Expression) {
       expr = sql`(${sql.raw(rawText)})::numeric`;
     } else if (field?.type === FieldType.Boolean) {
       expr = sql`(${sql.raw(rawText)})::boolean`;

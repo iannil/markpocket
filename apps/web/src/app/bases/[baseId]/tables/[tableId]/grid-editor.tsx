@@ -203,6 +203,23 @@ export function GridEditor({ tableId }: { tableId: string }) {
           </Select>
         );
       }
+      case FieldType.Expression: {
+        // Read-only: computed value (write-time materialized, Q2) or error sentinel.
+        const v = value as number | { __error?: string } | null | undefined;
+        if (v == null) return <div className="flex h-7 w-full items-center px-2" />;
+        if (typeof v === 'object' && v !== null && '__error' in v) {
+          return (
+            <div className="flex h-7 w-full items-center px-2 text-xs text-destructive">
+              {v.__error}
+            </div>
+          );
+        }
+        return (
+          <div className="flex h-7 w-full items-center px-2 text-left">
+            {formatNumberToString(v as number, field.options as { precision?: number })}
+          </div>
+        );
+      }
       case FieldType.Number:
         return isEditing ? (
           <Input

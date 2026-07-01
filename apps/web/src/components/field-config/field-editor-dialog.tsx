@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { trpc } from '@/lib/trpc/client';
+import { extractDependsOn } from '@/lib/expression-eval';
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { FieldTypePicker } from './field-type-picker';
 import { SelectOptionsEditor } from './select-options-editor';
@@ -59,12 +60,14 @@ export function FieldEditorDialog({
   const [name, setName] = useState('');
   const [type, setType] = useState<FieldType>(FieldType.Text);
   const [choices, setChoices] = useState<SelectOption[]>([]);
+  const [expression, setExpression] = useState('');
 
   useEffect(() => {
     if (open) {
       setName(field?.name ?? '');
       setType(field?.type ?? FieldType.Text);
       setChoices((field?.options?.choices as SelectOption[] | undefined) ?? []);
+      setExpression((field?.options?.expression as string | undefined) ?? '');
     }
   }, [open, field]);
 
@@ -74,10 +77,20 @@ export function FieldEditorDialog({
       rename.mutate({ id: field.id, name });
       if (field.type === FieldType.SingleSelect) {
         updateOptions.mutate({ id: field.id, options: { choices } });
+      } else if (field.type === FieldType.Expression) {
+        updateOptions.mutate({
+          id: field.id,
+          options: { expression, dependsOn: extractDependsOn(expression) },
+        });
       }
       onOpenChange(false);
     } else {
-      const options = type === FieldType.SingleSelect ? { choices } : {};
+      const options =
+        type === FieldType.SingleSelect
+          ? { choices }
+          : type === FieldType.Expression
+            ? { expression, dependsOn: extractDependsOn(expression) }
+            : {};
       create.mutate({ tableId, name, type, options });
     }
   }
@@ -106,6 +119,20 @@ export function FieldEditorDialog({
             <div className="space-y-1">
               <Label>Options</Label>
               <SelectOptionsEditor choices={choices} onChange={setChoices} />
+            </div>
+          )}
+          {type === FieldType.Expression && (
+            <div className="space-y-1">
+              <Label>Expression</Label>
+              <Input
+                value={expression}
+                onChange={(e) => setExpression(e.target.value)}
+                placeholder={'{fieldId} * {fieldId}'}
+                className="font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                Use {'{fieldId}'} tokens. Arithmetic on number fields only.
+              </p>
             </div>
           )}
         </div>

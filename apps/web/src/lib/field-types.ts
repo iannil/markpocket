@@ -12,6 +12,7 @@ export const FieldType = {
   Boolean: 'boolean',
   Date: 'date',
   SingleSelect: 'single-select',
+  Expression: 'expression',
 } as const;
 
 export type FieldType = (typeof FieldType)[keyof typeof FieldType];
@@ -22,6 +23,7 @@ export const FIELD_TYPES = [
   FieldType.Boolean,
   FieldType.Date,
   FieldType.SingleSelect,
+  FieldType.Expression,
 ] as const;
 
 // --- option schemas ---
@@ -46,6 +48,10 @@ const optionsSchemas = {
   [FieldType.SingleSelect]: z.object({
     choices: z.array(selectOptionSchema),
   }),
+  [FieldType.Expression]: z.object({
+    expression: z.string(),
+    dependsOn: z.array(z.string()),
+  }),
 } as const;
 
 export type FieldOptions = Record<string, unknown>;
@@ -63,6 +69,8 @@ export function defaultOptions(type: FieldType): FieldOptions {
       return { includeTime: false };
     case FieldType.SingleSelect:
       return { choices: [] as SelectOption[] };
+    case FieldType.Expression:
+      return { expression: '', dependsOn: [] };
     default:
       return {};
   }
@@ -108,6 +116,8 @@ export function normalizeCellValue(
       const choices = (options.choices as SelectOption[] | undefined) ?? [];
       return choices.some((c) => c.id === id) ? { value: id } : { error: 'Unknown select option' };
     }
+    case FieldType.Expression:
+      return { error: 'Expression fields are computed, not user-editable' };
   }
 }
 
@@ -119,4 +129,5 @@ export const FIELD_TYPE_META: Record<FieldType, { label: string; description: st
   [FieldType.Boolean]: { label: 'Checkbox', description: 'True / false' },
   [FieldType.Date]: { label: 'Date', description: 'Date or datetime' },
   [FieldType.SingleSelect]: { label: 'Select', description: 'Pick one from options' },
+  [FieldType.Expression]: { label: 'Expression', description: 'Computed from other fields' },
 };
