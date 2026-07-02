@@ -46,8 +46,10 @@ export default function MembersTab() {
                   {initials(label)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm">{m.name ?? m.email}</div>
-                  <div className="truncate text-xs text-muted-foreground">{m.email}</div>
+                  <div className="truncate text-sm">{m.name ?? m.email ?? m.userId}</div>
+                  {m.name && m.email && (
+                    <div className="truncate text-xs text-muted-foreground">{m.email}</div>
+                  )}
                 </div>
                 <Select
                   value={m.role}
