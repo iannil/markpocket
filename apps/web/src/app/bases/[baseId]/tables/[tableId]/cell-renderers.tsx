@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
@@ -28,6 +29,33 @@ function relativeDate(s: string): string | null {
 }
 
 const EMPTY = <span className="text-muted-foreground">—</span>;
+
+function AttachmentThumb({ id }: { id: string }) {
+  const [broken, setBroken] = useState(false);
+  const href = `/api/files/${id}`;
+  if (broken) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="rounded bg-muted px-1 text-xs hover:bg-accent"
+      >
+        📎
+      </a>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="-ml-1 first:ml-0">
+      <img
+        src={href}
+        alt=""
+        className="size-6 rounded object-cover"
+        onError={() => setBroken(true)}
+      />
+    </a>
+  );
+}
 
 export interface CellRendererProps {
   field: { id: string; name: string; type: FieldType; options: Record<string, unknown> };
@@ -199,19 +227,8 @@ export function CellRenderer({
       const attIds = (value as string[] | undefined) ?? [];
       return (
         <div className="flex min-h-[28px] items-start gap-1 px-2.5 py-1">
-          {attIds.map((id, i) => (
-            <a
-              key={id}
-              href={`/api/files/${id}`}
-              target="_blank"
-              className={i > 0 ? '-ml-1' : undefined}
-            >
-              <img
-                src={`/api/files/${id}`}
-                alt=""
-                className="size-6 rounded border border-border object-cover"
-              />
-            </a>
+          {attIds.map((id) => (
+            <AttachmentThumb key={id} id={id} />
           ))}
           <label className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
             +upload
