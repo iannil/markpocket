@@ -65,7 +65,7 @@ export default function GeneralTab() {
           {tables.data?.map((t) => (
             <li
               key={t.id}
-              className="flex items-center justify-between border-b border-border py-2.5"
+              className="flex items-center justify-between rounded border-b border-border px-2 py-2.5 hover:bg-muted"
             >
               <span className="text-sm">{t.name}</span>
               <a

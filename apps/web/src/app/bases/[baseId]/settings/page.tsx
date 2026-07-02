@@ -34,7 +34,7 @@ export default function TablesTab() {
           {tables.map((t) => (
             <li
               key={t.id}
-              className="flex items-center justify-between border-b border-border py-2.5"
+              className="flex items-center justify-between rounded border-b border-border px-2 py-2.5 hover:bg-muted"
             >
               <span className="text-sm font-medium">{t.name}</span>
               <Link
