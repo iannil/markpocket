@@ -10,3 +10,6 @@ if (!url) {
 
 const client = postgres(url);
 export const db = drizzle(client, { schema });
+
+// Raw postgres client, exposed for LISTEN/NOTIFY (cross-process realtime delivery).
+export const sql = client;

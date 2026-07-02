@@ -50,8 +50,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   // (React runs child effects first).
   const clientRef = useRef<RealtimeClient | null>(null);
   if (!clientRef.current && typeof window !== 'undefined') {
+    // In dev the gateway runs as a separate process on its own port
+    // (NEXT_PUBLIC_REALTIME_URL); in prod it's same-origin /realtime.
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    clientRef.current = createRealtimeClient(`${protocol}//${window.location.host}/realtime`);
+    const url =
+      process.env.NEXT_PUBLIC_REALTIME_URL ?? `${protocol}//${window.location.host}/realtime`;
+    clientRef.current = createRealtimeClient(url);
   }
 
   // Register message handler once utils is available.

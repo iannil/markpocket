@@ -10,6 +10,7 @@ cd "$ROOT_DIR"
 # ─── Ports (7400-7450 range) ───
 PG_PORT=7400
 WEB_PORT=7420
+REALTIME_PORT=7419
 
 # ─── State ───
 PIDS=()
@@ -57,6 +58,8 @@ if [ ! -f "$ENV_FILE" ]; then
   NEEDS_WRITE=true
 elif ! grep -q ":${PG_PORT}/" "$ENV_FILE" 2>/dev/null; then
   NEEDS_WRITE=true
+elif ! grep -q "NEXT_PUBLIC_REALTIME_URL=" "$ENV_FILE" 2>/dev/null; then
+  NEEDS_WRITE=true
 fi
 if [ "$NEEDS_WRITE" = true ]; then
   SECRET=$(openssl rand -base64 32)
@@ -65,11 +68,15 @@ DATABASE_URL=postgresql://markpocket:markpocket_dev@localhost:${PG_PORT}/markpoc
 BETTER_AUTH_SECRET=${SECRET}
 BETTER_AUTH_URL=http://localhost:${WEB_PORT}
 PORT=${WEB_PORT}
+REALTIME_PORT=${REALTIME_PORT}
+NEXT_PUBLIC_REALTIME_URL=ws://localhost:${REALTIME_PORT}/realtime
 ENV
-  echo "▸ Wrote apps/web/.env (pg=${PG_PORT}, web=${WEB_PORT})"
+  echo "▸ Wrote apps/web/.env (pg=${PG_PORT}, web=${WEB_PORT}, realtime=${REALTIME_PORT})"
 fi
 
 export PORT="$WEB_PORT"
+export REALTIME_PORT="$REALTIME_PORT"
+export NEXT_PUBLIC_REALTIME_URL="ws://localhost:${REALTIME_PORT}/realtime"
 export DATABASE_URL="postgresql://markpocket:markpocket_dev@localhost:${PG_PORT}/markpocket"
 export BETTER_AUTH_URL="http://localhost:${WEB_PORT}"
 
@@ -100,9 +107,16 @@ fi
 echo "▸ Running migrations…"
 pnpm --filter @markpocket/web exec drizzle-kit migrate 2>/dev/null || echo "  (migrations may already be applied)"
 
-# ─── 6. Start dev server ───
+# ─── 6. Start dev servers ───
+# Two processes: `next dev` serves pages (bundler in its own worker — flat memory),
+# and a standalone realtime gateway hosts the /realtime WebSocket. Running Next's
+# dev compiler inside the custom server leaked ~40MB/s to OOM; this split avoids it.
+echo "▸ Starting realtime gateway on :${REALTIME_PORT}…"
+pnpm --filter @markpocket/web dev:realtime &
+PIDS+=("$!")
+
 echo "▸ Starting web dev server on :${WEB_PORT}…"
-pnpm dev &
+pnpm --filter @markpocket/web dev &
 DEV_PID=$!
 PIDS+=("$DEV_PID")
 

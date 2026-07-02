@@ -20,6 +20,10 @@ app.prepare().then(async () => {
   // Dynamically import so auth/db inside the gateway resolve env after loadEnvFile
   // (ESM top-level imports would hoist before the .env load above).
   const { handleUpgrade } = await import('./server/realtime/gateway');
+  const { startRealtimeSubscription } = await import('./server/realtime/subscribe');
+  // This single process both mutates and hosts the gateway; deliver via pg so the
+  // path is identical to dev (where the gateway runs in a separate process).
+  await startRealtimeSubscription();
 
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url ?? '/', true);

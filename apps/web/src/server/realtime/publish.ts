@@ -1,8 +1,22 @@
 import { eq } from 'drizzle-orm';
 
 import { table } from '../db/schema';
-import { db } from '../db';
-import { broadcast } from './gateway';
+import { db, sql } from '../db';
+
+// Realtime change notices travel over a Postgres LISTEN/NOTIFY channel so the
+// process that hosts the ws gateway (a separate process in dev) can broadcast
+// them, regardless of which process ran the mutation.
+export const REALTIME_CHANNEL = 'markpocket_realtime';
+
+export interface RealtimeNotice {
+  baseId: string;
+  tableId?: string;
+  exceptUserId?: string;
+}
+
+function emit(notice: RealtimeNotice): Promise<unknown> {
+  return sql.notify(REALTIME_CHANNEL, JSON.stringify(notice));
+}
 
 // Resolve the owning base and broadcast a table-scoped change.
 export async function publishTableChange(tableId: string, exceptUserId?: string) {
@@ -12,10 +26,10 @@ export async function publishTableChange(tableId: string, exceptUserId?: string)
     .where(eq(table.id, tableId))
     .limit(1);
   if (!row) return;
-  broadcast(row.baseId, { type: 'change', tableId }, exceptUserId);
+  await emit({ baseId: row.baseId, tableId, exceptUserId });
 }
 
 // Broadcast a base-scoped change (table/base structural changes).
-export function publishBaseChange(baseId: string, exceptUserId?: string) {
-  broadcast(baseId, { type: 'change' }, exceptUserId);
+export async function publishBaseChange(baseId: string, exceptUserId?: string) {
+  await emit({ baseId, exceptUserId });
 }
