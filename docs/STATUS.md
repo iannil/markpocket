@@ -13,7 +13,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 |---|---|
 | 产品定位 | 单租户自托管通用数据库（Base/Table/Field/Record/View） |
 | v1 核心功能 | **✅ 全部完成**（Phase 0–7） |
-| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–4 ✅；Phase 5 Grid / 6 分享 / 7 收尾 未开始） |
+| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–4 ✅；Phase 5A Grid 视觉 ✅；5B 交互 / 6 分享 / 7 收尾 未开始） |
 | 技术栈 | Next.js 16 (App Router) + tRPC + Drizzle + Postgres 16 + ws |
 | Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏，见 §4.2 |
 | 部署形态 | 单 Docker Compose（web + postgres）；dev 拆 `next dev` + 独立 realtime 网关 |
@@ -147,8 +147,8 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 |---|---|---|---|
 | `archived/teable/` | 64 MB | teable 完整 fork，仅作只读参考。含大量 ARCHITECTURE.md、README。 | ✅ 正确归档，保持不动 |
 | `.superpowers/sdd/` | ~184 KB | SDD 任务跟踪文件（task-*.brief.md），内容与 `docs/redesign/2026-07-01-paper-ink-plan.md` 重复。 | 🔄 可删除或精简（计划中） |
-| `apps/web/src/components/view-config/` | 4 个旧组件 | `view-tabs.tsx` / `filter-panel.tsx` / `sort-menu.tsx` / `view-fields-menu.tsx` — 旧 Carbon & Citrus 时代的实现。新实现计划在 Phase 5 重建。 | ⏳ Phase 5 时替换，目前 grid-editor 仍然引用 |
-| `apps/web/src/app/bases/[baseId]/tables/[tableId]/grid-editor.tsx` | 596 行 | 旧风格 Grid 编辑器，含完整数据加载 + 历史 cell 渲染 + inline 编辑。Phase 5 需要用新设计替换 JSX 外壳。 | ⏳ Phase 5 时重构 |
+| `apps/web/src/components/view-config/` | 4 个组件 | `view-tabs.tsx` / `filter-panel.tsx` / `sort-menu.tsx` / `view-fields-menu.tsx` — Phase 5A 已 restyle 为 Paper & Ink（保留逻辑）。 | ✅ 已 restyle（`5f5efad`） |
+| `apps/web/src/app/bases/[baseId]/tables/[tableId]/grid-editor.tsx` | Grid 编辑器 | Phase 5A：cell 渲染已抽到 `cell-renderers.tsx`，表格外壳/工具栏已 Paper & Ink。数据/实时/mutation 逻辑保留。5B 加选中态/键盘/history dock。 | 🔄 5A 视觉完成，5B 交互待做 |
 | `.next/` | 大量缓存 | Next.js 开发缓存。 | 应 `.gitignore`（已排除） |
 
 ### 4.2 已知问题
@@ -175,11 +175,11 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 5（Grid Editor，最大工作项）
-- 重构 `grid-editor.tsx`（596 行旧风格）：保留数据/实时/mutation，仅换 JSX 外壳
-- 5.1 ViewTabs + FilterBar + grid 外壳 / 5.2 11 种 cell 渲染 / 5.3 inline 编辑 + 键盘导航 / 5.4 cell 历史 dock
-- 清理旧 `view-config/` 组件
-- ~~Phase 1–4（Login/Register、Bases 列表、Base 详情 + Tabs）~~ ✅
+### 🔴 P0 — Paper & Ink Phase 5B（Grid 交互）
+- 选中 cell 态 + 2px ink 描边 + 键盘导航（方向键/Enter/Tab/Esc）
+- inline 编辑（编辑态 bg-muted）
+- cell 历史 dock（右侧 280px 滑入，替换现有 per-cell `CellHistory`）
+- ~~Phase 1–4~~ ✅ / ~~Phase 5A Grid 视觉（外壳 + 10 种 cell + 工具栏 restyle）~~ ✅（`f56c26d`..`5f5efad`）
 
 ### 🟡 P1 — Phase 4 遗留占位（待后端）
 - 邀请成员机制、base 描述字段、History base 级时间线 endpoint、导出全部、前端角色门控
@@ -252,3 +252,4 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 2026-07-02 | Paper & Ink：Bases 列表/详情/新建页重设计（`27a06c7`，Phase 1–3 ✅、4 部分） |
 | 2026-07-02 | 修复 dev 内存 OOM：dev 拆进程 + Postgres NOTIFY/LISTEN（`2b5cfc5`）；打包器 Turbopack→Rspack（`4d72162`），根因见 §4.2 |
 | 2026-07-02 | Paper & Ink Phase 4 完成（SDD 执行，`4035cb0`..`a41fd66`）：Base 详情 Tabs（Tables/Members/Settings 真做，History+邀请+描述+导出全部 占位） |
+| 2026-07-03 | Paper & Ink Phase 5A 完成（SDD 执行，`f56c26d`..`5f5efad`）：Grid 视觉——抽 CellRenderer + 10 种 cell + 表格外壳 + 工具栏 restyle；5B 交互待做 |

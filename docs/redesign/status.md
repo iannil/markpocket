@@ -15,7 +15,7 @@
 | 2 | Login / Register 重设计 | 0.5d | ✅ Complete | 1/1 |
 | 3 | Bases 列表重设计 | 0.5d | ✅ Complete | 1/1 |
 | 4 | Base 详情 + Tabs | 0.5d | ✅ Complete | 1/1 |
-| 5 | Grid Editor | 3d | ⏳ Not Started | 0/4 |
+| 5 | Grid Editor | 3d | 🔄 5A 视觉 ✅ / 5B 交互 待做 | 4/8 |
 | 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
 | 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
 | **合计** | | **7d** | **~68%** | **13/19** |
@@ -108,16 +108,24 @@ Progress: **9/9 Tasks Complete**
 
 ---
 
-## Phase 5 · Grid Editor ⏳
+## Phase 5 · Grid Editor 🔄（拆 5A 视觉 / 5B 交互）
 
+### 5A 视觉 ✅（SDD 执行，commits `f56c26d`..`5f5efad`）
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
-| 5.1 | ViewTabs + FilterBar + grid 外壳 | `view-tabs.tsx`, `filter-bar.tsx`, `chip.tsx`, `grid-editor.tsx` | ❌ Pending |
-| 5.2 | Cell 类型渲染（11 种字段） | `cell-renderers.tsx` | ❌ Pending |
-| 5.3 | Inline 编辑 + 键盘导航 | `grid-editor.tsx` | ❌ Pending |
-| 5.4 | Cell 历史 dock | `cell-history-dock.tsx` | ❌ Pending |
+| 5A.1 | 抽 CellRenderer（行为不变） | `cell-renderers.tsx` | ✅ Done（`f56c26d`） |
+| 5A.2 | 10 种 cell Paper & Ink 渲染 | `cell-renderers.tsx` | ✅ Done（`1c4b752`,`965117a`） |
+| 5A.3 | grid 外壳（2 行表头/行号/ghost/hairline）+ globals.css | `grid-editor.tsx`, `globals.css` | ✅ Done（`0a1a882`） |
+| 5A.4 | 工具栏 + view-config + link-cell restyle | `grid-editor.tsx`, `view-config/*`, `link-cell.tsx` | ✅ Done（`5f5efad`） |
 
-**注意**：当前 `grid-editor.tsx`（596 行）是旧 Carbon & Citrus 风格，含完整数据加载与交互。Phase 5 需**保留数据加载逻辑**，只替换 JSX 外壳。
+### 5B 交互 ⏳（待做，另立 spec）
+| Step | 说明 | 状态 |
+|---|---|---|
+| 5B.1 | 选中 cell 态 + 2px ink 描边 + 键盘导航（方向键/Enter/Tab/Esc） | ❌ Pending |
+| 5B.2 | inline 编辑（编辑态 bg-muted） | ❌ Pending |
+| 5B.3 | cell 历史 dock（右侧 280px 滑入，替换现有 per-cell CellHistory） | ❌ Pending |
+
+> 5A 保留全部数据/实时/mutation 逻辑，编辑仍用现有点击方式。10 种 field（无 long-text）；表达式列头 chip 序列留后续。
 
 ---
 
