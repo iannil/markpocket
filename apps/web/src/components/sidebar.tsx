@@ -52,24 +52,33 @@ export function Sidebar({
           {bases.map((base) => {
             const isCurrent = base.id === currentBaseId;
             return (
-              <li key={base.id}>
+              <li key={base.id} className="group/row relative">
                 <Link
                   href={`/bases/${base.id}`}
                   className={cn(
-                    'group relative flex items-center gap-2 px-2 py-1.5 rounded text-sm',
+                    'group relative flex items-center gap-2 rounded px-2 py-1.5 text-sm',
                     isCurrent
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground',
+                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
                     collapsed && 'justify-center',
                   )}
                   title={collapsed ? base.name : undefined}
                 >
                   {isCurrent && (
-                    <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-foreground rounded-r" />
+                    <span className="absolute bottom-1 left-0 top-1 w-0.5 rounded-r bg-foreground" />
                   )}
                   <Database className="size-3.5 shrink-0 text-muted-foreground" />
                   {!collapsed && <span className="truncate">{base.name}</span>}
                 </Link>
+                {!collapsed && (
+                  <Link
+                    href={`/bases/${base.id}/settings`}
+                    title="Base settings"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 hover:bg-sidebar-accent hover:text-foreground group-hover/row:opacity-100"
+                  >
+                    <Settings className="size-3.5" />
+                  </Link>
+                )}
               </li>
             );
           })}

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
@@ -51,23 +52,31 @@ export default function BasePage() {
         title="No tables yet"
         description="Create the first table in this base."
         action={
-          <form onSubmit={onSubmit} className="flex items-center gap-2">
-            <input
-              autoFocus
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Table name"
-              className="h-8 w-56 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <button
-              type="submit"
-              disabled={create.isPending}
-              className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          <div>
+            <form onSubmit={onSubmit} className="flex items-center gap-2">
+              <input
+                autoFocus
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Table name"
+                className="h-8 w-56 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <button
+                type="submit"
+                disabled={create.isPending}
+                className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              >
+                {create.isPending ? '···' : 'create'}
+              </button>
+            </form>
+            <Link
+              href={`/bases/${baseId}/settings`}
+              className="mt-3 block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
             >
-              {create.isPending ? '···' : 'create'}
-            </button>
-          </form>
+              base settings →
+            </Link>
+          </div>
         }
       />
     </div>
