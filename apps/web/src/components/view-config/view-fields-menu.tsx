@@ -22,13 +22,16 @@ export function ViewFieldsMenu({
 
   return (
     <Popover>
-      <PopoverTrigger className="rounded border px-2 py-1 text-sm hover:bg-muted/50">
+      <PopoverTrigger className="flex h-7 items-center rounded-md border border-border px-2 text-sm hover:bg-muted">
         Fields
       </PopoverTrigger>
-      <PopoverContent className="w-56">
+      <PopoverContent className="w-56 border-border">
         <div className="space-y-0.5">
           {fields.map((f) => (
-            <label key={f.id} className="flex cursor-pointer items-center gap-2 py-0.5 text-sm">
+            <label
+              key={f.id}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-muted"
+            >
               <input
                 type="checkbox"
                 checked={!hiddenFields.includes(f.id)}

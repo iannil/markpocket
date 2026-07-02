@@ -167,7 +167,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
   }
 
   return (
-    <div className="h-full space-y-3 overflow-auto p-4">
+    <div className="flex h-full flex-col gap-2 overflow-auto p-4">
       <ViewTabs
         tableId={tableId}
         views={views}
@@ -176,8 +176,8 @@ export function GridEditor({ tableId }: { tableId: string }) {
       />
 
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">{activeView?.name ?? 'Grid'}</h1>
-        <Button onClick={openCreateField} size="sm">
+        <h1 className="text-sm font-semibold">{activeView?.name ?? 'Grid'}</h1>
+        <Button onClick={openCreateField} size="sm" className="h-7 rounded-md">
           + Field
         </Button>
       </div>
@@ -186,6 +186,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         <Button
           variant={showFilter ? 'default' : 'outline'}
           size="sm"
+          className="h-7 rounded-md"
           onClick={() => setShowFilter((s) => !s)}
         >
           Filter
@@ -210,7 +211,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
             patchOptions({ group: v === '__none' ? undefined : [{ fieldId: v }] });
           }}
         >
-          <SelectTrigger className="h-7 w-40">
+          <SelectTrigger className="h-7 w-40 rounded-md border-border text-sm">
             {viewOptions.group?.[0]
               ? (fields.find((f) => f.id === viewOptions.group?.[0]?.fieldId)?.name ?? 'Group')
               : 'No grouping'}

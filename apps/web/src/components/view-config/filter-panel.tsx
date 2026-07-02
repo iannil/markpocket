@@ -100,7 +100,7 @@ export function FilterPanel({
           value={String(cond.operand ?? 'true')}
           onValueChange={(v) => update(i, { operand: v ?? 'true' })}
         >
-          <SelectTrigger className="h-7 w-24">
+          <SelectTrigger className="h-7 w-24 rounded-md border-border text-sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -117,7 +117,7 @@ export function FilterPanel({
           value={String(cond.operand ?? '')}
           onValueChange={(v) => update(i, { operand: v ?? '' })}
         >
-          <SelectTrigger className="h-7 w-32">
+          <SelectTrigger className="h-7 w-32 rounded-md border-border text-sm">
             <SelectValue placeholder="—" />
           </SelectTrigger>
           <SelectContent>
@@ -135,7 +135,7 @@ export function FilterPanel({
     return (
       <Input
         type={inputType}
-        className="h-7 w-40"
+        className="h-7 w-40 rounded-md border-border text-sm"
         value={String(cond.operand ?? '')}
         onChange={(e) => update(i, { operand: e.target.value })}
       />
@@ -143,7 +143,7 @@ export function FilterPanel({
   }
 
   return (
-    <div className="space-y-1 rounded border bg-card p-2">
+    <div className="space-y-1 rounded-md border border-border bg-background p-2">
       {conditions.length === 0 && (
         <p className="px-1 text-xs text-muted-foreground">No filters — all records shown.</p>
       )}
@@ -164,7 +164,9 @@ export function FilterPanel({
                 });
               }}
             >
-              <SelectTrigger className="h-7 w-32">{field ? field.name : 'Field'}</SelectTrigger>
+              <SelectTrigger className="h-7 w-32 rounded-md border-border text-sm">
+                {field ? field.name : 'Field'}
+              </SelectTrigger>
               <SelectContent>
                 {fields.map((f) => (
                   <SelectItem key={f.id} value={f.id}>
@@ -179,7 +181,7 @@ export function FilterPanel({
                 if (o) update(i, { operator: o });
               }}
             >
-              <SelectTrigger className="h-7 w-32">
+              <SelectTrigger className="h-7 w-32 rounded-md border-border text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -191,13 +193,18 @@ export function FilterPanel({
               </SelectContent>
             </Select>
             {renderOperand(cond, field, i)}
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(i)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-md hover:bg-muted"
+              onClick={() => remove(i)}
+            >
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         );
       })}
-      <Button variant="outline" size="sm" onClick={add}>
+      <Button variant="outline" size="sm" className="h-7 rounded-md" onClick={add}>
         <Plus className="mr-1 h-3.5 w-3.5" /> Add condition
       </Button>
     </div>

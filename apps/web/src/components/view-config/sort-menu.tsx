@@ -36,10 +36,10 @@ export function SortMenu({
 
   return (
     <Popover>
-      <PopoverTrigger className="rounded border px-2 py-1 text-sm hover:bg-muted/50">
+      <PopoverTrigger className="flex h-7 items-center rounded-md border border-border px-2 text-sm hover:bg-muted">
         Sort{list.length > 0 ? ` (${list.length})` : ''}
       </PopoverTrigger>
-      <PopoverContent className="w-80">
+      <PopoverContent className="w-80 border-border">
         <div className="space-y-1">
           {list.map((s, i) => (
             <div key={i} className="flex items-center gap-1">
@@ -49,7 +49,7 @@ export function SortMenu({
                   if (fid) update(i, { fieldId: fid });
                 }}
               >
-                <SelectTrigger className="h-7 flex-1">
+                <SelectTrigger className="h-7 flex-1 rounded-md border-border text-sm">
                   {fields.find((f) => f.id === s.fieldId)?.name ?? 'Field'}
                 </SelectTrigger>
                 <SelectContent>
@@ -63,7 +63,7 @@ export function SortMenu({
               <Button
                 size="icon"
                 variant="ghost"
-                className="h-7 w-7"
+                className="h-7 w-7 rounded-md hover:bg-muted"
                 title={s.direction === 'asc' ? 'Ascending' : 'Descending'}
                 onClick={() => update(i, { direction: s.direction === 'asc' ? 'desc' : 'asc' })}
               >
@@ -73,12 +73,17 @@ export function SortMenu({
                   <ArrowDown className="h-3.5 w-3.5" />
                 )}
               </Button>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => remove(i)}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 rounded-md hover:bg-muted"
+                onClick={() => remove(i)}
+              >
                 <X className="h-3.5 w-3.5" />
               </Button>
             </div>
           ))}
-          <Button variant="outline" size="sm" onClick={add}>
+          <Button variant="outline" size="sm" className="h-7 rounded-md" onClick={add}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add sort
           </Button>
         </div>

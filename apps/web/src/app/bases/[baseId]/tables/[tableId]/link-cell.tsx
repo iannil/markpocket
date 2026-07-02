@@ -50,14 +50,14 @@ export function LinkCell({
           <span className="text-muted-foreground">—</span>
         )}
       </PopoverTrigger>
-      <PopoverContent className="max-h-64 w-64 overflow-auto p-1">
+      <PopoverContent className="max-h-64 w-64 overflow-auto border-border p-1">
         {allRecords.length === 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground">No records in target table.</p>
         )}
         {allRecords.map((r) => (
           <label
             key={r.id}
-            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-accent"
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted"
           >
             <input
               type="checkbox"

@@ -37,12 +37,14 @@ export function ViewTabs({
   const [name, setName] = useState('');
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b pb-2">
+    <div className="flex flex-wrap items-center gap-1 border-b border-border">
       {views.map((v) => (
         <div
           key={v.id}
-          className={`group flex items-center rounded px-2 py-1 text-sm ${
-            v.id === activeViewId ? 'bg-muted font-medium' : 'hover:bg-muted/50'
+          className={`group flex items-center border-b-2 px-2 py-1 text-sm ${
+            v.id === activeViewId
+              ? 'border-foreground text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
           <button
@@ -91,7 +93,12 @@ export function ViewTabs({
           />
         </form>
       ) : (
-        <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 rounded-md text-muted-foreground hover:text-foreground"
+          onClick={() => setAdding(true)}
+        >
           + view
         </Button>
       )}
