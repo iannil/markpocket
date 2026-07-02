@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-07-01
+> **最后更新**：2026-07-02
 > 本文档是项目层面的完整状态快照，供大模型（LLM）与人类开发者使用。本文件记录的是**当前实际状态**，而非目标。
 
 ---
@@ -13,9 +13,10 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 |---|---|
 | 产品定位 | 单租户自托管通用数据库（Base/Table/Field/Record/View） |
 | v1 核心功能 | **✅ 全部完成**（Phase 0–7） |
-| Paper & Ink 重设计 | **🔄 Phase 1 进行中**（共 8 个 Phase） |
+| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–3 ✅、Phase 4 部分；Phase 5 Grid 未开始） |
 | 技术栈 | Next.js 16 (App Router) + tRPC + Drizzle + Postgres 16 + ws |
-| 部署形态 | 单 Docker Compose（web + postgres） |
+| Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏，见 §4.2 |
+| 部署形态 | 单 Docker Compose（web + postgres）；dev 拆 `next dev` + 独立 realtime 网关 |
 | 发布状态 | 未发布到 registry，无 tagged release，master 视作 unstable |
 
 ---
@@ -93,7 +94,7 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 - typecheck + lint 通过
 
 ### Phase 1 — App Shell（1d）
-**状态**: 🔄 In Progress
+**状态**: ✅ Complete
 
 | Task | 状态 | Commit | 说明 |
 |---|---|---|---|
@@ -103,18 +104,18 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 1.4 Statusbar 组件 | ✅ Done | `05709da` | 24px 状态条 |
 | 1.5 AppShell 接入 bases layout | ✅ Done | `498aa10` | 替换旧 sidebar-nav |
 | 1.6 Sidebar 接入真实 base 列表 | ✅ Done | `db7b583` | trpc 数据接入 |
-| 1.7 Login/Register 重设计 | ❌ Pending | — | 居中卡片 + inline 错误 |
-| 1.8 Bases 列表重设计 | ❌ Pending | — | list 布局 + 空状态 |
-| 1.9 Base 详情 + Tabs | ❌ Pending | — | redirect 逻辑 + tab 页 |
+| 1.7 Login/Register 重设计 | ✅ Done | `f84a0da` | 居中卡片 + inline 错误 |
+| 1.8 Bases 列表重设计 | ✅ Done | `27a06c7` | list 布局 + EmptyState + `/bases/new` |
+| 1.9 Base 详情 + Tabs | ⚠️ 部分 | `27a06c7` | redirect + 空态建表；Tabs 外壳未做 |
 
 ### Phase 2 — Login/Register（0.5d）
-**状态**: ⏳ Not Started
+**状态**: ✅ Complete（已符合 spec）
 
 ### Phase 3 — Bases 列表（0.5d）
-**状态**: ⏳ Not Started
+**状态**: ✅ Complete（`27a06c7`）——紧凑 list + EmptyState + 新建页
 
 ### Phase 4 — Base 详情 + Tabs（0.5d）
-**状态**: ⏳ Not Started
+**状态**: ⚠️ 部分（`27a06c7`）——仅 redirect + 空态建表；Tabs / Members / Settings / History 外壳待做
 
 ### Phase 5 — Grid Editor（3d，分 4 个子 Task）
 **状态**: ⏳ Not Started
@@ -152,6 +153,11 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ### 4.2 已知问题
 
+0. **Dev 服务器内存（已缓解，根因在上游）**：
+   - **Turbopack（Next 16.2.x 默认）dev server 存在内存泄漏**：真实使用后即使空闲、0% CPU 仍以 ~20MB/s 线性增长（`vmmap` 确认为真实 anonymous dirty 内存），本机涨到 22GB+。属 Vercel 已知、跨版本（15.3→16.2）未修的 issue（[#93896](https://github.com/vercel/next.js/issues/93896) / [#91396](https://github.com/vercel/next.js/issues/91396) / [#93451](https://github.com/vercel/next.js/discussions/93451)），M 系列 Mac 尤甚。
+   - **早期自定义服务器（`next({dev})` 内联跑编译器）不管哪种打包器都从开机泄漏 → OOM 崩溃**；worker 隔离仅 Next CLI（`next dev`）提供。
+   - **当前对策**：① dev 拆两进程——`next dev` serve 页面 + 独立 `realtime-server.ts` serve `/realtime`，跨进程实时改用 **Postgres LISTEN/NOTIFY**（`publish.ts` → `subscribe.ts`）；② dev 打包器换 **Rspack**（`next-rspack`，`next.config.js` withRspack），实测空闲平稳 ~1.5GB。
+   - **回退路径**：Turbopack 修复后，去掉 withRspack + 卸 next-rspack 即可回默认；或临时用 webpack（dev 脚本加 `--webpack` + 去掉 withRspack）。生产 `next({dev:false})` 不编译、不受影响。
 1. **无测试框架**：项目迄今无任何自动化测试（单元/集成/E2E）。Phase 0–7 的验收"在 dev 浏览器肉眼验证"。
 2. **两个 `fix` commit 未描述具体修复内容**：`99218a7` 和 `f84a0da` commit message 仅写 "fix"，缺少上下文。
 3. **`packages/` 目录不存在**：迁移计划中预留的 `packages/domain` 尚未创建（v1 只有 `apps/web` 一个包，合理，但文档已过时）。
@@ -169,10 +175,9 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 1 收尾 & Phase 2–4
-- 完成 Login/Register 页重设计（Phase 1.7）
-- Bases 列表重设计（Phase 1.8）
-- Base 详情 + Tabs（Phase 1.9）
+### 🔴 P0 — Paper & Ink Phase 4 收尾
+- Base 详情 Tabs 外壳（Tables / Members / Settings / History）+ Members/Settings/History 内容
+- ~~Login/Register（1.7）~~ ✅ / ~~Bases 列表（1.8/Phase 3）~~ ✅ / ~~Base 详情 redirect（1.9/4.1）~~ ✅
 
 ### 🔴 P0 — Paper & Ink Phase 5（Grid Editor）
 - 重构 grid-editor.tsx：用 Paper & Ink 组件替换 JSX
@@ -210,7 +215,9 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 数据模型 | `apps/web/src/server/db/schema.ts` |
 | tRPC 路由定义 | `apps/web/src/server/trpc/router.ts` + `routers/*.ts` |
 | 业务 Feature | `apps/web/src/server/trpc/routers/*.ts` |
-| 实时 WebSocket | `apps/web/src/server/realtime/gateway.ts` |
+| 实时 WebSocket 网关 | `apps/web/src/server/realtime/gateway.ts` |
+| 实时 跨进程投递（NOTIFY/LISTEN） | `apps/web/src/server/realtime/publish.ts` + `subscribe.ts` |
+| Dev 独立 realtime 进程入口 | `apps/web/src/realtime-server.ts`（prod 用 `server.ts` 单进程） |
 | 鉴权配置 | `apps/web/src/server/auth.ts` |
 | 字段类型定义 | `apps/web/src/lib/field-types.ts` |
 | 表达式求值 | `apps/web/src/lib/expression-eval.ts` |
@@ -237,3 +244,5 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 日期 | 变更内容 |
 |---|---|
 | 2026-07-01 | 创建 STATUS.md，记录 v1 完成 + Paper & Ink 重设计 Phase 0-1 进行中状态 |
+| 2026-07-02 | Paper & Ink：Bases 列表/详情/新建页重设计（`27a06c7`，Phase 1–3 ✅、4 部分） |
+| 2026-07-02 | 修复 dev 内存 OOM：dev 拆进程 + Postgres NOTIFY/LISTEN（`2b5cfc5`）；打包器 Turbopack→Rspack（`4d72162`），根因见 §4.2 |

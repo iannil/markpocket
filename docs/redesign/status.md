@@ -11,14 +11,16 @@
 | Phase | 内容 | 工期 | 状态 | 完成 Task / 总计 Task |
 |---|---|---|---|---|
 | 0 | 设计 Token 落地 | 0.5d | ✅ Complete | 1/1 |
-| 1 | App Shell | 1d | 🔄 In Progress | 6/9 |
-| 2 | Login / Register 重设计 | 0.5d | ⏳ Not Started | 0/1 |
-| 3 | Bases 列表重设计 | 0.5d | ⏳ Not Started | 0/1 |
-| 4 | Base 详情 + Tabs | 0.5d | ⏳ Not Started | 0/1 |
+| 1 | App Shell | 1d | ✅ Complete | 9/9 |
+| 2 | Login / Register 重设计 | 0.5d | ✅ Complete | 1/1 |
+| 3 | Bases 列表重设计 | 0.5d | ✅ Complete | 1/1 |
+| 4 | Base 详情 + Tabs | 0.5d | ⚠️ 部分 | 0.5/1 |
 | 5 | Grid Editor | 3d | ⏳ Not Started | 0/4 |
 | 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
 | 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
-| **合计** | | **7d** | **~22%** | **8/19** |
+| **合计** | | **7d** | **~60%** | **12.5/19** |
+
+> **最后更新**：2026-07-02（commit `27a06c7`）。Phase 4 仅完成 redirect + 空态建表；Tabs / Members / Settings / History 外壳尚未做。
 
 ---
 
@@ -32,9 +34,9 @@
 
 ---
 
-## Phase 1 · App Shell 🔄
+## Phase 1 · App Shell ✅
 
-Progress: **6/9 Tasks Complete**
+Progress: **9/9 Tasks Complete**
 
 ### Task 1.1 — sidebar 折叠 hook + Breadcrumb ✅
 - [x] `use-sidebar-collapsed.ts` — localStorage + mobile 1024px 自动折叠
@@ -60,47 +62,44 @@ Progress: **6/9 Tasks Complete**
 - [x] trpc base.list 数据接入
 - [x] 折叠/展开状态持久化
 
-### Task 1.7 — Login/Register 重设计 ❌ Pending
-- 居中卡片 360px，1px hairline
-- inline 错误（input 下方 ink 红字）
-- 演示账号（if `BETTER_AUTH_DEMO=1`）
-- **注意**：git 当前有 uncommitted changes 涉及 login/register page
+### Task 1.7 — Login/Register 重设计 ✅ Done
+- [x] 居中卡片 360px + inline 错误（login/register 页已符合 spec）
 
-### Task 1.8 — Bases 列表重设计 ❌ Pending
-- 一行一个 base，72px 高
-- hover bg-muted
-- 空状态 + 排序
+### Task 1.8 — Bases 列表重设计 ✅ Done（`27a06c7`）
+- [x] 紧凑 list 布局 + `<EmptyState>` 组件
+- [x] `+ new base` → `/bases/new`（新建页，修复 sidebar 现有 404）
+- 简化 meta：仅 name + `created X ago`（`base.list` 后端未返回 rowCount/members 聚合）
 
-### Task 1.9 — Base 详情 + Tabs ❌ Pending
-- redirect 逻辑（有 tables → 第一条 table 的 grid）
-- Tables / Members / Settings / History 四个 tab 外壳
-- Members / Settings / History 壳内容留 Phase 4 详细实现
+### Task 1.9 — Base 详情 + Tabs ⚠️ 部分（`27a06c7`）
+- [x] redirect 逻辑（有 tables → 第一个 table；无则内联建表空态）
+- [ ] Tables / Members / Settings / History 四个 tab 外壳（未做）
 
 ---
 
-## Phase 2 · Login / Register ⏳
+## Phase 2 · Login / Register ✅
 
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
-| 2.1 | Login 页重设计 | `login/page.tsx` | ❌ Pending |
-| 2.2 | Register 页重设计 | `register/page.tsx` | ❌ Pending |
+| 2.1 | Login 页重设计 | `login/page.tsx` | ✅ Done |
+| 2.2 | Register 页重设计 | `register/page.tsx` | ✅ Done |
 
 ---
 
-## Phase 3 · Bases 列表 ⏳
+## Phase 3 · Bases 列表 ✅
 
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
-| 3.1 | Bases 列表重设计 | `bases/page.tsx` | ❌ Pending |
+| 3.1 | Bases 列表重设计 + EmptyState | `bases/page.tsx`, `components/empty-state.tsx` | ✅ Done（`27a06c7`） |
+| 3.2 | 新建 base 页（修复 sidebar 404） | `bases/new/page.tsx` | ✅ Done（`27a06c7`） |
 
 ---
 
-## Phase 4 · Base 详情 + Tabs ⏳
+## Phase 4 · Base 详情 + Tabs ⚠️ 部分
 
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
-| 4.1 | Base 详情 redirect + Tabs 外壳 | `bases/[baseId]/page.tsx` | ❌ Pending |
-| 4.2 | Members / Settings / History 详细实现 | `bases/[baseId]/settings/page.tsx` | ❌ Pending |
+| 4.1 | Base 详情 redirect + 空态建表 | `bases/[baseId]/page.tsx` | ✅ Done（`27a06c7`） |
+| 4.2 | Tables / Members / Settings / History tab 外壳 | `bases/[baseId]/settings/page.tsx` | ❌ Pending |
 
 ---
 
