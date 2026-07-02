@@ -14,13 +14,13 @@
 | 1 | App Shell | 1d | ✅ Complete | 9/9 |
 | 2 | Login / Register 重设计 | 0.5d | ✅ Complete | 1/1 |
 | 3 | Bases 列表重设计 | 0.5d | ✅ Complete | 1/1 |
-| 4 | Base 详情 + Tabs | 0.5d | ⚠️ 部分 | 0.5/1 |
+| 4 | Base 详情 + Tabs | 0.5d | ✅ Complete | 1/1 |
 | 5 | Grid Editor | 3d | ⏳ Not Started | 0/4 |
 | 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
 | 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
-| **合计** | | **7d** | **~60%** | **12.5/19** |
+| **合计** | | **7d** | **~68%** | **13/19** |
 
-> **最后更新**：2026-07-02（commit `27a06c7`）。Phase 4 仅完成 redirect + 空态建表；Tabs / Members / Settings / History 外壳尚未做。
+> **最后更新**：2026-07-02。Phase 4 完成（SDD 执行，commits `4035cb0`..`a41fd66`）：Tabs 外壳 + Tables/Members/Settings 真做，History 及 邀请/base 描述/base 级时间线/导出全部 按设计留占位（缺后端）。
 
 ---
 
@@ -94,12 +94,17 @@ Progress: **9/9 Tasks Complete**
 
 ---
 
-## Phase 4 · Base 详情 + Tabs ⚠️ 部分
+## Phase 4 · Base 详情 + Tabs ✅
 
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
 | 4.1 | Base 详情 redirect + 空态建表 | `bases/[baseId]/page.tsx` | ✅ Done（`27a06c7`） |
-| 4.2 | Tables / Members / Settings / History tab 外壳 | `bases/[baseId]/settings/page.tsx` | ❌ Pending |
+| 4.2 | Tabs 外壳 + Tables tab | `settings/{layout,page}.tsx`, `components/settings-tabs.tsx` | ✅ Done（`4035cb0`） |
+| 4.3 | Members tab（角色矩阵 + 公开分享链接 + 邀请占位） | `settings/members/page.tsx` | ✅ Done（`55aede9`,`fc02406`） |
+| 4.4 | Settings tab（重命名 + 按表导出 + 删除 base） | `settings/general/page.tsx` | ✅ Done（`3d9c89c`） |
+| 4.5 | 入口（sidebar 齿轮 + 空 base 链接）+ History 占位 | `sidebar.tsx`, `settings/history/page.tsx` | ✅ Done（`f09aced`） |
+
+> 占位（缺后端，见 spec §9）：邀请链接、base 描述、History base 级时间线、导出全部、前端角色门控。
 
 ---
 

@@ -13,7 +13,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 |---|---|
 | 产品定位 | 单租户自托管通用数据库（Base/Table/Field/Record/View） |
 | v1 核心功能 | **✅ 全部完成**（Phase 0–7） |
-| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–3 ✅、Phase 4 部分；Phase 5 Grid 未开始） |
+| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–4 ✅；Phase 5 Grid / 6 分享 / 7 收尾 未开始） |
 | 技术栈 | Next.js 16 (App Router) + tRPC + Drizzle + Postgres 16 + ws |
 | Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏，见 §4.2 |
 | 部署形态 | 单 Docker Compose（web + postgres）；dev 拆 `next dev` + 独立 realtime 网关 |
@@ -115,7 +115,7 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 **状态**: ✅ Complete（`27a06c7`）——紧凑 list + EmptyState + 新建页
 
 ### Phase 4 — Base 详情 + Tabs（0.5d）
-**状态**: ⚠️ 部分（`27a06c7`）——仅 redirect + 空态建表；Tabs / Members / Settings / History 外壳待做
+**状态**: ✅ Complete（`27a06c7`, `4035cb0`..`a41fd66`；SDD 执行）——redirect + Tabs 外壳 + Tables/Members/Settings 真做；History 及 邀请/描述/base 级时间线/导出全部 按设计留占位（缺后端）
 
 ### Phase 5 — Grid Editor（3d，分 4 个子 Task）
 **状态**: ⏳ Not Started
@@ -175,9 +175,14 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 4 收尾
-- Base 详情 Tabs 外壳（Tables / Members / Settings / History）+ Members/Settings/History 内容
-- ~~Login/Register（1.7）~~ ✅ / ~~Bases 列表（1.8/Phase 3）~~ ✅ / ~~Base 详情 redirect（1.9/4.1）~~ ✅
+### 🔴 P0 — Paper & Ink Phase 5（Grid Editor，最大工作项）
+- 重构 `grid-editor.tsx`（596 行旧风格）：保留数据/实时/mutation，仅换 JSX 外壳
+- 5.1 ViewTabs + FilterBar + grid 外壳 / 5.2 11 种 cell 渲染 / 5.3 inline 编辑 + 键盘导航 / 5.4 cell 历史 dock
+- 清理旧 `view-config/` 组件
+- ~~Phase 1–4（Login/Register、Bases 列表、Base 详情 + Tabs）~~ ✅
+
+### 🟡 P1 — Phase 4 遗留占位（待后端）
+- 邀请成员机制、base 描述字段、History base 级时间线 endpoint、导出全部、前端角色门控
 
 ### 🔴 P0 — Paper & Ink Phase 5（Grid Editor）
 - 重构 grid-editor.tsx：用 Paper & Ink 组件替换 JSX
@@ -246,3 +251,4 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 2026-07-01 | 创建 STATUS.md，记录 v1 完成 + Paper & Ink 重设计 Phase 0-1 进行中状态 |
 | 2026-07-02 | Paper & Ink：Bases 列表/详情/新建页重设计（`27a06c7`，Phase 1–3 ✅、4 部分） |
 | 2026-07-02 | 修复 dev 内存 OOM：dev 拆进程 + Postgres NOTIFY/LISTEN（`2b5cfc5`）；打包器 Turbopack→Rspack（`4d72162`），根因见 §4.2 |
+| 2026-07-02 | Paper & Ink Phase 4 完成（SDD 执行，`4035cb0`..`a41fd66`）：Base 详情 Tabs（Tables/Members/Settings 真做，History+邀请+描述+导出全部 占位） |
