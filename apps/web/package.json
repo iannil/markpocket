@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
     "dev:realtime": "tsx watch src/realtime-server.ts",
     "build": "next build",
     "start": "tsx src/server.ts",
@@ -41,6 +41,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "drizzle-kit": "^0.31.10",
+    "next-rspack": "16.2.9",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.22.4"
