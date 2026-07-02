@@ -148,13 +148,22 @@
   }
 }
 
-/* ─── Grid polish ─── */
+/* ─── Grid polish (Paper & Ink) ─── */
 table.markpocket-grid {
+  width: 100%;
+  background: var(--background);
   font-variant-numeric: tabular-nums;
+}
+table.markpocket-grid th,
+table.markpocket-grid td {
+  border-color: var(--border);
 }
 table.markpocket-grid th {
   font-weight: 500;
   letter-spacing: -0.01em;
+}
+table.markpocket-grid thead th {
+  height: 36px;
 }
 table.markpocket-grid td {
   font-variant-numeric: tabular-nums;

@@ -234,7 +234,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         />
       )}
 
-      <div className="overflow-auto rounded border">
+      <div className="overflow-auto rounded-md border border-border">
         <table className="markpocket-grid border-collapse text-sm">
           <colgroup>
             <col style={{ width: 40 }} />
@@ -245,20 +245,29 @@ export function GridEditor({ tableId }: { tableId: string }) {
           </colgroup>
           <thead>
             <tr className="bg-muted/40">
-              <th className="border-b p-1" />
+              <th className="border-b border-border p-1" />
               {displayedFields.map((f) => (
                 <th
                   key={f.id}
-                  className="relative border-b border-l p-0"
+                  className="relative border-b border-l border-border p-0"
                   onDoubleClick={() => openEditField(f)}
                 >
                   <button
-                    className="block w-full px-2 py-1 text-left text-xs font-medium"
+                    className="block w-full px-2.5 pt-1 text-left"
                     onClick={() => openEditField(f)}
                     title={`${f.name} (${f.type})`}
                   >
-                    {f.name}
-                    <span className="ml-1 text-muted-foreground">· {f.type}</span>
+                    <div className="text-xs font-medium text-foreground">
+                      {f.name}
+                      {viewOptions.sort?.find((s) => s.fieldId === f.id) && (
+                        <span className="ml-1 text-muted-foreground">
+                          {viewOptions.sort.find((s) => s.fieldId === f.id)?.direction === 'desc'
+                            ? 'Z↓'
+                            : 'A↓'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="pb-1 font-mono text-[10px] text-muted-foreground">{f.type}</div>
                   </button>
                   <div
                     className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
@@ -266,12 +275,13 @@ export function GridEditor({ tableId }: { tableId: string }) {
                   />
                 </th>
               ))}
-              <th className="border-b border-l p-1">
+              <th className="border-b border-l border-border bg-muted/20 p-0">
                 <button
-                  className="text-xs text-muted-foreground hover:text-foreground"
+                  className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
                   onClick={openCreateField}
+                  title="Add field"
                 >
-                  + field
+                  +
                 </button>
               </th>
             </tr>
@@ -280,21 +290,22 @@ export function GridEditor({ tableId }: { tableId: string }) {
             {groups.map((g) => (
               <Fragment key={g.key ?? '__null'}>
                 {hasGroup && (
-                  <tr className="bg-muted/20">
+                  <tr className="border-b border-border bg-muted/30">
                     <th
                       colSpan={displayedFields.length + 2}
-                      className="border-b border-l p-1 text-left text-xs font-medium"
+                      className="border-b border-border p-1 text-left text-xs font-medium"
                     >
                       {groupLabel(g.key)}{' '}
                       <span className="text-muted-foreground">({g.records.length})</span>
                     </th>
                   </tr>
                 )}
-                {g.records.map((rec) => (
+                {g.records.map((rec, i) => (
                   <tr key={rec.id} className="group">
-                    <td className="border-b p-1 text-center">
+                    <td className="border-b border-border px-2 text-center text-xs text-muted-foreground">
+                      <span className="group-hover:hidden">{i + 1}</span>
                       <button
-                        className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                        className="hidden text-muted-foreground hover:text-destructive group-hover:inline"
                         onClick={() => deleteRecord.mutate({ id: rec.id, tableId })}
                         title="Delete record"
                       >
@@ -302,7 +313,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                       </button>
                     </td>
                     {displayedFields.map((f) => (
-                      <td key={f.id} className="group relative border-b border-l p-0">
+                      <td key={f.id} className="group relative border-b border-l border-border p-0">
                         <CellRenderer
                           field={f}
                           record={rec}
@@ -321,7 +332,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                         </div>
                       </td>
                     ))}
-                    <td className="border-b border-l" />
+                    <td className="border-b border-l border-border" />
                   </tr>
                 ))}
               </Fragment>
@@ -339,16 +350,14 @@ export function GridEditor({ tableId }: { tableId: string }) {
           </tbody>
           <tfoot>
             <tr>
-              <td className="p-1" />
-              <td colSpan={displayedFields.length + 1} className="p-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
+              <td colSpan={displayedFields.length + 2} className="p-0">
+                <button
+                  className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
                   onClick={() => createRecord.mutate({ tableId })}
                   disabled={createRecord.isPending}
                 >
-                  + New record
-                </Button>
+                  + new record
+                </button>
               </td>
             </tr>
           </tfoot>
