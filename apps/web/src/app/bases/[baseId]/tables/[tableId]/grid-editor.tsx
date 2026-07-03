@@ -13,6 +13,7 @@ import { ViewTabs } from '@/components/view-config/view-tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { FieldType, type SelectOption } from '@/lib/field-types';
+import { cn } from '@/lib/utils';
 import { CellRenderer } from './cell-renderers';
 import { CellHistory } from '@/components/history/cell-history';
 import { trpc } from '@/lib/trpc/client';
@@ -94,6 +95,10 @@ export function GridEditor({ tableId }: { tableId: string }) {
   }
 
   const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
+    null,
+  );
+  const gridRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<FieldEditorTarget | undefined>(undefined);
@@ -108,7 +113,12 @@ export function GridEditor({ tableId }: { tableId: string }) {
     widthsRef.current = w;
   }, [activeViewId]);
 
+  function selectCell(recordId: string, fieldId: string) {
+    setSelectedCell({ recordId, fieldId });
+    gridRef.current?.focus();
+  }
   function startEdit(recordId: string, fieldId: string, current: unknown) {
+    setSelectedCell({ recordId, fieldId });
     setEditing({ recordId, fieldId });
     setDraft(current == null ? '' : String(current));
   }
@@ -235,134 +245,147 @@ export function GridEditor({ tableId }: { tableId: string }) {
         />
       )}
 
-      <div className="overflow-auto rounded-md border border-border">
-        <table className="markpocket-grid border-collapse text-sm">
-          <colgroup>
-            <col style={{ width: 40 }} />
-            {displayedFields.map((f) => (
-              <col key={f.id} style={{ width: widths[f.id] ?? DEFAULT_COL_WIDTH }} />
-            ))}
-            <col style={{ width: 120 }} />
-          </colgroup>
-          <thead>
-            <tr className="bg-muted/40">
-              <th className="border-b border-border p-1" />
+      <div ref={gridRef} tabIndex={0} className="relative outline-none">
+        <div className="overflow-auto rounded-md border border-border">
+          <table className="markpocket-grid border-collapse text-sm">
+            <colgroup>
+              <col style={{ width: 40 }} />
               {displayedFields.map((f) => (
-                <th
-                  key={f.id}
-                  className="relative border-b border-l border-border p-0"
-                  onDoubleClick={() => openEditField(f)}
-                >
-                  <button
-                    className="block w-full px-2.5 pt-1 text-left"
-                    onClick={() => openEditField(f)}
-                    title={`${f.name} (${f.type})`}
-                  >
-                    <div className="text-xs font-medium text-foreground">
-                      {f.name}
-                      {viewOptions.sort?.find((s) => s.fieldId === f.id) && (
-                        <span className="ml-1 text-muted-foreground">
-                          {viewOptions.sort.find((s) => s.fieldId === f.id)?.direction === 'desc'
-                            ? 'Z↓'
-                            : 'A↓'}
-                        </span>
-                      )}
-                    </div>
-                    <div className="pb-1 font-mono text-[10px] text-muted-foreground">{f.type}</div>
-                  </button>
-                  <div
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
-                    onMouseDown={(e) => startResize(e, f.id)}
-                  />
-                </th>
+                <col key={f.id} style={{ width: widths[f.id] ?? DEFAULT_COL_WIDTH }} />
               ))}
-              <th className="border-b border-l border-border bg-muted/20 p-0">
-                <button
-                  className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
-                  onClick={openCreateField}
-                  title="Add field"
-                >
-                  +
-                </button>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g) => (
-              <Fragment key={g.key ?? '__null'}>
-                {hasGroup && (
-                  <tr className="border-b border-border bg-muted/30">
-                    <th
-                      colSpan={displayedFields.length + 2}
-                      className="border-b border-border p-1 text-left text-xs font-medium"
+              <col style={{ width: 120 }} />
+            </colgroup>
+            <thead>
+              <tr className="bg-muted/40">
+                <th className="border-b border-border p-1" />
+                {displayedFields.map((f) => (
+                  <th
+                    key={f.id}
+                    className="relative border-b border-l border-border p-0"
+                    onDoubleClick={() => openEditField(f)}
+                  >
+                    <button
+                      className="block w-full px-2.5 pt-1 text-left"
+                      onClick={() => openEditField(f)}
+                      title={`${f.name} (${f.type})`}
                     >
-                      {groupLabel(g.key)}{' '}
-                      <span className="text-muted-foreground">({g.records.length})</span>
-                    </th>
-                  </tr>
-                )}
-                {g.records.map((rec, i) => (
-                  <tr key={rec.id} className="group">
-                    <td className="border-b border-border px-2 text-center text-xs text-muted-foreground">
-                      <span className="group-hover:hidden">{i + 1}</span>
-                      <button
-                        className="hidden text-muted-foreground hover:text-destructive group-hover:inline"
-                        onClick={() => deleteRecord.mutate({ id: rec.id, tableId })}
-                        title="Delete record"
-                      >
-                        ×
-                      </button>
-                    </td>
-                    {displayedFields.map((f) => (
-                      <td key={f.id} className="group relative border-b border-l border-border p-0">
-                        <CellRenderer
-                          field={f}
-                          record={rec}
-                          users={usersData ?? []}
-                          isEditing={editing?.recordId === rec.id && editing?.fieldId === f.id}
-                          draft={draft}
-                          onDraftChange={setDraft}
-                          onStartEdit={(v) => startEdit(rec.id, f.id, v)}
-                          onCommitEdit={() => commitEdit(f.type, rec.id, f.id)}
-                          onUpsert={(v) =>
-                            upsertCell.mutate({ recordId: rec.id, fieldId: f.id, value: v })
-                          }
-                        />
-                        <div className="absolute right-0 top-0">
-                          <CellHistory recordId={rec.id} fieldId={f.id} />
-                        </div>
-                      </td>
-                    ))}
-                    <td className="border-b border-l border-border" />
-                  </tr>
+                      <div className="text-xs font-medium text-foreground">
+                        {f.name}
+                        {viewOptions.sort?.find((s) => s.fieldId === f.id) && (
+                          <span className="ml-1 text-muted-foreground">
+                            {viewOptions.sort.find((s) => s.fieldId === f.id)?.direction === 'desc'
+                              ? 'Z↓'
+                              : 'A↓'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="pb-1 font-mono text-[10px] text-muted-foreground">
+                        {f.type}
+                      </div>
+                    </button>
+                    <div
+                      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
+                      onMouseDown={(e) => startResize(e, f.id)}
+                    />
+                  </th>
                 ))}
-              </Fragment>
-            ))}
-            {groups.every((g) => g.records.length === 0) && (
+                <th className="border-b border-l border-border bg-muted/20 p-0">
+                  <button
+                    className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
+                    onClick={openCreateField}
+                    title="Add field"
+                  >
+                    +
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <Fragment key={g.key ?? '__null'}>
+                  {hasGroup && (
+                    <tr className="border-b border-border bg-muted/30">
+                      <th
+                        colSpan={displayedFields.length + 2}
+                        className="border-b border-border p-1 text-left text-xs font-medium"
+                      >
+                        {groupLabel(g.key)}{' '}
+                        <span className="text-muted-foreground">({g.records.length})</span>
+                      </th>
+                    </tr>
+                  )}
+                  {g.records.map((rec, i) => (
+                    <tr key={rec.id} className="group">
+                      <td className="border-b border-border px-2 text-center text-xs text-muted-foreground">
+                        <span className="group-hover:hidden">{i + 1}</span>
+                        <button
+                          className="hidden text-muted-foreground hover:text-destructive group-hover:inline"
+                          onClick={() => deleteRecord.mutate({ id: rec.id, tableId })}
+                          title="Delete record"
+                        >
+                          ×
+                        </button>
+                      </td>
+                      {displayedFields.map((f) => (
+                        <td
+                          key={f.id}
+                          onClick={() => selectCell(rec.id, f.id)}
+                          className={cn(
+                            'group relative border-b border-l border-border p-0',
+                            selectedCell?.recordId === rec.id &&
+                              selectedCell?.fieldId === f.id &&
+                              'ring-2 ring-inset ring-foreground',
+                          )}
+                        >
+                          <CellRenderer
+                            field={f}
+                            record={rec}
+                            users={usersData ?? []}
+                            isEditing={editing?.recordId === rec.id && editing?.fieldId === f.id}
+                            draft={draft}
+                            onDraftChange={setDraft}
+                            onStartEdit={(v) => startEdit(rec.id, f.id, v)}
+                            onCommitEdit={() => commitEdit(f.type, rec.id, f.id)}
+                            onUpsert={(v) =>
+                              upsertCell.mutate({ recordId: rec.id, fieldId: f.id, value: v })
+                            }
+                          />
+                          <div className="absolute right-0 top-0">
+                            <CellHistory recordId={rec.id} fieldId={f.id} />
+                          </div>
+                        </td>
+                      ))}
+                      <td className="border-b border-l border-border" />
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              {groups.every((g) => g.records.length === 0) && (
+                <tr>
+                  <td
+                    colSpan={displayedFields.length + 2}
+                    className="p-4 text-sm text-muted-foreground"
+                  >
+                    No records.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            <tfoot>
               <tr>
-                <td
-                  colSpan={displayedFields.length + 2}
-                  className="p-4 text-sm text-muted-foreground"
-                >
-                  No records.
+                <td colSpan={displayedFields.length + 2} className="p-0">
+                  <button
+                    className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
+                    onClick={() => createRecord.mutate({ tableId })}
+                    disabled={createRecord.isPending}
+                  >
+                    + new record
+                  </button>
                 </td>
               </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={displayedFields.length + 2} className="p-0">
-                <button
-                  className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
-                  onClick={() => createRecord.mutate({ tableId })}
-                  disabled={createRecord.isPending}
-                >
-                  + new record
-                </button>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
       <FieldEditorDialog
