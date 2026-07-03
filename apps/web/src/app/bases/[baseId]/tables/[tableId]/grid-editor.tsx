@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { cn } from '@/lib/utils';
 import { CellRenderer } from './cell-renderers';
-import { CellHistory } from '@/components/history/cell-history';
+import { CellHistoryDock } from './cell-history-dock';
 import { trpc } from '@/lib/trpc/client';
 import type { ViewOptions } from '@/lib/view-ast';
 
@@ -350,9 +350,6 @@ export function GridEditor({ tableId }: { tableId: string }) {
                               upsertCell.mutate({ recordId: rec.id, fieldId: f.id, value: v })
                             }
                           />
-                          <div className="absolute right-0 top-0">
-                            <CellHistory recordId={rec.id} fieldId={f.id} />
-                          </div>
                         </td>
                       ))}
                       <td className="border-b border-l border-border" />
@@ -386,6 +383,30 @@ export function GridEditor({ tableId }: { tableId: string }) {
             </tfoot>
           </table>
         </div>
+        {selectedCell &&
+          (() => {
+            const flat = groups.flatMap((g) => g.records);
+            const rowNumber = flat.findIndex((r) => r.id === selectedCell.recordId) + 1;
+            const field = displayedFields.find((f) => f.id === selectedCell.fieldId);
+            const record = flat.find((r) => r.id === selectedCell.recordId);
+            if (!field || !record) return null;
+            return (
+              <CellHistoryDock
+                cell={selectedCell}
+                fieldName={field.name}
+                rowNumber={rowNumber}
+                currentValue={record.cells[selectedCell.fieldId]}
+                onRestore={(value) =>
+                  upsertCell.mutate({
+                    recordId: selectedCell.recordId,
+                    fieldId: selectedCell.fieldId,
+                    value,
+                  })
+                }
+                onClose={() => setSelectedCell(null)}
+              />
+            );
+          })()}
       </div>
 
       <FieldEditorDialog
