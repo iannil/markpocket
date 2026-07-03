@@ -261,9 +261,6 @@ export function CellRenderer({
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onBlur={() => onCommitEdit()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
         />
       ) : (
         <button
@@ -287,9 +284,6 @@ export function CellRenderer({
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onBlur={() => onCommitEdit()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
         />
       ) : (
         <button
@@ -315,9 +309,6 @@ export function CellRenderer({
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onBlur={() => onCommitEdit()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') e.currentTarget.blur();
-          }}
         />
       ) : (
         <button

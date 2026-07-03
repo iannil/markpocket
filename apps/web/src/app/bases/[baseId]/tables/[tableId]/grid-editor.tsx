@@ -1,6 +1,13 @@
 'use client';
 
-import { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 
 import {
   FieldEditorDialog,
@@ -116,6 +123,90 @@ export function GridEditor({ tableId }: { tableId: string }) {
   function selectCell(recordId: string, fieldId: string) {
     setSelectedCell({ recordId, fieldId });
     gridRef.current?.focus();
+  }
+
+  function moveTo(r: number, c: number) {
+    const flat = groups.flatMap((g) => g.records);
+    const rec = flat[r];
+    const f = displayedFields[c];
+    if (rec && f) selectCell(rec.id, f.id);
+  }
+
+  function onGridKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!selectedCell) return;
+    const flat = groups.flatMap((g) => g.records);
+    const r = flat.findIndex((x) => x.id === selectedCell.recordId);
+    const c = displayedFields.findIndex((f) => f.id === selectedCell.fieldId);
+    if (r < 0 || c < 0) return;
+    const field = displayedFields[c]!;
+    const rec = flat[r]!;
+    const inline =
+      field.type === FieldType.Text ||
+      field.type === FieldType.Number ||
+      field.type === FieldType.Date;
+    const editingNow =
+      editing?.recordId === selectedCell.recordId && editing?.fieldId === selectedCell.fieldId;
+    const lastR = flat.length - 1;
+    const lastC = displayedFields.length - 1;
+
+    if (editingNow) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
+        moveTo(Math.min(r + 1, lastR), c);
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        commitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
+        moveTo(r, Math.min(c + 1, lastC));
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setEditing(null);
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowUp':
+        e.preventDefault();
+        moveTo(Math.max(r - 1, 0), c);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        moveTo(Math.min(r + 1, lastR), c);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        moveTo(r, Math.max(c - 1, 0));
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        moveTo(r, Math.min(c + 1, lastC));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (inline) {
+          startEdit(selectedCell.recordId, selectedCell.fieldId, rec.cells[selectedCell.fieldId]);
+        } else if (field.type === FieldType.Boolean) {
+          upsertCell.mutate({
+            recordId: selectedCell.recordId,
+            fieldId: selectedCell.fieldId,
+            value: !rec.cells[selectedCell.fieldId],
+          });
+        }
+        break;
+      case 'Tab': {
+        e.preventDefault();
+        const nc = c + (e.shiftKey ? -1 : 1);
+        if (nc < 0) moveTo(Math.max(r - 1, 0), lastC);
+        else if (nc > lastC) moveTo(Math.min(r + 1, lastR), 0);
+        else moveTo(r, nc);
+        break;
+      }
+      case 'Escape':
+        e.preventDefault();
+        setSelectedCell(null);
+        break;
+    }
   }
   function startEdit(recordId: string, fieldId: string, current: unknown) {
     setSelectedCell({ recordId, fieldId });
@@ -245,7 +336,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         />
       )}
 
-      <div ref={gridRef} tabIndex={0} className="relative outline-none">
+      <div ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} className="relative outline-none">
         <div className="overflow-auto rounded-md border border-border">
           <table className="markpocket-grid border-collapse text-sm">
             <colgroup>
