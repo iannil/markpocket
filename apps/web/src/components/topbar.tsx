@@ -47,12 +47,18 @@ export function Topbar({
 
       <div className="flex items-center gap-3 shrink-0">
         {onlineUsers.length > 0 && <OnlineAvatars users={onlineUsers} />}
-        <kbd
-          className="hidden md:inline-flex items-center gap-0.5 h-5 px-1.5 rounded border border-border bg-muted text-[10px] text-muted-foreground font-mono"
-          title="Command palette"
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(
+              new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
+            )
+          }
+          className="hidden h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground hover:text-foreground md:inline-flex"
+          title="Command palette (⌘K)"
         >
           <Command className="size-2.5" />K
-        </kbd>
+        </button>
         {currentUser && (
           <div
             className="size-7 rounded-full bg-muted flex items-center justify-center text-xs font-mono"
