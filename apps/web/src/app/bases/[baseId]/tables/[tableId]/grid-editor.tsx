@@ -102,6 +102,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
   }
 
   const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
+  const editingRef = useRef<{ recordId: string; fieldId: string } | null>(null);
   const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
     null,
   );
@@ -160,6 +161,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         moveTo(r, Math.min(c + 1, lastC));
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        editingRef.current = null;
         setEditing(null);
       }
       return;
@@ -211,10 +213,12 @@ export function GridEditor({ tableId }: { tableId: string }) {
   function startEdit(recordId: string, fieldId: string, current: unknown) {
     setSelectedCell({ recordId, fieldId });
     setEditing({ recordId, fieldId });
+    editingRef.current = { recordId, fieldId };
     setDraft(current == null ? '' : String(current));
   }
   function commitEdit(type: FieldType, recordId: string, fieldId: string) {
-    if (!editing) return;
+    if (!editingRef.current) return;
+    editingRef.current = null;
     let value: unknown = draft;
     if (type === FieldType.Number) value = draft === '' ? '' : Number(draft);
     upsertCell.mutate({ recordId, fieldId, value });
