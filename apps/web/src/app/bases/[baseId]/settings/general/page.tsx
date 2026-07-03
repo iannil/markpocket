@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 
 export default function GeneralTab() {
@@ -29,11 +30,13 @@ export default function GeneralTab() {
     onSuccess: () => {
       void utils.base.get.invalidate({ id: baseId });
       void utils.base.list.invalidate();
+      toast.success('Base renamed');
     },
   });
   const del = trpc.base.delete.useMutation({
     onSuccess: () => {
       void utils.base.list.invalidate();
+      toast.success('Base deleted');
       router.push('/bases');
     },
   });

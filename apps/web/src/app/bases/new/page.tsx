@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 
 export default function NewBasePage() {
@@ -15,6 +16,7 @@ export default function NewBasePage() {
       void utils.base.list.invalidate();
       router.push(`/bases/${row.id}`);
     },
+    onError: (err) => toast.error(err.message),
   });
 
   function onSubmit(e: FormEvent) {
