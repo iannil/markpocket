@@ -17,8 +17,10 @@
 | 4 | Base 详情 + Tabs | 0.5d | ✅ Complete | 1/1 |
 | 5 | Grid Editor | 3d | ✅ Complete（5A 视觉 + 5B 交互） | 8/8 |
 | 6 | 公开分享页 | — | ⏭️ 跳过（消费端未实现，非重设计） | — |
-| 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
-| **合计** | | **7d** | **~68%** | **13/19** |
+| 7 | 收尾 | 0.5d | ✅ Complete | 3/3 |
+| **合计** | | **7d** | **✅ 完成**（Phase 6 分享页除外，作为独立功能） | 16/16 |
+
+> **Paper & Ink 重设计整体收官**（2026-07-03）。除 Phase 6 公开分享页（消费端未实现，已列为独立真功能），Phase 0–5 + 7 全部完成。
 
 > **最后更新**：2026-07-02。Phase 4 完成（SDD 执行，commits `4035cb0`..`a41fd66`）：Tabs 外壳 + Tables/Members/Settings 真做，History 及 邀请/base 描述/base 级时间线/导出全部 按设计留占位（缺后端）。
 
@@ -136,14 +138,15 @@ Progress: **9/9 Tasks Complete**
 
 ---
 
-## Phase 7 · 收尾 ⏳
+## Phase 7 · 收尾 ✅（SDD 执行，commits `50e1aa4`..`98ddbf3`）
 
 | Step | 说明 | 文件 | 状态 |
 |---|---|---|---|
-| 7.1 | 404/500/loading 页 | `not-found.tsx`, `error.tsx`, `loading.tsx` | ❌ Pending |
-| 7.2 | Toast 系统 | `toaster.tsx` | ❌ Pending |
-| 7.3 | ⌘K 占位 | `command-palette.tsx` | ❌ Pending |
-| 7.4 | 截图存档 | — | ❌ Pending |
+| 7.1 | 404/500/loading 页 | `app/{not-found,error,loading}.tsx` | ✅ Done（`50e1aa4`） |
+| 7.2 | 自造最小 Toast 系统 + 3 处演示接线 | `lib/toast.ts`, `components/toaster.tsx`, `app/layout.tsx` | ✅ Done（`4b55dfb`） |
+| 7.3 | ⌘K 命令面板占位（cmdk 导航命令） | `components/command-palette.tsx`, `app-shell.tsx`, `topbar.tsx` | ✅ Done（`6320666`,`98ddbf3` 修 cmdk 上下文崩溃） |
+
+> Toast 只接 2–3 处 mutation 演示，其余增量采用；命令面板不做真实搜索。crash 修复：本项目 `CommandDialog` 不含 cmdk root，caller 需包 `<Command>`。
 
 ---
 

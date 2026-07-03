@@ -13,7 +13,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 |---|---|
 | 产品定位 | 单租户自托管通用数据库（Base/Table/Field/Record/View） |
 | v1 核心功能 | **✅ 全部完成**（Phase 0–7） |
-| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–5 ✅（Grid 视觉+交互）；6 分享 / 7 收尾 未开始） |
+| Paper & Ink 重设计 | **✅ 完成**（Phase 0–5 + 7；Phase 6 公开分享页作为独立功能待建，见 §5 P1） |
 | 技术栈 | Next.js 16 (App Router) + tRPC + Drizzle + Postgres 16 + ws |
 | Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏，见 §4.2 |
 | 部署形态 | 单 Docker Compose（web + postgres）；dev 拆 `next dev` + 独立 realtime 网关 |
@@ -127,8 +127,8 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 **状态**: ⏳ Not Started
 
 ### Phase 7 — 收尾（0.5d）
-**状态**: ⏳ Not Started
-- 404/500/loading、Toast、⌘K 占位
+**状态**: ✅ Complete（SDD 执行，`50e1aa4`..`98ddbf3`）
+- 404/500/loading 页；自造最小 Toast（+3 处演示接线）；⌘K 命令面板占位（cmdk）
 
 ### 最新 Commit（`99218a7`, `f84a0da`）
 **状态**: ⚠️ Uncommitted fixes
@@ -174,12 +174,12 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 7（收尾）
-- 404 / 500 / loading 页、Toast 系统、⌘K 命令面板占位
-- ~~Phase 1–4~~ ✅ / ~~Phase 5 Grid（5A 视觉 + 5B 交互）~~ ✅（`f56c26d`..`cc0f433`）
-- Phase 6（分享页重设计）**跳过**：公开分享消费端未实现（见下），无页可重设计
+### ✅ Paper & Ink 重设计已完成（Phase 0–5 + 7）
+- ~~Phase 1–4~~ ✅ / ~~Phase 5 Grid（5A 视觉 + 5B 交互）~~ ✅ / ~~Phase 7 收尾~~ ✅（`50e1aa4`..`98ddbf3`）
+- Phase 6（分享页重设计）**跳过**：公开分享消费端未实现（见 P1），无页可重设计
+- 下一步 P0 候选：**测试基础设施**（vitest/E2E，见下 P1）或 **公开分享真功能**（P1）
 
-### 🟡 P1 — 公开分享功能（真功能，非重设计）
+### 🔴 P0 候选 — 公开分享功能（真功能，非重设计）
 - 新增 public 端点：按 token 读 base/table/fields/records（尊重 `viewId` 范围 + `expiresAt`）
 - 新建 `/share/[token]` 公开只读页（无 AppShell/鉴权）+ 复用 CellRenderer 只读 Paper & Ink 渲染
 - 完成后 Members tab 生成的分享链接才真正可用（当前 404）
@@ -251,3 +251,5 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 2026-07-02 | Paper & Ink Phase 4 完成（SDD 执行，`4035cb0`..`a41fd66`）：Base 详情 Tabs（Tables/Members/Settings 真做，History+邀请+描述+导出全部 占位） |
 | 2026-07-03 | Paper & Ink Phase 5A 完成（SDD 执行，`f56c26d`..`5f5efad`）：Grid 视觉——抽 CellRenderer + 10 种 cell + 表格外壳 + 工具栏 restyle |
 | 2026-07-03 | Paper & Ink Phase 5B 完成（SDD 执行，`892e055`..`cc0f433`）：Grid 交互——选中态 + 键盘导航 + cell 历史 dock；修复键盘编辑双 commit（editingRef 守卫） |
+| 2026-07-03 | 修正公开分享过度声明（消费端未实现），Phase 6 跳过、列为独立 P1 功能（`4bc8713`） |
+| 2026-07-03 | Paper & Ink Phase 7 完成（SDD 执行，`50e1aa4`..`98ddbf3`）：404/500/loading + 自造 Toast + ⌘K 命令面板（修 cmdk 上下文崩溃）。**Paper & Ink 重设计整体收官**（Phase 6 分享页除外） |
