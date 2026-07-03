@@ -15,7 +15,7 @@
 | 2 | Login / Register 重设计 | 0.5d | ✅ Complete | 1/1 |
 | 3 | Bases 列表重设计 | 0.5d | ✅ Complete | 1/1 |
 | 4 | Base 详情 + Tabs | 0.5d | ✅ Complete | 1/1 |
-| 5 | Grid Editor | 3d | 🔄 5A 视觉 ✅ / 5B 交互 待做 | 4/8 |
+| 5 | Grid Editor | 3d | ✅ Complete（5A 视觉 + 5B 交互） | 8/8 |
 | 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
 | 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
 | **合计** | | **7d** | **~68%** | **13/19** |
@@ -108,7 +108,7 @@ Progress: **9/9 Tasks Complete**
 
 ---
 
-## Phase 5 · Grid Editor 🔄（拆 5A 视觉 / 5B 交互）
+## Phase 5 · Grid Editor ✅（拆 5A 视觉 / 5B 交互）
 
 ### 5A 视觉 ✅（SDD 执行，commits `f56c26d`..`5f5efad`）
 | Step | 说明 | 文件 | 状态 |
@@ -118,14 +118,15 @@ Progress: **9/9 Tasks Complete**
 | 5A.3 | grid 外壳（2 行表头/行号/ghost/hairline）+ globals.css | `grid-editor.tsx`, `globals.css` | ✅ Done（`0a1a882`） |
 | 5A.4 | 工具栏 + view-config + link-cell restyle | `grid-editor.tsx`, `view-config/*`, `link-cell.tsx` | ✅ Done（`5f5efad`） |
 
-### 5B 交互 ⏳（待做，另立 spec）
+### 5B 交互 ✅（SDD 执行，commits `892e055`..`cc0f433`）
 | Step | 说明 | 状态 |
 |---|---|---|
-| 5B.1 | 选中 cell 态 + 2px ink 描边 + 键盘导航（方向键/Enter/Tab/Esc） | ❌ Pending |
-| 5B.2 | inline 编辑（编辑态 bg-muted） | ❌ Pending |
-| 5B.3 | cell 历史 dock（右侧 280px 滑入，替换现有 per-cell CellHistory） | ❌ Pending |
+| 5B.1 | 选中 cell 态 + 2px ink 描边 + 可聚焦 wrapper | ✅ Done（`892e055`） |
+| 5B.2 | cell 历史 dock（右 280px，替换 per-cell CellHistory，删 cell-history.tsx） | ✅ Done（`8e303ce`） |
+| 5B.3 | 键盘导航（方向键/Enter/Tab/Esc）+ 移除 Input onKeyDown | ✅ Done（`d295fda`） |
+| 5B.fix | 键盘编辑双 commit 修复（同步 editingRef 守卫） | ✅ Done（`cc0f433`，final review 提出） |
 
-> 5A 保留全部数据/实时/mutation 逻辑，编辑仍用现有点击方式。10 种 field（无 long-text）；表达式列头 chip 序列留后续。
+> 编辑仍用点击/键盘 Enter 模型。不做：行/多选、复制粘贴、撤销重做、restore 角色门控、打字进编辑、表达式列头 chip。dock 点外关闭未实现（Esc/× 可关，已记为已知小缺口）。
 
 ---
 

@@ -13,7 +13,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 |---|---|
 | 产品定位 | 单租户自托管通用数据库（Base/Table/Field/Record/View） |
 | v1 核心功能 | **✅ 全部完成**（Phase 0–7） |
-| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–4 ✅；Phase 5A Grid 视觉 ✅；5B 交互 / 6 分享 / 7 收尾 未开始） |
+| Paper & Ink 重设计 | **🔄 进行中**（Phase 0–5 ✅（Grid 视觉+交互）；6 分享 / 7 收尾 未开始） |
 | 技术栈 | Next.js 16 (App Router) + tRPC + Drizzle + Postgres 16 + ws |
 | Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏，见 §4.2 |
 | 部署形态 | 单 Docker Compose（web + postgres）；dev 拆 `next dev` + 独立 realtime 网关 |
@@ -117,12 +117,11 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 ### Phase 4 — Base 详情 + Tabs（0.5d）
 **状态**: ✅ Complete（`27a06c7`, `4035cb0`..`a41fd66`；SDD 执行）——redirect + Tabs 外壳 + Tables/Members/Settings 真做；History 及 邀请/描述/base 级时间线/导出全部 按设计留占位（缺后端）
 
-### Phase 5 — Grid Editor（3d，分 4 个子 Task）
-**状态**: ⏳ Not Started
-- 5.1 ViewTabs + FilterBar + grid 外壳
-- 5.2 Cell 类型渲染（11 种字段）
-- 5.3 Inline 编辑 + 键盘导航
-- 5.4 Cell 历史 dock
+### Phase 5 — Grid Editor（拆 5A 视觉 / 5B 交互）
+**状态**: ✅ Complete（SDD 执行）
+- 5A 视觉（`f56c26d`..`5f5efad`）：抽 CellRenderer + 10 种 cell Paper & Ink + 2 行表头/行号/ghost 外壳 + 工具栏/view-config restyle
+- 5B 交互（`892e055`..`cc0f433`）：选中态 2px ink 描边 + 键盘导航（方向键/Enter/Tab/Esc）+ cell 历史 dock（替换 per-cell CellHistory）；修复键盘编辑双 commit
+- 实际 10 种 field（无 long-text）；不做 restore 角色门控 / 打字进编辑 / dock 点外关闭
 
 ### Phase 6 — 公开分享页（0.5d）
 **状态**: ⏳ Not Started
@@ -148,7 +147,7 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | `archived/teable/` | 64 MB | teable 完整 fork，仅作只读参考。含大量 ARCHITECTURE.md、README。 | ✅ 正确归档，保持不动 |
 | `.superpowers/sdd/` | ~184 KB | SDD 任务跟踪文件（task-*.brief.md），内容与 `docs/redesign/2026-07-01-paper-ink-plan.md` 重复。 | 🔄 可删除或精简（计划中） |
 | `apps/web/src/components/view-config/` | 4 个组件 | `view-tabs.tsx` / `filter-panel.tsx` / `sort-menu.tsx` / `view-fields-menu.tsx` — Phase 5A 已 restyle 为 Paper & Ink（保留逻辑）。 | ✅ 已 restyle（`5f5efad`） |
-| `apps/web/src/app/bases/[baseId]/tables/[tableId]/grid-editor.tsx` | Grid 编辑器 | Phase 5A：cell 渲染已抽到 `cell-renderers.tsx`，表格外壳/工具栏已 Paper & Ink。数据/实时/mutation 逻辑保留。5B 加选中态/键盘/history dock。 | 🔄 5A 视觉完成，5B 交互待做 |
+| `apps/web/src/app/bases/[baseId]/tables/[tableId]/grid-editor.tsx` | Grid 编辑器 | Phase 5 完成：cell 渲染在 `cell-renderers.tsx`，表格外壳/工具栏 Paper & Ink；选中态+键盘导航+`cell-history-dock.tsx`。数据/实时/mutation 逻辑保留。 | ✅ Complete |
 | `.next/` | 大量缓存 | Next.js 开发缓存。 | 应 `.gitignore`（已排除） |
 
 ### 4.2 已知问题
@@ -175,21 +174,14 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 5B（Grid 交互）
-- 选中 cell 态 + 2px ink 描边 + 键盘导航（方向键/Enter/Tab/Esc）
-- inline 编辑（编辑态 bg-muted）
-- cell 历史 dock（右侧 280px 滑入，替换现有 per-cell `CellHistory`）
-- ~~Phase 1–4~~ ✅ / ~~Phase 5A Grid 视觉（外壳 + 10 种 cell + 工具栏 restyle）~~ ✅（`f56c26d`..`5f5efad`）
+### 🔴 P0 — Paper & Ink Phase 6 / 7（收尾）
+- Phase 6：公开分享页 `/share/[token]` 重设计
+- Phase 7：404/500/loading、Toast 系统、⌘K 命令面板占位
+- ~~Phase 1–4~~ ✅ / ~~Phase 5 Grid（5A 视觉 + 5B 交互）~~ ✅（`f56c26d`..`cc0f433`）
 
-### 🟡 P1 — Phase 4 遗留占位（待后端）
+### 🟡 P1 — Phase 4/5 遗留占位（待后端/后续）
 - 邀请成员机制、base 描述字段、History base 级时间线 endpoint、导出全部、前端角色门控
-
-### 🔴 P0 — Paper & Ink Phase 5（Grid Editor）
-- 重构 grid-editor.tsx：用 Paper & Ink 组件替换 JSX
-- 保留所有数据加载逻辑（trpc, realtime, mutation）
-- 实现 11 种 cell 类型渲染
-- 实现 inline 编辑 + 键盘导航
-- 实现 cell 历史 dock
+- Grid：dock 点外关闭、表达式列头 chip、行/多选、复制粘贴、撤销重做
 
 ### 🟡 P1 — 测试基础设施
 - 建立单元测试（vitest）
@@ -252,4 +244,5 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 | 2026-07-02 | Paper & Ink：Bases 列表/详情/新建页重设计（`27a06c7`，Phase 1–3 ✅、4 部分） |
 | 2026-07-02 | 修复 dev 内存 OOM：dev 拆进程 + Postgres NOTIFY/LISTEN（`2b5cfc5`）；打包器 Turbopack→Rspack（`4d72162`），根因见 §4.2 |
 | 2026-07-02 | Paper & Ink Phase 4 完成（SDD 执行，`4035cb0`..`a41fd66`）：Base 详情 Tabs（Tables/Members/Settings 真做，History+邀请+描述+导出全部 占位） |
-| 2026-07-03 | Paper & Ink Phase 5A 完成（SDD 执行，`f56c26d`..`5f5efad`）：Grid 视觉——抽 CellRenderer + 10 种 cell + 表格外壳 + 工具栏 restyle；5B 交互待做 |
+| 2026-07-03 | Paper & Ink Phase 5A 完成（SDD 执行，`f56c26d`..`5f5efad`）：Grid 视觉——抽 CellRenderer + 10 种 cell + 表格外壳 + 工具栏 restyle |
+| 2026-07-03 | Paper & Ink Phase 5B 完成（SDD 执行，`892e055`..`cc0f433`）：Grid 交互——选中态 + 键盘导航 + cell 历史 dock；修复键盘编辑双 commit（editingRef 守卫） |
