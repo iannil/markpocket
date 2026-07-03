@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -34,27 +35,29 @@ export function CommandPalette({ bases }: { bases: Array<{ id: string; name: str
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command…" />
-      <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
-        <CommandGroup heading="Navigate">
-          <CommandItem value="Go to Bases" onSelect={() => go('/bases')}>
-            Go to Bases
-          </CommandItem>
-          <CommandItem value="New base" onSelect={() => go('/bases/new')}>
-            New base
-          </CommandItem>
-        </CommandGroup>
-        {bases.length > 0 && (
-          <CommandGroup heading="Bases">
-            {bases.map((b) => (
-              <CommandItem key={b.id} value={b.name} onSelect={() => go(`/bases/${b.id}`)}>
-                {b.name}
-              </CommandItem>
-            ))}
+      <Command>
+        <CommandInput placeholder="Type a command…" />
+        <CommandList>
+          <CommandEmpty>No results.</CommandEmpty>
+          <CommandGroup heading="Navigate">
+            <CommandItem value="Go to Bases" onSelect={() => go('/bases')}>
+              Go to Bases
+            </CommandItem>
+            <CommandItem value="New base" onSelect={() => go('/bases/new')}>
+              New base
+            </CommandItem>
           </CommandGroup>
-        )}
-      </CommandList>
+          {bases.length > 0 && (
+            <CommandGroup heading="Bases">
+              {bases.map((b) => (
+                <CommandItem key={b.id} value={b.name} onSelect={() => go(`/bases/${b.id}`)}>
+                  {b.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }
