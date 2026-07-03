@@ -16,7 +16,7 @@
 | 3 | Bases 列表重设计 | 0.5d | ✅ Complete | 1/1 |
 | 4 | Base 详情 + Tabs | 0.5d | ✅ Complete | 1/1 |
 | 5 | Grid Editor | 3d | ✅ Complete（5A 视觉 + 5B 交互） | 8/8 |
-| 6 | 公开分享页 | 0.5d | ⏳ Not Started | 0/1 |
+| 6 | 公开分享页 | — | ⏭️ 跳过（消费端未实现，非重设计） | — |
 | 7 | 收尾 | 0.5d | ⏳ Not Started | 0/1 |
 | **合计** | | **7d** | **~68%** | **13/19** |
 
@@ -130,11 +130,9 @@ Progress: **9/9 Tasks Complete**
 
 ---
 
-## Phase 6 · 公开分享页 ⏳
+## Phase 6 · 公开分享页 ⏭️ 跳过
 
-| Step | 说明 | 文件 | 状态 |
-|---|---|---|---|
-| 6.1 | 公开分享页重设计 | `share/[token]/page.tsx` | ❌ Pending |
+前提不成立：`/share/[token]` 公开页与 public 按-token 读取端点**从未实现**（v1 §7 过度声明）。Members tab 生成的分享链接目前打开是 404。**没有页可重设计** —— 公开分享作为独立真功能待建（含 public 端点 + 公开只读页），见 `STATUS.md` §5 P1，不属 Paper & Ink 换肤范畴。
 
 ---
 

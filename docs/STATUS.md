@@ -76,7 +76,7 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 ### Phase 7 — 收尾（`5c3b127`）
 **状态**: ✅ Complete
 - CSV 导入导出
-- 公开分享（base_shares, read-only token）
+- 公开分享 **⚠️ 仅后端一半**：`base_share` 表 + `share.create/list/delete`（生成 token）已做，但**公开消费端从未实现**——没有 `/share/[token]` 公开页，也没有 public 的按-token 读取端点。Members tab 生成的分享链接目前打开是 404。作为独立功能待建（见 §5 P1）。
 - 权限三层角色（owner / editor / viewer）
 
 ---
@@ -174,10 +174,15 @@ v1 功能 Phase 已全部落地，按 git log 从旧到新排列。每一 Phase 
 
 ## 5. 下一步工作（按优先级）
 
-### 🔴 P0 — Paper & Ink Phase 6 / 7（收尾）
-- Phase 6：公开分享页 `/share/[token]` 重设计
-- Phase 7：404/500/loading、Toast 系统、⌘K 命令面板占位
+### 🔴 P0 — Paper & Ink Phase 7（收尾）
+- 404 / 500 / loading 页、Toast 系统、⌘K 命令面板占位
 - ~~Phase 1–4~~ ✅ / ~~Phase 5 Grid（5A 视觉 + 5B 交互）~~ ✅（`f56c26d`..`cc0f433`）
+- Phase 6（分享页重设计）**跳过**：公开分享消费端未实现（见下），无页可重设计
+
+### 🟡 P1 — 公开分享功能（真功能，非重设计）
+- 新增 public 端点：按 token 读 base/table/fields/records（尊重 `viewId` 范围 + `expiresAt`）
+- 新建 `/share/[token]` 公开只读页（无 AppShell/鉴权）+ 复用 CellRenderer 只读 Paper & Ink 渲染
+- 完成后 Members tab 生成的分享链接才真正可用（当前 404）
 
 ### 🟡 P1 — Phase 4/5 遗留占位（待后端/后续）
 - 邀请成员机制、base 描述字段、History base 级时间线 endpoint、导出全部、前端角色门控
