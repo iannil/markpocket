@@ -50,6 +50,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@markpocket/plugin-csv':
+        specifier: workspace:*
+        version: link:../../packages/plugin-csv
       '@markpocket/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk

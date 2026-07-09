@@ -1,3 +1,4 @@
+import { pluginRouters } from '@/plugins.config';
 import { router } from './init';
 import { authRouter } from './routers/auth';
 import { baseRouter } from './routers/base';
@@ -23,6 +24,7 @@ export const appRouter = router({
   history: historyRouter,
   share: shareRouter,
   member: memberRouter,
+  ...pluginRouters,
 });
 
 export type AppRouter = typeof appRouter;

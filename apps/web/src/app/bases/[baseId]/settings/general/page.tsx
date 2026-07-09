@@ -71,12 +71,13 @@ export default function GeneralTab() {
               className="flex items-center justify-between rounded border-b border-border px-2 py-2.5 hover:bg-muted"
             >
               <span className="text-sm">{t.name}</span>
-              <a
-                href={`/api/export?tableId=${t.id}`}
-                className="text-xs text-muted-foreground hover:text-foreground"
+              {/* Task 7: 替换为 <Slot name="table.export"> —— 临时占位，避免 dangling /api/export 404 */}
+              <span
+                aria-disabled="true"
+                className="cursor-not-allowed text-xs text-muted-foreground/50"
               >
                 download →
-              </a>
+              </span>
             </li>
           ))}
         </ul>
