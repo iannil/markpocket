@@ -1,6 +1,6 @@
 import { attachment } from '@/server/db/schema';
 import { db } from '@/server/db';
-import { getStorage } from '@/server/storage';
+import { getStorage } from '@/server/plugins';
 import { auth } from '@/server/auth';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';

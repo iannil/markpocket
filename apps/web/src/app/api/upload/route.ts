@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { attachment } from '@/server/db/schema';
 import { db } from '@/server/db';
-import { getStorage } from '@/server/storage';
+import { getStorage } from '@/server/plugins';
 import { auth } from '@/server/auth';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';

@@ -53,6 +53,9 @@ importers:
       '@markpocket/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@markpocket/plugin-storage-local':
+        specifier: workspace:*
+        version: link:../../packages/plugin-storage-local
       '@tanstack/react-query':
         specifier: ^5.101.2
         version: 5.101.2(react@19.2.7)
