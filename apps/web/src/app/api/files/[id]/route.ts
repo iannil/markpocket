@@ -1,6 +1,6 @@
 import { attachment } from '@/server/db/schema';
 import { db } from '@/server/db';
-import { get } from '@/server/storage/local';
+import { getStorage } from '@/server/storage';
 import { auth } from '@/server/auth';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const data = await get(row.storageKey);
+  const data = await getStorage().get(row.storageKey);
   const safeFilename = row.filename.replace(/[\r\n"]/g, '_');
   return new NextResponse(new Uint8Array(data), {
     headers: {
