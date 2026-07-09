@@ -31,7 +31,7 @@
    - **Server Router**：`appRouter` 暴露一个 `plugins` 命名空间，插件在启动钩子里 `mergeRouters`。风险中（tRPC 类型在编译期静态，动态挂载需运行时 + 类型双轨）。
    - View Type / UI Slot / Table Action / Auth Provider：各自成文，不在本 ADR 展开。
 
-4. **License 验证不属于本 ADR**。付费/license 闭源模块另起 ADR-0007，本 ADR 只解决「核心可被扩展」这一步，与收费解耦。
+4. **License 验证不属于本 ADR**。付费/license 闭源模块另起后续 ADR（加载器与注册表已占用 ADR-0007，license 顺延），本 ADR 只解决「核心可被扩展」这一步，与收费解耦。
 
 ## 后果
 
