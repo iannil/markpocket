@@ -146,6 +146,10 @@ importers:
         version: 4.22.4
 
   packages/plugin-sdk:
+    dependencies:
+      '@trpc/server':
+        specifier: ^11.18.0
+        version: 11.18.0(typescript@6.0.3)
     devDependencies:
       '@types/node':
         specifier: ^26.0.1
