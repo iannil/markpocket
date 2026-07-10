@@ -4,6 +4,7 @@ import '@/app/globals.css';
 import { TRPCProvider } from '@/lib/trpc/client';
 import { RealtimeProvider } from '@/components/realtime/realtime-provider';
 import { Toaster } from '@/components/toaster';
+import '@/plugins.client';
 
 export const metadata: Metadata = {
   title: 'markpocket',

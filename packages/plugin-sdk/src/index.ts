@@ -32,3 +32,55 @@ export interface PluginDefinition {
 export function definePlugin(def: PluginDefinition): PluginDefinition {
   return def;
 }
+
+// --- Server Router 扩展点：核心服务注入 ---
+
+// 最小 drizzle 面（够 CSV 用；宽松以避免 SDK 依赖 app schema）。
+export interface DrizzleLike {
+  insert: (table: unknown) => {
+    values: (v: unknown) => {
+      returning: () => Promise<unknown[]>;
+      execute?: () => Promise<unknown>;
+    } & Promise<unknown>;
+  };
+  // drizzle 的 select 返回一个高度泛型的链式 builder；此处保持 any 以避免 SDK 依赖 app schema。
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  select: (fields?: unknown) => any;
+}
+
+export interface CoreSchema {
+  record: unknown;
+  cell: unknown;
+  field: unknown;
+  table: unknown;
+}
+
+export interface CoreQueries {
+  listRecordsPivoted: (
+    tableId: string,
+    opts: { where?: unknown; orderBy?: unknown },
+    offset?: number,
+    limit?: number,
+  ) => Promise<Array<{ id: string; cells: Record<string, unknown> }>>;
+}
+
+export interface CoreFieldTypes {
+  FieldType: Record<string, string>;
+  formatNumberToString: (n: number, opts: { precision?: number }) => string;
+  parseStringToNumber: (input: string) => number | null;
+}
+
+export interface CoreServerApi {
+  db: DrizzleLike;
+  schema: CoreSchema;
+  queries: CoreQueries;
+  fieldTypes: CoreFieldTypes;
+}
+
+export type ServerRouterFactory<TRouter> = (core: CoreServerApi) => TRouter;
+
+// --- UI Slot 扩展点（client 组件类型在客户端侧收紧为 React 组件）---
+export interface UiSlotContribution {
+  slotId: string;
+  Component: unknown;
+}

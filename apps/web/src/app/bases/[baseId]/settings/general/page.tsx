@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Slot } from '@/lib/plugins/ui-slot-client';
 import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 
@@ -41,6 +42,7 @@ export default function GeneralTab() {
     },
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const importMut = trpc.csv.import.useMutation();
 
   return (
     <div className="space-y-8">
@@ -63,23 +65,32 @@ export default function GeneralTab() {
       </section>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold">Export (CSV)</h2>
-        <ul className="border-t border-border">
-          {tables.data?.map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center justify-between rounded border-b border-border px-2 py-2.5 hover:bg-muted"
-            >
-              <span className="text-sm">{t.name}</span>
-              <a
-                href={`/api/export?tableId=${t.id}`}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                download →
-              </a>
-            </li>
-          ))}
-        </ul>
+        <h2 className="mb-2 text-sm font-semibold">Tables (CSV)</h2>
+        <Slot
+          id="table-tools"
+          ctx={{
+            tables: tables.data ?? [],
+            onExport: async (tableId: string) => {
+              const { csv } = await utils.client.csv.export.query({ tableId });
+              const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+              const a = document.createElement('a');
+              a.href = url;
+              const tableName = (tables.data ?? []).find((t) => t.id === tableId)?.name;
+              const fileBase = tableName ? tableName.replace(/[^a-zA-Z0-9_-]/g, '_') : tableId;
+              a.download = `${fileBase}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            },
+            onImport: async (tableId: string, file: File) => {
+              const csvText = await file.text();
+              const { imported } = await importMut.mutateAsync({ tableId, csvText });
+              toast.success(`Imported ${imported} rows`);
+              // Grid reads records via record.list; invalidate the record query it
+              // actually reads (mirrors grid-editor.tsx) so the Grid repaints.
+              void utils.record.list.invalidate({ tableId });
+            },
+          }}
+        />
       </section>
 
       <section>
