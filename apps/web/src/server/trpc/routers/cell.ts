@@ -4,7 +4,8 @@ import { and, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { FieldType, FieldOptions, normalizeCellValue } from '@/lib/field-types';
+import { FieldType, type FieldOptions } from '@/lib/field-types';
+import { normalizeCellValue } from '@/server/plugins/field-value';
 import { evaluateExpression } from '@/lib/expression-eval';
 import { cell, cellHistory, field, record } from '../../db/schema';
 import { db } from '../../db';
