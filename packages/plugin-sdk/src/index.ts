@@ -84,3 +84,22 @@ export interface UiSlotContribution {
   slotId: string;
   Component: unknown;
 }
+
+// --- Field Type 扩展点（server 侧值语义）---
+
+export type CellValue = string | number | boolean | string[];
+export type FieldOptions = Record<string, unknown>;
+export type NormalizedCell = { empty: true } | { value: CellValue } | { error: string };
+
+// 结构化 options 校验面：任何 zod object schema 的 .parse 结构上满足它，SDK 因此不依赖 zod。
+export interface OptionsSchema {
+  parse(raw: unknown): FieldOptions;
+}
+
+export interface FieldTypeContribution {
+  type: string;
+  optionsSchema: OptionsSchema;
+  defaultOptions: () => FieldOptions;
+  normalizeCellValue: (options: FieldOptions, raw: unknown) => NormalizedCell;
+  meta: { label: string; description: string };
+}
