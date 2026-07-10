@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/server/db', () => ({ db: {} }));
 
 import { defaultOptions, normalizeCellValue, parseOptions } from './field-value';
-import '@/server/plugins'; // barrel side-effect: registers builtin field types
 
 describe('field-value dispatch', () => {
   it('normalizeCellValue dispatches to the registered type', () => {
