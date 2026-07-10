@@ -4,14 +4,20 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./client": "./src/client.tsx"
   },
   "dependencies": {
     "@markpocket/plugin-sdk": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "zod": "^4.4.3"
   },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
   "devDependencies": {
-    "@types/node": "^26.0.1"
+    "@types/node": "^26.0.1",
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7"
   }
 }
