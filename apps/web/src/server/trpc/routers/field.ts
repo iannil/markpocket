@@ -4,13 +4,8 @@ import { eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import {
-  FIELD_TYPES,
-  FieldType,
-  FieldOptions,
-  defaultOptions,
-  parseOptions,
-} from '@/lib/field-types';
+import { FIELD_TYPES, FieldType, type FieldOptions } from '@/lib/field-types';
+import { defaultOptions, parseOptions } from '@/server/plugins/field-value';
 import { field } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
