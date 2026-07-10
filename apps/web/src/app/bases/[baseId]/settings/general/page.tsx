@@ -75,7 +75,9 @@ export default function GeneralTab() {
               const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
               const a = document.createElement('a');
               a.href = url;
-              a.download = `${tableId}.csv`;
+              const tableName = (tables.data ?? []).find((t) => t.id === tableId)?.name;
+              const fileBase = tableName ? tableName.replace(/[^a-zA-Z0-9_-]/g, '_') : tableId;
+              a.download = `${fileBase}.csv`;
               a.click();
               URL.revokeObjectURL(url);
             },
@@ -83,7 +85,9 @@ export default function GeneralTab() {
               const csvText = await file.text();
               const { imported } = await importMut.mutateAsync({ tableId, csvText });
               toast.success(`Imported ${imported} rows`);
-              void utils.table.list.invalidate({ baseId });
+              // Grid reads records via record.list; invalidate the record query it
+              // actually reads (mirrors grid-editor.tsx) so the Grid repaints.
+              void utils.record.list.invalidate({ tableId });
             },
           }}
         />
