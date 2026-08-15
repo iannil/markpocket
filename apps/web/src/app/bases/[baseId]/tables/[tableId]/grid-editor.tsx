@@ -362,7 +362,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                     <button
                       className="block w-full px-2.5 pt-1 text-left"
                       onClick={() => openEditField(f)}
-                      title={`${f.name} (${f.type})`}
+                      title={`${f.name} (${f.type === 'expression' ? ((f.options as { expression?: string })?.expression ?? 'expr') : f.type})`}
                     >
                       <div className="text-xs font-medium text-foreground">
                         {f.name}
@@ -374,9 +374,20 @@ export function GridEditor({ tableId }: { tableId: string }) {
                           </span>
                         )}
                       </div>
-                      <div className="pb-1 font-mono text-[10px] text-muted-foreground">
-                        {f.type}
-                      </div>
+                      {f.type === 'expression' ? (
+                        <div className="flex items-center gap-1 pb-1">
+                          <span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
+                            {(f.options as { expression?: string })?.expression ?? 'expr'}
+                          </span>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            expression
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="pb-1 font-mono text-[10px] text-muted-foreground">
+                          {f.type}
+                        </div>
+                      )}
                     </button>
                     <div
                       className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
