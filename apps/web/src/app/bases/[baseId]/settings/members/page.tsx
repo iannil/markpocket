@@ -40,6 +40,16 @@ export default function MembersTab() {
     onSuccess: () => utils.share.list.invalidate({ baseId }),
   });
 
+  if (members.isLoading) {
+    return (
+      <div className="space-y-3 p-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-12 animate-pulse rounded bg-muted" />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <section>

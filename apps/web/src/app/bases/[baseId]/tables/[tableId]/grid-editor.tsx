@@ -52,9 +52,37 @@ const DEFAULT_COL_WIDTH = 160;
 
 export function GridEditor({ tableId }: { tableId: string }) {
   const utils = trpc.useUtils();
-  const { data: fieldsData } = trpc.field.list.useQuery({ tableId });
-  const { data: viewsData } = trpc.view.list.useQuery({ tableId });
+  const {
+    data: fieldsData,
+    isLoading: fieldsLoading,
+    isError: fieldsError,
+  } = trpc.field.list.useQuery({ tableId });
+  const {
+    data: viewsData,
+    isLoading: viewsLoading,
+    isError: viewsError,
+  } = trpc.view.list.useQuery({ tableId });
   const { data: usersData } = trpc.auth.listUsers.useQuery();
+
+  if (fieldsLoading || viewsLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="space-y-3">
+          <div className="h-8 w-96 animate-pulse rounded bg-muted" />
+          <div className="h-64 w-96 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    );
+  }
+
+  if (fieldsError || viewsError) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-destructive">
+        Failed to load fields. Please try again.
+      </div>
+    );
+  }
+
   const fields = (fieldsData ?? []) as FieldLike[];
   const views = (viewsData ?? []) as ViewLike[];
 
