@@ -83,9 +83,6 @@ export function GridEditor({ tableId }: { tableId: string }) {
   const createRecord = trpc.record.create.useMutation({
     onSuccess: () => utils.record.list.invalidate({ tableId }),
   });
-  const deleteRecord = trpc.record.delete.useMutation({
-    onSuccess: () => utils.record.list.invalidate({ tableId }),
-  });
   const updateOptionsMut = trpc.view.updateOptions.useMutation({
     onSuccess: () => {
       utils.view.list.invalidate({ tableId });
@@ -106,6 +103,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
   const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
     null,
   );
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const gridRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -207,6 +205,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
       case 'Escape':
         e.preventDefault();
         setSelectedCell(null);
+        setSelectedRows(new Set());
         break;
     }
   }
@@ -421,15 +420,38 @@ export function GridEditor({ tableId }: { tableId: string }) {
                     </tr>
                   )}
                   {g.records.map((rec, i) => (
-                    <tr key={rec.id} className="group">
+                    <tr
+                      key={rec.id}
+                      className={`group ${selectedRows.has(rec.id) ? 'bg-primary/5' : ''}`}
+                    >
                       <td className="border-b border-border px-2 text-center text-xs text-muted-foreground">
-                        <span className="group-hover:hidden">{i + 1}</span>
                         <button
-                          className="hidden text-muted-foreground hover:text-destructive group-hover:inline"
-                          onClick={() => deleteRecord.mutate({ id: rec.id, tableId })}
-                          title="Delete record"
+                          className={`w-full ${
+                            selectedRows.has(rec.id)
+                              ? 'bg-primary/10 font-semibold text-primary'
+                              : ''
+                          }`}
+                          onClick={(e) => {
+                            const next = new Set(selectedRows);
+                            if (e.shiftKey && selectedCell) {
+                              // Range select: from last selected to this one
+                              const flat = groups.flatMap((g) => g.records);
+                              const start = flat.findIndex((r) => r.id === selectedCell.recordId);
+                              const end = flat.findIndex((r) => r.id === rec.id);
+                              const [lo, hi] = start < end ? [start, end] : [end, start];
+                              for (let j = lo; j <= hi; j++) next.add(flat[j]!.id);
+                            } else if (e.metaKey || e.ctrlKey) {
+                              if (next.has(rec.id)) next.delete(rec.id);
+                              else next.add(rec.id);
+                            } else {
+                              next.clear();
+                              next.add(rec.id);
+                            }
+                            setSelectedRows(next);
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
                         >
-                          ×
+                          {i + 1}
                         </button>
                       </td>
                       {displayedFields.map((f) => (
