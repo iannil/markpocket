@@ -23,6 +23,7 @@ import { FieldType, type SelectOption } from '@/lib/field-types';
 import { cn } from '@/lib/utils';
 import { CellRenderer } from './cell-renderers';
 import { CellHistoryDock } from './cell-history-dock';
+import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 import type { ViewOptions } from '@/lib/view-ast';
 
@@ -78,13 +79,25 @@ export function GridEditor({ tableId }: { tableId: string }) {
   const groups = (recordsData?.groups ?? []) as GroupLike[];
 
   const upsertCell = trpc.cell.upsert.useMutation({
-    onSuccess: () => utils.record.list.invalidate({ tableId }),
+    onSuccess: () => {
+      utils.record.list.invalidate({ tableId });
+      toast.success('Cell updated');
+    },
+    onError: (err) => toast.error(err.message),
   });
   const createRecord = trpc.record.create.useMutation({
-    onSuccess: () => utils.record.list.invalidate({ tableId }),
+    onSuccess: () => {
+      utils.record.list.invalidate({ tableId });
+      toast.success('Record added');
+    },
+    onError: (err) => toast.error(err.message),
   });
   const deleteRecord = trpc.record.delete.useMutation({
-    onSuccess: () => utils.record.list.invalidate({ tableId }),
+    onSuccess: () => {
+      utils.record.list.invalidate({ tableId });
+      toast.success('Record deleted');
+    },
+    onError: (err) => toast.error(err.message),
   });
   const updateOptionsMut = trpc.view.updateOptions.useMutation({
     onSuccess: () => {

@@ -28,7 +28,13 @@ export default function MembersTab() {
     onSuccess: () => utils.member.list.invalidate({ baseId }),
   });
   const createShare = trpc.share.create.useMutation({
-    onSuccess: () => utils.share.list.invalidate({ baseId }),
+    onSuccess: (row) => {
+      void utils.share.list.invalidate({ baseId });
+      toast.success('Share link created');
+      navigator.clipboard.writeText(`${window.location.origin}/share/${row.token}`);
+      toast.info('Link copied to clipboard');
+    },
+    onError: (err) => toast.error(err.message),
   });
   const deleteShare = trpc.share.delete.useMutation({
     onSuccess: () => utils.share.list.invalidate({ baseId }),
