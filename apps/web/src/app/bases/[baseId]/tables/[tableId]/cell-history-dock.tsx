@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { trpc } from '@/lib/trpc/client';
 
 function fmtVal(v: unknown): string {
@@ -38,6 +39,7 @@ export function CellHistoryDock({
   onRestore: (value: unknown) => void;
   onClose: () => void;
 }) {
+  const [showDiff, setShowDiff] = useState<string | null>(null);
   const { data: history } = trpc.history.list.useQuery({
     recordId: cell.recordId,
     fieldId: cell.fieldId,
@@ -77,11 +79,25 @@ export function CellHistoryDock({
                 <span>{fmtTime(h.changedAt)}</span>
               </div>
               <button
-                onClick={() => onRestore(h.newValue)}
+                onClick={() => {
+                  if (confirm('Restore this version?')) onRestore(h.newValue);
+                }}
                 className="mt-0.5 text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 restore
               </button>
+              <button
+                onClick={() => setShowDiff(showDiff === h.id ? null : h.id)}
+                className="ml-2 text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                {showDiff === h.id ? 'hide diff' : 'diff'}
+              </button>
+              {showDiff === h.id && (
+                <div className="mt-1 rounded bg-muted p-1.5 font-mono text-[10px]">
+                  <div className="text-muted-foreground">Old: {fmtVal(h.oldValue)}</div>
+                  <div className="text-foreground">New: {fmtVal(h.newValue)}</div>
+                </div>
+              )}
             </div>
           ))
         )}
