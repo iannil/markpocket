@@ -369,7 +369,17 @@ export function GridEditor({ tableId }: { tableId: string }) {
         />
       )}
 
-      <div ref={gridRef} tabIndex={0} onKeyDown={onGridKeyDown} className="relative outline-none">
+      <div
+        ref={gridRef}
+        tabIndex={0}
+        onKeyDown={onGridKeyDown}
+        className="relative outline-none"
+        onClick={(e) => {
+          if (selectedCell && e.target === e.currentTarget) {
+            setSelectedCell(null);
+          }
+        }}
+      >
         <div className="overflow-auto rounded-md border border-border">
           <table className="markpocket-grid border-collapse text-sm">
             <colgroup>
