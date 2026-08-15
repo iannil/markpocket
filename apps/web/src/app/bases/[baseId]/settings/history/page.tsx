@@ -1,5 +1,7 @@
-import { EmptyState } from '@/components/empty-state';
+import { redirect } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 export default function HistoryTab() {
-  return <EmptyState title="Coming soon" description="Base 级变更时间线待后端支持。" />;
+  const { baseId } = useParams<{ baseId: string }>();
+  redirect(`/bases/${baseId}/history`);
 }
