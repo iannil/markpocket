@@ -67,6 +67,7 @@ export interface CellRendererProps {
   onStartEdit: (current: unknown) => void;
   onCommitEdit: () => void;
   onUpsert: (value: unknown) => void;
+  readOnly?: boolean;
 }
 
 export function CellRenderer({
@@ -79,6 +80,7 @@ export function CellRenderer({
   onStartEdit,
   onCommitEdit,
   onUpsert,
+  readOnly = false,
 }: CellRendererProps) {
   const value = record.cells[field.id];
 
@@ -87,7 +89,8 @@ export function CellRenderer({
       return (
         <button
           className="flex min-h-[28px] w-full items-start px-2.5 py-1 text-sm"
-          onClick={() => onUpsert(!value)}
+          onClick={() => (readOnly ? undefined : onUpsert(!value))}
+          disabled={readOnly}
         >
           {value ? <span className="text-foreground">✓</span> : null}
         </button>
@@ -95,6 +98,23 @@ export function CellRenderer({
     case FieldType.SingleSelect: {
       const choices = (field.options.choices as SelectOption[] | undefined) ?? [];
       const selected = choices.find((c) => c.id === (value as string | undefined));
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-center gap-1 px-2.5 text-sm">
+            {selected ? (
+              <span className="flex items-center">
+                <span
+                  className="mr-1.5 inline-block size-1.5 rounded-full"
+                  style={{ backgroundColor: selected.color }}
+                />
+                {selected.name}
+              </span>
+            ) : (
+              EMPTY
+            )}
+          </div>
+        );
+      }
       return (
         <Select value={(value as string | undefined) ?? ''} onValueChange={(v) => onUpsert(v)}>
           <SelectTrigger className="h-7 w-full rounded-none border-0 focus:ring-0">
@@ -145,6 +165,26 @@ export function CellRenderer({
           : [...selectedIds, id];
         onUpsert(next);
       }
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-center px-2.5 text-sm">
+            {selectedNames.length === 0 ? (
+              EMPTY
+            ) : (
+              <span className="flex items-center">
+                {selectedNames.slice(0, 2).map((name) => (
+                  <span key={name} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+                    {name}
+                  </span>
+                ))}
+                {selectedNames.length > 2 ? (
+                  <span className="text-xs text-muted-foreground">+{selectedNames.length - 2}</span>
+                ) : null}
+              </span>
+            )}
+          </div>
+        );
+      }
       return (
         <Popover>
           <PopoverTrigger className="flex min-h-[28px] w-full items-start px-2.5 py-1 text-left text-sm">
@@ -181,6 +221,22 @@ export function CellRenderer({
     case FieldType.User: {
       const selected = users.find((u) => u.id === (value as string | undefined));
       const label = selected ? (selected.name ?? selected.email ?? selected.id) : '';
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-center gap-1.5 px-2.5 text-sm">
+            {selected ? (
+              <span className="flex items-center gap-1.5">
+                <span className="flex size-5 items-center justify-center rounded-full bg-muted font-mono text-[10px]">
+                  {initials(label)}
+                </span>
+                {label}
+              </span>
+            ) : (
+              EMPTY
+            )}
+          </div>
+        );
+      }
       return (
         <Select
           value={(value as string | undefined) ?? ''}
@@ -214,6 +270,19 @@ export function CellRenderer({
     case FieldType.Link: {
       const targetTableId = field.options.targetTableId as string | undefined;
       const linkedIds = (value as string[] | undefined) ?? [];
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-center px-2.5 text-sm">
+            {linkedIds.length > 0 ? (
+              <span className="text-muted-foreground">
+                {linkedIds.length} linked record{linkedIds.length !== 1 ? 's' : ''}
+              </span>
+            ) : (
+              EMPTY
+            )}
+          </div>
+        );
+      }
       // Resolve linked record primary field values via a query hook
       return (
         <LinkCell
@@ -230,29 +299,42 @@ export function CellRenderer({
           {attIds.map((id) => (
             <AttachmentThumb key={id} id={id} />
           ))}
-          <label className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-            +upload
-            <input
-              type="file"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const fd = new FormData();
-                fd.append('file', file);
-                const res = await fetch('/api/upload', { method: 'POST', body: fd });
-                const json = await res.json();
-                if (json.id) {
-                  onUpsert([...attIds, json.id]);
-                }
-              }}
-            />
-          </label>
+          {!readOnly && (
+            <label className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              +upload
+              <input
+                type="file"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+                  const json = await res.json();
+                  if (json.id) {
+                    onUpsert([...attIds, json.id]);
+                  }
+                }}
+              />
+            </label>
+          )}
         </div>
       );
     }
     case FieldType.Number: {
       const num = value == null ? null : (value as number);
+      if (readOnly) {
+        return (
+          <div
+            className={`flex min-h-[28px] w-full items-start justify-end px-2.5 py-1 text-right font-mono tabular-nums text-sm${num != null && num < 0 ? ' text-destructive' : ''}`}
+          >
+            {num == null
+              ? EMPTY
+              : formatNumberToString(num, field.options as { precision?: number })}
+          </div>
+        );
+      }
       return isEditing ? (
         <Input
           className="h-7 rounded-none border-0 bg-muted focus-visible:ring-0"
@@ -276,6 +358,19 @@ export function CellRenderer({
     case FieldType.Date: {
       const includeTime = (field.options.includeTime as boolean | undefined) ?? false;
       const rel = value == null ? null : relativeDate(String(value));
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-start px-2.5 py-1 text-left font-mono text-sm">
+            {value == null ? (
+              EMPTY
+            ) : rel ? (
+              <span className="text-muted-foreground">{rel}</span>
+            ) : (
+              String(value)
+            )}
+          </div>
+        );
+      }
       return isEditing ? (
         <Input
           className="h-7 rounded-none border-0 bg-muted focus-visible:ring-0"
@@ -302,6 +397,13 @@ export function CellRenderer({
     }
     case FieldType.Text:
     default:
+      if (readOnly) {
+        return (
+          <div className="flex min-h-[28px] w-full items-start px-2.5 py-1 text-left text-sm">
+            {value == null || value === '' ? EMPTY : String(value)}
+          </div>
+        );
+      }
       return isEditing ? (
         <Input
           className="h-7 rounded-none border-0 bg-muted focus-visible:ring-0"

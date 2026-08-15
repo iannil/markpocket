@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation';
 
+import { toast } from '@/lib/toast';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc/client';
 
@@ -103,9 +104,10 @@ export default function MembersTab() {
                   /share/{s.token}
                 </code>
                 <button
-                  onClick={() =>
-                    navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`)
-                  }
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`);
+                    toast.success('Link copied');
+                  }}
                   className="text-xs hover:text-foreground"
                 >
                   copy

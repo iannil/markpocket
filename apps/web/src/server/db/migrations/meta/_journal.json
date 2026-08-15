@@ -50,6 +50,13 @@
       "when": 1782904751420,
       "tag": "0006_lame_cargill",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786809128320,
+      "tag": "0007_fresh_stingray",
+      "breakpoints": true
     }
   ]
 }
