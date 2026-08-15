@@ -46,13 +46,13 @@ export default function BaseHistoryPage() {
           {data.rows.map(
             (r: {
               id: string;
-              changedAt: Date | string;
+              changedAt: string;
               changedByName: string | null;
               changedByEmail: string | null;
               tableName: string;
               fieldName: string;
-              oldValue: unknown;
-              newValue: unknown;
+              oldValue?: unknown;
+              newValue?: unknown;
             }) => (
               <div
                 key={r.id}
