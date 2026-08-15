@@ -210,6 +210,33 @@ export function GridEditor({ tableId }: { tableId: string }) {
         setSelectedCell(null);
         setSelectedRows(new Set());
         break;
+      case 'c':
+        if ((e.metaKey || e.ctrlKey) && selectedCell) {
+          e.preventDefault();
+          const flat = groups.flatMap((g) => g.records);
+          const si = flat.findIndex((r) => r.id === selectedCell.recordId);
+          const sj = displayedFields.findIndex((f) => f.id === selectedCell.fieldId);
+          // Single cell copy
+          const val = flat[si]?.cells[displayedFields[sj]?.id ?? ''];
+          navigator.clipboard.writeText(val == null ? '' : String(val));
+          return;
+        }
+        break;
+      case 'v':
+        if ((e.metaKey || e.ctrlKey) && selectedCell) {
+          e.preventDefault();
+          navigator.clipboard.readText().then((text) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            upsertCell.mutate({
+              recordId: selectedCell.recordId,
+              fieldId: selectedCell.fieldId,
+              value: trimmed,
+            });
+          });
+          return;
+        }
+        break;
     }
   }
   function startEdit(recordId: string, fieldId: string, current: unknown) {
