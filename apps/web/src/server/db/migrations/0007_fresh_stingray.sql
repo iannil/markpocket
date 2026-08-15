@@ -1,0 +1,1 @@
+ALTER TABLE "base_share" ADD COLUMN "created_by" text;

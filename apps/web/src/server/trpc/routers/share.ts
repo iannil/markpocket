@@ -14,7 +14,7 @@ export const shareRouter = router({
 
   create: protectedProcedure
     .input(z.object({ baseId: z.string(), viewId: z.string().optional() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const [row] = await db
         .insert(baseShare)
         .values({
@@ -22,6 +22,7 @@ export const shareRouter = router({
           baseId: input.baseId,
           viewId: input.viewId,
           token: randomUUID().replace(/-/g, ''),
+          createdBy: ctx.session.user.id,
         })
         .returning();
       return row;

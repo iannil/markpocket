@@ -117,6 +117,7 @@ export const baseShare = pgTable('base_share', {
   token: text('token').notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  createdBy: text('created_by'),
 });
 
 export const baseMember = pgTable('base_member', {
