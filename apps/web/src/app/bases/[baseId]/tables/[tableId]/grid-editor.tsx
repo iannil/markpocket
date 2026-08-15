@@ -83,6 +83,9 @@ export function GridEditor({ tableId }: { tableId: string }) {
   const createRecord = trpc.record.create.useMutation({
     onSuccess: () => utils.record.list.invalidate({ tableId }),
   });
+  const deleteRecord = trpc.record.delete.useMutation({
+    onSuccess: () => utils.record.list.invalidate({ tableId }),
+  });
   const updateOptionsMut = trpc.view.updateOptions.useMutation({
     onSuccess: () => {
       utils.view.list.invalidate({ tableId });
@@ -424,7 +427,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                       key={rec.id}
                       className={`group ${selectedRows.has(rec.id) ? 'bg-primary/5' : ''}`}
                     >
-                      <td className="border-b border-border px-2 text-center text-xs text-muted-foreground">
+                      <td className="relative border-b border-border px-2 text-center text-xs text-muted-foreground">
                         <button
                           className={`w-full ${
                             selectedRows.has(rec.id)
@@ -452,6 +455,16 @@ export function GridEditor({ tableId }: { tableId: string }) {
                           onMouseDown={(e) => e.stopPropagation()}
                         >
                           {i + 1}
+                        </button>
+                        <button
+                          className="absolute right-1 top-1/2 -translate-y-1/2 hidden leading-none text-muted-foreground hover:text-destructive group-hover:block"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteRecord.mutate({ id: rec.id, tableId });
+                          }}
+                          title="Delete record"
+                        >
+                          ×
                         </button>
                       </td>
                       {displayedFields.map((f) => (
