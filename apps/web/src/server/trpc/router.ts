@@ -6,6 +6,7 @@ import { cellRouter } from './routers/cell';
 import { fieldRouter } from './routers/field';
 import { historyRouter } from './routers/history';
 import { memberRouter } from './routers/member';
+import { publicShareRouter } from './routers/public-share';
 import { recordRouter } from './routers/record';
 import { shareRouter } from './routers/share';
 import { tableRouter } from './routers/table';
@@ -24,6 +25,7 @@ export const appRouter = router({
   history: historyRouter,
   share: shareRouter,
   member: memberRouter,
+  publicShare: publicShareRouter,
   ...pluginRouters,
 });
 
