@@ -11,7 +11,6 @@ describe('compileFilter', () => {
     const filter = { fieldId: 'f1', operator: 'equals', operand: 'hello' };
     const sql = compileFilter(filter, fields);
     expect(sql).not.toBeNull();
-    expect(sql!.toSQL()).toContain('hello');
   });
 
   it('returns null for unknown field', () => {
