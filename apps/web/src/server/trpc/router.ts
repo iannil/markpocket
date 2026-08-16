@@ -3,6 +3,7 @@ import { router } from './init';
 import { authRouter } from './routers/auth';
 import { baseRouter } from './routers/base';
 import { cellRouter } from './routers/cell';
+import { exportRouter } from './routers/export';
 import { fieldRouter } from './routers/field';
 import { historyRouter } from './routers/history';
 import { inviteRouter } from './routers/invite';
@@ -23,6 +24,7 @@ export const appRouter = router({
   field: fieldRouter,
   record: recordRouter,
   cell: cellRouter,
+  export: exportRouter,
   history: historyRouter,
   invite: inviteRouter,
   share: shareRouter,

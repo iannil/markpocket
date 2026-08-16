@@ -13,6 +13,7 @@ export function SettingsTabs({ baseId }: { baseId: string }) {
     { label: 'Members', href: `${root}/members` },
     { label: 'Settings', href: `${root}/general` },
     { label: 'History', href: `${root}/history` },
+    { label: 'Export', href: `${root}/export` },
   ];
   return (
     <nav className="flex gap-1 border-b border-border px-6">
