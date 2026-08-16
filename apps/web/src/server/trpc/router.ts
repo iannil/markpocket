@@ -5,6 +5,7 @@ import { baseRouter } from './routers/base';
 import { cellRouter } from './routers/cell';
 import { fieldRouter } from './routers/field';
 import { historyRouter } from './routers/history';
+import { inviteRouter } from './routers/invite';
 import { memberRouter } from './routers/member';
 import { publicShareRouter } from './routers/public-share';
 import { recordRouter } from './routers/record';
@@ -23,6 +24,7 @@ export const appRouter = router({
   record: recordRouter,
   cell: cellRouter,
   history: historyRouter,
+  invite: inviteRouter,
   share: shareRouter,
   member: memberRouter,
   publicShare: publicShareRouter,

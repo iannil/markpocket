@@ -128,3 +128,21 @@ export const baseMember = pgTable('base_member', {
   role: text('role').notNull().default('editor'), // owner | editor | viewer
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Pending collaborator invites for a base. Soft-deleted by setting acceptedAt
+// (delete marks it consumed; create deactivates prior pending invites). invitedBy
+// has no FK (app-layer integrity, like the rest of the schema). Token is a UUID
+// without dashes (same pattern as baseShare.token).
+export const baseInvite = pgTable('base_invite', {
+  id: text('id').primaryKey(),
+  baseId: text('base_id')
+    .notNull()
+    .references(() => base.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role').notNull().default('editor'), // owner | editor | viewer
+  token: text('token').notNull(),
+  invitedBy: text('invited_by'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+});
