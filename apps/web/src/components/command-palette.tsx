@@ -46,9 +46,6 @@ export function CommandPalette({ bases }: { bases: Array<{ id: string; name: str
             <CommandItem value="Go to Bases" onSelect={() => go('/bases')}>
               Go to Bases
             </CommandItem>
-            <CommandItem value="Create new base" onSelect={() => go('/bases/new')}>
-              Create new base
-            </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Actions">
             <CommandItem value="New base" onSelect={() => go('/bases/new')}>

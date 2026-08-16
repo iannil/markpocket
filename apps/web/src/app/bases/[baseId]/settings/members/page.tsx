@@ -38,6 +38,7 @@ export default function MembersTab() {
   });
   const deleteShare = trpc.share.delete.useMutation({
     onSuccess: () => utils.share.list.invalidate({ baseId }),
+    onError: (err) => toast.error(err.message),
   });
 
   if (members.isLoading) {
@@ -112,7 +113,9 @@ export default function MembersTab() {
             + create link
           </button>
         </div>
-        {shares.data && shares.data.length > 0 ? (
+        {shares.isLoading && shares.data === undefined ? (
+          <p className="text-xs text-muted-foreground">Loading…</p>
+        ) : shares.data && shares.data.length > 0 ? (
           <ul className="border-t border-border">
             {shares.data.map((s) => (
               <li key={s.id} className="flex items-center gap-2 border-b border-border py-2.5">

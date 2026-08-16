@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { cellHistory, cell, field, table, user } from '../../db/schema';
@@ -81,6 +81,12 @@ export const historyRouter = router({
         historyConditions.push(eq(cellHistory.changedBy, input.userId));
       }
 
+      const [cnt] = await db
+        .select({ value: count() })
+        .from(cellHistory)
+        .where(and(...historyConditions));
+      const total = cnt?.value ?? 0;
+
       const rows = await db
         .select({
           id: cellHistory.id,
@@ -109,7 +115,7 @@ export const historyRouter = router({
         };
       });
 
-      return { rows: enriched, total: enriched.length };
+      return { rows: enriched, total };
     }),
 
   listByTable: protectedProcedure
@@ -145,6 +151,12 @@ export const historyRouter = router({
       const fieldById = new Map(fields.map((f) => [f.id, f]));
       const cellToField = new Map(cells.map((c) => [c.id, c.fieldId]));
 
+      const [cnt] = await db
+        .select({ value: count() })
+        .from(cellHistory)
+        .where(inArray(cellHistory.cellId, cellIds));
+      const total = cnt?.value ?? 0;
+
       const rows = await db
         .select({
           id: cellHistory.id,
@@ -172,6 +184,6 @@ export const historyRouter = router({
         };
       });
 
-      return { rows: enriched, total: enriched.length };
+      return { rows: enriched, total };
     }),
 });

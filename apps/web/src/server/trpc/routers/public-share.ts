@@ -48,7 +48,15 @@ export const publicShareRouter = router({
       if (!share) return null;
       if (share.expiresAt && new Date(share.expiresAt) < new Date()) return null;
 
-      const fields = await db
+      // Verify the requested table belongs to the shared base (scope guard).
+      const [tableRow] = await db
+        .select({ id: table.id, baseId: table.baseId })
+        .from(table)
+        .where(eq(table.id, input.tableId))
+        .limit(1);
+      if (!tableRow || tableRow.baseId !== share.baseId) return null;
+
+      let fields = await db
         .select({ id: field.id, name: field.name, type: field.type, options: field.options })
         .from(field)
         .where(eq(field.tableId, input.tableId));
@@ -61,6 +69,11 @@ export const publicShareRouter = router({
         const { compileFilter, compileSort } = await import('@/lib/view-query');
         const { parseViewOptions } = await import('@/lib/view-ast');
         const viewOptions = v ? parseViewOptions(v.options) : {};
+        // Apply hiddenFields from the view
+        const hiddenFields = (viewOptions.hiddenFields ?? []) as string[];
+        if (hiddenFields.length > 0) {
+          fields = fields.filter((f) => !hiddenFields.includes(f.id));
+        }
         const fieldsById = new Map(
           fields.map((f) => [
             f.id,
