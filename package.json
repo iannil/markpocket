@@ -1,5 +1,6 @@
 {
   "name": "markpocket",
+  "version": "1.0.0-alpha.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
