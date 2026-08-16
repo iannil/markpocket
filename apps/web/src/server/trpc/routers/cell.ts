@@ -10,6 +10,7 @@ import { evaluateExpression } from '@/lib/expression-eval';
 import { cell, cellHistory, field, record } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
+import { assertRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 async function recomputeExpressions(
@@ -96,6 +97,11 @@ export const cellRouter = router({
       if (!fld) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
       }
+
+      // Role gate: editor+ required
+      const baseId = await baseIdFromTable(fld.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
 
       const normalized = normalizeCellValue(
         fld.type as FieldType,

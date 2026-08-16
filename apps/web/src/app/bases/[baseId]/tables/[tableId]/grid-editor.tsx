@@ -50,7 +50,7 @@ interface ViewLike {
 
 const DEFAULT_COL_WIDTH = 160;
 
-export function GridEditor({ tableId }: { tableId: string }) {
+export function GridEditor({ baseId, tableId }: { baseId: string; tableId: string }) {
   const utils = trpc.useUtils();
   const {
     data: fieldsData,
@@ -63,6 +63,8 @@ export function GridEditor({ tableId }: { tableId: string }) {
     isError: viewsError,
   } = trpc.view.list.useQuery({ tableId });
   const { data: usersData } = trpc.auth.listUsers.useQuery();
+  const { data: myMembership } = trpc.member.me.useQuery({ baseId });
+  const isViewer = myMembership?.role === 'viewer';
 
   if (fieldsLoading || viewsLoading) {
     return (
@@ -228,6 +230,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         break;
       case 'Enter':
         e.preventDefault();
+        if (isViewer) break;
         if (inline) {
           startEdit(selectedCell.recordId, selectedCell.fieldId, rec.cells[selectedCell.fieldId]);
         } else if (field.type === FieldType.Boolean) {
@@ -264,7 +267,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
         }
         break;
       case 'v':
-        if ((e.metaKey || e.ctrlKey) && selectedCell) {
+        if ((e.metaKey || e.ctrlKey) && selectedCell && !isViewer) {
           e.preventDefault();
           navigator.clipboard.readText().then((text) => {
             const trimmed = text.trim();
@@ -348,59 +351,64 @@ export function GridEditor({ tableId }: { tableId: string }) {
         views={views}
         activeViewId={activeViewId}
         onSelect={setActiveViewId}
+        readOnly={isViewer}
       />
 
       <div className="flex items-center justify-between">
         <h1 className="text-sm font-semibold">{activeView?.name ?? 'Grid'}</h1>
-        <Button onClick={openCreateField} size="sm" className="h-7 rounded-md">
-          + Field
-        </Button>
+        {!isViewer && (
+          <Button onClick={openCreateField} size="sm" className="h-7 rounded-md">
+            + Field
+          </Button>
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant={showFilter ? 'default' : 'outline'}
-          size="sm"
-          className="h-7 rounded-md"
-          onClick={() => setShowFilter((s) => !s)}
-        >
-          Filter
-          {(viewOptions.filter?.conditions?.length ?? 0) > 0
-            ? ` (${viewOptions.filter!.conditions.length})`
-            : ''}
-        </Button>
-        <SortMenu
-          fields={fields}
-          sort={viewOptions.sort}
-          onChange={(s) => patchOptions({ sort: s })}
-        />
-        <ViewFieldsMenu
-          fields={fields}
-          hiddenFields={hiddenFields}
-          onChange={(ids) => patchOptions({ hiddenFields: ids })}
-        />
-        <Select
-          value={viewOptions.group?.[0]?.fieldId ?? '__none'}
-          onValueChange={(v) => {
-            if (!v) return;
-            patchOptions({ group: v === '__none' ? undefined : [{ fieldId: v }] });
-          }}
-        >
-          <SelectTrigger className="h-7 w-40 rounded-md border-border text-sm">
-            {viewOptions.group?.[0]
-              ? (fields.find((f) => f.id === viewOptions.group?.[0]?.fieldId)?.name ?? 'Group')
-              : 'No grouping'}
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none">No grouping</SelectItem>
-            {fields.map((f) => (
-              <SelectItem key={f.id} value={f.id}>
-                {f.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {!isViewer && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={showFilter ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 rounded-md"
+            onClick={() => setShowFilter((s) => !s)}
+          >
+            Filter
+            {(viewOptions.filter?.conditions?.length ?? 0) > 0
+              ? ` (${viewOptions.filter!.conditions.length})`
+              : ''}
+          </Button>
+          <SortMenu
+            fields={fields}
+            sort={viewOptions.sort}
+            onChange={(s) => patchOptions({ sort: s })}
+          />
+          <ViewFieldsMenu
+            fields={fields}
+            hiddenFields={hiddenFields}
+            onChange={(ids) => patchOptions({ hiddenFields: ids })}
+          />
+          <Select
+            value={viewOptions.group?.[0]?.fieldId ?? '__none'}
+            onValueChange={(v) => {
+              if (!v) return;
+              patchOptions({ group: v === '__none' ? undefined : [{ fieldId: v }] });
+            }}
+          >
+            <SelectTrigger className="h-7 w-40 rounded-md border-border text-sm">
+              {viewOptions.group?.[0]
+                ? (fields.find((f) => f.id === viewOptions.group?.[0]?.fieldId)?.name ?? 'Group')
+                : 'No grouping'}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none">No grouping</SelectItem>
+              {fields.map((f) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {showFilter && (
         <FilterPanel
@@ -437,11 +445,11 @@ export function GridEditor({ tableId }: { tableId: string }) {
                   <th
                     key={f.id}
                     className="relative border-b border-l border-border p-0"
-                    onDoubleClick={() => openEditField(f)}
+                    onDoubleClick={() => !isViewer && openEditField(f)}
                   >
                     <button
                       className="block w-full px-2.5 pt-1 text-left"
-                      onClick={() => openEditField(f)}
+                      onClick={() => !isViewer && openEditField(f)}
                       title={`${f.name} (${f.type === 'expression' ? ((f.options as { expression?: string })?.expression ?? 'expr') : f.type})`}
                     >
                       <div className="text-xs font-medium text-foreground">
@@ -475,15 +483,17 @@ export function GridEditor({ tableId }: { tableId: string }) {
                     />
                   </th>
                 ))}
-                <th className="border-b border-l border-border bg-muted/20 p-0">
-                  <button
-                    className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
-                    onClick={openCreateField}
-                    title="Add field"
-                  >
-                    +
-                  </button>
-                </th>
+                {!isViewer && (
+                  <th className="border-b border-l border-border bg-muted/20 p-0">
+                    <button
+                      className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
+                      onClick={openCreateField}
+                      title="Add field"
+                    >
+                      +
+                    </button>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -534,16 +544,18 @@ export function GridEditor({ tableId }: { tableId: string }) {
                         >
                           {i + 1}
                         </button>
-                        <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 hidden leading-none text-muted-foreground hover:text-destructive group-hover:block"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteRecord.mutate({ id: rec.id, tableId });
-                          }}
-                          title="Delete record"
-                        >
-                          ×
-                        </button>
+                        {!isViewer && (
+                          <button
+                            className="absolute right-1 top-1/2 -translate-y-1/2 hidden leading-none text-muted-foreground hover:text-destructive group-hover:block"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteRecord.mutate({ id: rec.id, tableId });
+                            }}
+                            title="Delete record"
+                          >
+                            ×
+                          </button>
+                        )}
                       </td>
                       {displayedFields.map((f) => (
                         <td
@@ -568,6 +580,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
                             onUpsert={(v) =>
                               upsertCell.mutate({ recordId: rec.id, fieldId: f.id, value: v })
                             }
+                            readOnly={isViewer}
                           />
                         </td>
                       ))}
@@ -590,13 +603,15 @@ export function GridEditor({ tableId }: { tableId: string }) {
             <tfoot>
               <tr>
                 <td colSpan={displayedFields.length + 2} className="p-0">
-                  <button
-                    className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
-                    onClick={() => createRecord.mutate({ tableId })}
-                    disabled={createRecord.isPending}
-                  >
-                    + new record
-                  </button>
+                  {!isViewer && (
+                    <button
+                      className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
+                      onClick={() => createRecord.mutate({ tableId })}
+                      disabled={createRecord.isPending}
+                    >
+                      + new record
+                    </button>
+                  )}
                 </td>
               </tr>
             </tfoot>
@@ -629,7 +644,7 @@ export function GridEditor({ tableId }: { tableId: string }) {
       </div>
 
       <FieldEditorDialog
-        open={dialogOpen}
+        open={dialogOpen && !isViewer}
         onOpenChange={setDialogOpen}
         tableId={tableId}
         field={editTarget}

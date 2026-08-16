@@ -9,6 +9,7 @@ import { defaultOptions, parseOptions } from '@/server/plugins/field-value';
 import { field } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
+import { assertRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const fieldRouter = router({
@@ -29,7 +30,10 @@ export const fieldRouter = router({
         options: z.unknown().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const baseId = await baseIdFromTable(input.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const options = parseOptions(input.type, input.options ?? defaultOptions(input.type));
       const [row] = await db
         .insert(field)
@@ -47,7 +51,12 @@ export const fieldRouter = router({
 
   rename: protectedProcedure
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .update(field)
         .set({ name: input.name })
@@ -61,11 +70,14 @@ export const fieldRouter = router({
   // that option id in Phase 1 — such cells render blank until re-edited. Lands later.
   updateOptions: protectedProcedure
     .input(z.object({ id: z.string(), options: z.unknown() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
       if (!existing) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
       }
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const options = parseOptions(existing.type as FieldType, input.options) as FieldOptions;
       const [row] = await db
         .update(field)
@@ -76,11 +88,17 @@ export const fieldRouter = router({
       return row;
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
-    // FK cascade clears cells; cell_history rows persist (no FK on cellId).
-    await db.delete(field).where(eq(field.id, input.id));
-    if (existing) void publishTableChange(existing.tableId);
-    return { ok: true };
-  }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
+      // FK cascade clears cells; cell_history rows persist (no FK on cellId).
+      await db.delete(field).where(eq(field.id, input.id));
+      if (existing) void publishTableChange(existing.tableId);
+      return { ok: true };
+    }),
 });

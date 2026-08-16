@@ -17,11 +17,13 @@ export function ViewTabs({
   views,
   activeViewId,
   onSelect,
+  readOnly = false,
 }: {
   tableId: string;
   views: ViewLike[];
   activeViewId: string | null;
   onSelect: (id: string) => void;
+  readOnly?: boolean;
 }) {
   const utils = trpc.useUtils();
   const create = trpc.view.create.useMutation({
@@ -57,7 +59,7 @@ export function ViewTabs({
           >
             {v.name}
           </button>
-          {views.length > 1 && (
+          {views.length > 1 && !readOnly && (
             <button
               className="ml-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
               onClick={() => {
@@ -70,7 +72,7 @@ export function ViewTabs({
           )}
         </div>
       ))}
-      {adding ? (
+      {readOnly ? null : adding ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();

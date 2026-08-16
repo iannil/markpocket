@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { eq, sql } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { type FieldOptions } from '@/lib/field-types';
@@ -10,6 +11,7 @@ import { parseViewOptions } from '@/lib/view-ast';
 import { field, record, view } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
+import { assertRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const recordRouter = router({
@@ -49,6 +51,9 @@ export const recordRouter = router({
   create: protectedProcedure
     .input(z.object({ tableId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const baseId = await baseIdFromTable(input.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .insert(record)
         .values({
@@ -63,7 +68,10 @@ export const recordRouter = router({
 
   delete: protectedProcedure
     .input(z.object({ id: z.string(), tableId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const baseId = await baseIdFromTable(input.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       // Q6 cascade-clear: find all link cells referencing this record id and remove it.
       await db.transaction(async (tx) => {
         // GIN scan: cells whose value (JSONB array) contains this record id.

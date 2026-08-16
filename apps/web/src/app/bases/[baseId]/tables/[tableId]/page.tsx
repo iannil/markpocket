@@ -5,6 +5,6 @@ export default async function TableGridPage({
 }: {
   params: Promise<{ baseId: string; tableId: string }>;
 }) {
-  const { tableId } = await params;
-  return <GridEditor tableId={tableId} />;
+  const { baseId, tableId } = await params;
+  return <GridEditor baseId={baseId} tableId={tableId} />;
 }

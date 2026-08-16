@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
 import { and, asc, eq } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { view } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
+import { assertRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const viewRouter = router({
@@ -25,7 +27,10 @@ export const viewRouter = router({
         type: z.string().optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const baseId = await baseIdFromTable(input.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .insert(view)
         .values({
@@ -41,7 +46,12 @@ export const viewRouter = router({
 
   rename: protectedProcedure
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'View not found' });
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .update(view)
         .set({ name: input.name })
@@ -53,7 +63,12 @@ export const viewRouter = router({
 
   updateOptions: protectedProcedure
     .input(z.object({ id: z.string(), options: z.record(z.string(), z.unknown()) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'View not found' });
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .update(view)
         .set({ options: input.options })
@@ -63,10 +78,16 @@ export const viewRouter = router({
       return row;
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
-    await db.delete(view).where(eq(view.id, input.id));
-    if (existing) void publishTableChange(existing.tableId);
-    return { ok: true };
-  }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'View not found' });
+      const baseId = await baseIdFromTable(existing.tableId);
+      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      await assertRole(baseId, ctx.session.user.id, 'editor');
+      await db.delete(view).where(eq(view.id, input.id));
+      if (existing) void publishTableChange(existing.tableId);
+      return { ok: true };
+    }),
 });

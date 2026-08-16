@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { base } from '../../db/schema';
+import { base, baseMember } from '../../db/schema';
 import { db } from '../../db';
 import { ensureDefaultWorkspace } from '@/lib/db-queries';
 import { publishBaseChange } from '../../realtime/publish';
@@ -33,6 +33,12 @@ export const baseRouter = router({
           createdBy: ctx.session.user.id,
         })
         .returning();
+      // Creator becomes owner; nothing can be done without this membership row.
+      await db.insert(baseMember).values({
+        baseId: row!.id,
+        userId: ctx.session.user.id,
+        role: 'owner',
+      });
       return row;
     }),
 
