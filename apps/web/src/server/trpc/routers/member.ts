@@ -1,14 +1,15 @@
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { ensureMembership, assertRole } from '@/lib/roles';
+import { getMembership, assertRole } from '@/lib/roles';
 import { baseMember, user } from '../../db/schema';
 import { db } from '../../db';
 import { protectedProcedure, router } from '../init';
 
 export const memberRouter = router({
   me: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ ctx, input }) => {
-    return { role: await ensureMembership(input.baseId, ctx.session.user.id) };
+    const role = await getMembership(input.baseId, ctx.session.user.id);
+    return role ? { role } : null;
   }),
 
   list: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ input }) => {

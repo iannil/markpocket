@@ -192,7 +192,7 @@ export default function MembersTab() {
                 </Select>
                 <button
                   onClick={() => {
-                    if (confirm(`移除 ${label}?`))
+                    if (confirm(`Remove ${label}?`))
                       removeMember.mutate({ baseId, userId: m.userId });
                   }}
                   className="text-xs text-muted-foreground hover:text-destructive"

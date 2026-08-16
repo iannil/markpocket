@@ -52,6 +52,7 @@ export function ViewTabs({
           <button
             onClick={() => onSelect(v.id)}
             onDoubleClick={() => {
+              if (readOnly) return;
               const next = window.prompt('Rename view', v.name);
               if (next && next.trim()) rename.mutate({ id: v.id, name: next.trim() });
             }}

@@ -8,22 +8,22 @@ export type Role = 'owner' | 'editor' | 'viewer';
 
 const ROLE_RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
 
-export async function ensureMembership(baseId: string, userId: string): Promise<Role> {
+// Returns the user's role in a base, or null if they are not a member.
+// Membership is only ever created by base.create (owner) or the invite accept flow.
+export async function getMembership(baseId: string, userId: string): Promise<Role | null> {
   const [existing] = await db
     .select()
     .from(baseMember)
     .where(and(eq(baseMember.baseId, baseId), eq(baseMember.userId, userId)))
     .limit(1);
-
-  if (existing) return existing.role as Role;
-
-  // Auto-add as editor for single-tenant model
-  await db.insert(baseMember).values({ baseId, userId, role: 'editor' });
-  return 'editor';
+  return existing ? (existing.role as Role) : null;
 }
 
 export async function assertRole(baseId: string, userId: string, minRole: Role): Promise<void> {
-  const role = await ensureMembership(baseId, userId);
+  const role = await getMembership(baseId, userId);
+  if (!role) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this base' });
+  }
   if (ROLE_RANK[role] < ROLE_RANK[minRole]) {
     throw new TRPCError({
       code: 'FORBIDDEN',

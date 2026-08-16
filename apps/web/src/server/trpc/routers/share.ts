@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import { eq } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { baseShare } from '../../db/schema';
 import { db } from '../../db';
+import { assertRole } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const shareRouter = router({
@@ -15,6 +17,7 @@ export const shareRouter = router({
   create: protectedProcedure
     .input(z.object({ baseId: z.string(), viewId: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
+      await assertRole(input.baseId, ctx.session.user.id, 'editor');
       const [row] = await db
         .insert(baseShare)
         .values({
@@ -28,8 +31,19 @@ export const shareRouter = router({
       return row;
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    await db.delete(baseShare).where(eq(baseShare.id, input.id));
-    return { ok: true };
-  }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const [share] = await db
+        .select({ baseId: baseShare.baseId })
+        .from(baseShare)
+        .where(eq(baseShare.id, input.id))
+        .limit(1);
+      if (!share) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Share not found' });
+      }
+      await assertRole(share.baseId, ctx.session.user.id, 'editor');
+      await db.delete(baseShare).where(eq(baseShare.id, input.id));
+      return { ok: true };
+    }),
 });

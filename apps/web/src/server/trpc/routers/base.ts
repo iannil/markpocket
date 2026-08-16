@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { base, baseMember } from '../../db/schema';
 import { db } from '../../db';
 import { ensureDefaultWorkspace } from '@/lib/db-queries';
+import { assertRole } from '@/lib/roles';
 import { publishBaseChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
@@ -44,7 +45,8 @@ export const baseRouter = router({
 
   rename: protectedProcedure
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await assertRole(input.id, ctx.session.user.id, 'editor');
       const [row] = await db
         .update(base)
         .set({ name: input.name })
@@ -54,10 +56,13 @@ export const baseRouter = router({
       return row;
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
-    // FK cascade clears tables → fields → cells → records.
-    await db.delete(base).where(eq(base.id, input.id));
-    void publishBaseChange(input.id);
-    return { ok: true };
-  }),
+  delete: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertRole(input.id, ctx.session.user.id, 'owner');
+      // FK cascade clears tables → fields → cells → records.
+      await db.delete(base).where(eq(base.id, input.id));
+      void publishBaseChange(input.id);
+      return { ok: true };
+    }),
 });
