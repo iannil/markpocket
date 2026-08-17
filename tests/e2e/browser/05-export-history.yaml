@@ -1,0 +1,117 @@
+# 导出流程 + 历史回溯 浏览器 E2E 测试
+# 覆盖：Settings Export 页 → 导出 CSV → 历史时间线 → 恢复版本
+
+- name: "Settings Export 页显示表列表"
+  preconditions: ["用户已登录，在 Base 详情页"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl/settings/export"
+    - action: "wait_for_selector"
+      selector: "text=Export"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "input[type='checkbox']"
+      present: true
+
+- name: "导出全部表（点击 Export 按钮）"
+  preconditions: ["在 Export 页"]
+  steps:
+    - action: "click"
+      selector: "text=Export"
+    - action: "wait_for_selector"
+      selector: "text=Exporting"
+      timeout: 5000
+    - action: "wait_for_selector"
+      selector: "text=Export"  # 导出完成后按钮恢复
+      timeout: 30000
+    - action: "assert_browser_downloads"
+      min_count: 1  # 至少下载了 1 个 CSV 文件
+
+- name: "查看 Base 级历史时间线"
+  preconditions: ["用户已登录，Base 有编辑历史"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl/history"
+    - action: "wait_for_selector"
+      selector: "text=History"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "text=All changes across this base"
+      present: true
+    - action: "assert_selector"
+      selector: "div.border-b.border-border"
+      present: true  # 有历史条目
+
+- name: "Cell History dock 显示"
+  preconditions: ["在 Grid 编辑器页"]
+  steps:
+    - action: "click"
+      selector: "td"
+    - action: "wait_for_selector"
+      selector: "text=Cell History"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "text=restore"
+      present: true
+    - action: "assert_selector"
+      selector: "text=diff"
+      present: true
+
+- name: "Cell History diff 视图"
+  preconditions: ["Cell History dock 已打开"]
+  steps:
+    - action: "click"
+      selector: "text=diff"
+    - action: "wait_for_selector"
+      selector: "text=Old:"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "text=New:"
+      present: true
+
+- name: "Cell History 恢复版本"
+  preconditions: ["Cell History dock 已打开，有历史记录"]
+  steps:
+    - action: "click"
+      selector: "text=restore"
+    - action: "wait_for_selector"
+      selector: "dialog"
+      timeout: 3000
+    - action: "click"
+      selector: "text=OK"
+    - action: "wait_for_selector"
+      selector: "text=Cell updated"
+      timeout: 5000
+
+- name: "Cell History dock Esc 关闭"
+  preconditions: ["Cell History dock 已打开"]
+  steps:
+    - action: "press"
+      key: "Escape"
+    - action: "wait_for_selector"
+      selector: "text=Cell History"
+      present: false
+      timeout: 5000
+
+- name: "⌘K 命令面板"
+  preconditions: ["用户已登录"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/bases"
+    - action: "press"
+      key: "Meta+K"
+    - action: "wait_for_selector"
+      selector: "input[placeholder='Type a command']"
+      timeout: 5000
+    - action: "type"
+      selector: "input[placeholder='Type a command']"
+      value: "Settings"
+    - action: "wait_for_selector"
+      selector: "text=Go to Settings"
+      timeout: 5000
+    - action: "click"
+      selector: "text=Go to Settings"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url_pattern"
+      pattern: "/settings"

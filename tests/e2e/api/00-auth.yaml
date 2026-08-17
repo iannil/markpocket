@@ -1,0 +1,42 @@
+# 鉴权模块 API 测试
+- name: 注册新用户
+  steps:
+    - action: "POST /api/auth/sign-up/email"
+      body:
+        email: "alice-e2e-$random_uuid@test.local"
+        password: "password123"
+        name: "Alice"
+      asserts:
+        - "$status == 200"
+
+- name: 登录失败 — 密码错误
+  steps:
+    - action: "POST /api/auth/sign-up/email"
+      body:
+        email: "login-fail-$random_uuid@test.local"
+        password: "password123"
+        name: "LoginFail"
+      register:
+        failEmail: "$response.body.user.email"
+    - action: "POST /api/auth/sign-in/email"
+      body:
+        email: "$ref:failEmail"
+        password: "wrongpassword"
+      asserts:
+        - "$status != 200"
+
+- name: 登录失败 — 用户不存在
+  steps:
+    - action: "POST /api/auth/sign-in/email"
+      body:
+        email: "nonexistent-$random_uuid@test.local"
+        password: "password123"
+      asserts:
+        - "$status != 200"
+
+- name: 未认证无法访问 tRPC 端点
+  steps:
+    - action: "POST /api/trpc/base.list"
+      body: {}
+      asserts:
+        - "$status == 401"

@@ -1,0 +1,94 @@
+# 登录/注册/退出 浏览器 E2E 测试
+- name: 注册新用户
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/register"
+    - action: "wait_for_selector"
+      selector: "input[type='email']"
+      timeout: 5000
+    - action: "type"
+      selector: "input[type='email']"
+      value: "alice-$random_uuid@test.local"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "password123"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "Alice"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url"
+      url: "http://localhost:7420/bases"
+
+- name: 登录已有用户
+  preconditions: ["alice@test.local 已注册"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/login"
+    - action: "wait_for_selector"
+      selector: "input[type='email']"
+      timeout: 5000
+    - action: "type"
+      selector: "input[type='email']"
+      value: "alice@test.local"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "password123"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url_pattern"
+      pattern: "/bases.*"
+
+- name: 登录失败 — 密码错误
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/login"
+    - action: "type"
+      selector: "input[type='email']"
+      value: "alice@test.local"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "wrongpassword"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_selector"
+      selector: "text=Sign in failed"
+      timeout: 5000
+
+- name: 登录失败 — 用户不存在
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/login"
+    - action: "type"
+      selector: "input[type='email']"
+      value: "nonexistent@test.local"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "password123"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_selector"
+      selector: "text=Sign in failed"
+      timeout: 5000
+
+- name: callbackUrl 跳转
+  preconditions: ["用户未登录"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/login?callbackUrl=/bases/new"
+    - action: "type"
+      selector: "input[type='email']"
+      value: "alice@test.local"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "password123"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url"
+      url: "http://localhost:7420/bases/new"

@@ -1,0 +1,161 @@
+# Field 创建 + Cell 写入 API 测试
+- name: 创建 Text 字段
+  steps:
+    - action: "POST /api/trpc/field.create"
+      body:
+        tableId: "$ref:tableId"
+        name: "Text-Field"
+        type: "text"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.type == text"
+        - "$response.body.result.data.name == Text-Field"
+      register:
+        textFieldId: "$response.body.result.data.id"
+
+- name: 创建 Number 字段
+  steps:
+    - action: "POST /api/trpc/field.create"
+      body:
+        tableId: "$ref:tableId"
+        name: "Number-Field"
+        type: "number"
+        options:
+          precision: 2
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.type == number"
+        - "$response.body.result.data.options.precision == 2"
+      register:
+        numberFieldId: "$response.body.result.data.id"
+
+- name: 创建 Select 字段
+  steps:
+    - action: "POST /api/trpc/field.create"
+      body:
+        tableId: "$ref:tableId"
+        name: "Select-Field"
+        type: "single-select"
+        options:
+          choices:
+            - id: "opt1"
+              name: "Option A"
+              color: "blue"
+            - id: "opt2"
+              name: "Option B"
+              color: "red"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.type == single-select"
+      register:
+        selectFieldId: "$response.body.result.data.id"
+
+- name: 创建 Expression 字段
+  steps:
+    - action: "POST /api/trpc/field.create"
+      body:
+        tableId: "$ref:tableId"
+        name: "Expr-Field"
+        type: "expression"
+        options:
+          expression: "{$ref:numberFieldId} * 2"
+          dependsOn:
+            - "$ref:numberFieldId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.type == expression"
+      register:
+        exprFieldId: "$response.body.result.data.id"
+
+- name: 重命名字段
+  steps:
+    - action: "POST /api/trpc/field.rename"
+      body:
+        id: "$ref:textFieldId"
+        name: "Renamed-Text"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.name == Renamed-Text"
+
+- name: 创建 Record
+  steps:
+    - action: "POST /api/trpc/record.create"
+      body:
+        tableId: "$ref:tableId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.id is not null"
+      register:
+        recordId: "$response.body.result.data.id"
+
+- name: 写入 Text 单元格
+  steps:
+    - action: "POST /api/trpc/cell.upsert"
+      body:
+        recordId: "$ref:recordId"
+        fieldId: "$ref:textFieldId"
+        value: "Hello World"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.value == Hello World"
+
+- name: 写入 Number 单元格
+  steps:
+    - action: "POST /api/trpc/cell.upsert"
+      body:
+        recordId: "$ref:recordId"
+        fieldId: "$ref:numberFieldId"
+        value: 42
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.value == 42"
+
+- name: Number 字段写入非数字应拒绝
+  steps:
+    - action: "POST /api/trpc/cell.upsert"
+      body:
+        recordId: "$ref:recordId"
+        fieldId: "$ref:numberFieldId"
+        value: "abc"
+      asserts:
+        - "$status == 400"
+
+- name: 写入空字符串 = 删除单元格行
+  steps:
+    - action: "POST /api/trpc/cell.upsert"
+      body:
+        recordId: "$ref:recordId"
+        fieldId: "$ref:textFieldId"
+        value: ""
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.empty == true"
+
+- name: 表达式字段不可直接写入
+  steps:
+    - action: "POST /api/trpc/cell.upsert"
+      body:
+        recordId: "$ref:recordId"
+        fieldId: "$ref:exprFieldId"
+        value: 999
+      asserts:
+        - "$status == 400"
+
+- name: 删除 Record
+  steps:
+    - action: "POST /api/trpc/record.delete"
+      body:
+        id: "$ref:recordId"
+        tableId: "$ref:tableId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.ok == true"
+
+- name: 删除字段
+  steps:
+    - action: "POST /api/trpc/field.delete"
+      body:
+        id: "$ref:textFieldId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.ok == true"

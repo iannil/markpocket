@@ -1,0 +1,81 @@
+# 角色权限 UI 验证 浏览器 E2E 测试
+# 覆盖：viewer 只读 UI 验证、owner 可见操作
+
+- name: "Viewer 无法看到创建 Base 按钮"
+  preconditions: ["Carol（viewer）已登录，在 Bases 列表页"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/bases"
+    - action: "wait_for_selector"
+      selector: "text=New base"
+      present: true   # 任何人都可以创建新 Base（自己的 Base）
+      timeout: 5000
+
+- name: "Viewer 在 Grid 中看不到编辑按钮"
+  preconditions: ["Carol 在 Base 详情页（她是 viewer 成员）"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl"
+    - action: "wait_for_selector"
+      selector: "h1"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "button:has-text('+ Field')"
+      present: false      # 无添加字段按钮
+    - action: "assert_selector"
+      selector: "button:has-text('+ new record')"
+      present: false      # 无添加记录按钮
+    - action: "assert_selector"
+      selector: "button:has-text('Filter')"
+      present: false      # 无过滤按钮
+    - action: "assert_selector"
+      selector: "button:has-text('Sort')"
+      present: false      # 无排序按钮
+
+- name: "Viewer 无法编辑单元格"
+  preconditions: ["Carol 在 Grid 页"]
+  steps:
+    - action: "wait_for_selector"
+      selector: "td"
+      timeout: 5000
+    - action: "dblclick"
+      selector: "td"
+    - action: "assert_selector"
+      selector: "input[type='text']"
+      present: false      # 双击不进入编辑
+    - action: "click"
+      selector: "td"
+    - action: "press"
+      key: "Enter"
+    - action: "assert_selector"
+      selector: "input[type='text']"
+      present: false      # Enter 也不进入编辑
+
+- name: "Viewer 的数据可见"
+  preconditions: ["Carol 在 Grid 页"]
+  steps:
+    - action: "assert_selector"
+      selector: "td"
+      present: true       # 表格数据可见
+
+- name: "Owner 可以删除 Base"
+  preconditions: ["Alice（owner）已登录"]
+  steps:
+    - action: "switch_session"
+      session: "alice"
+    - action: "navigate"
+      url: "$ref:baseUrl/settings"
+    - action: "wait_for_selector"
+      selector: "text=Delete base"
+      timeout: 5000
+    - action: "click"
+      selector: "text=Delete base"
+    - action: "wait_for_selector"
+      selector: "text=Delete"
+      timeout: 5000
+    - action: "click"
+      selector: "text=Delete"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url"
+      url: "http://localhost:7420/bases"

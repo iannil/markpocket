@@ -1,0 +1,204 @@
+# Base 生命周期 浏览器 E2E 测试
+# 覆盖：创建 Base → 创建表 → 添加字段 → 输入数据 → 编辑数据 → 删除
+
+- name: "创建新的 Base"
+  preconditions: ["用户已登录（alice@test.local）"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/bases"
+    - action: "wait_for_selector"
+      selector: "text=New base"
+      timeout: 5000
+    - action: "click"
+      selector: "text=New base"
+    - action: "wait_for_selector"
+      selector: "input[name='name']"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "E2E-Base-$random_uuid"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url_pattern"
+      pattern: "/bases/[a-f0-9-]+/tables/[a-f0-9-]+"
+  register: { baseUrl: "$page.url" }
+
+- name: "在 Grid 中创建新表"
+  preconditions: ["$ref: baseUrl 存在"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl"
+    - action: "wait_for_selector"
+      selector: "text=+ Field"
+      timeout: 5000
+    - action: "navigate"
+      url: "http://localhost:7420/bases/new"
+    - action: "wait_for_selector"
+      selector: "input[name='name']"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "Products"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+
+- name: "添加字段（Text 类型）"
+  preconditions: ["在 Base 详情页"]
+  steps:
+    - action: "wait_for_selector"
+      selector: "text=+ Field"
+      timeout: 5000
+    - action: "click"
+      selector: "text=+ Field"
+    - action: "wait_for_selector"
+      selector: "input[name='name']"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "Product Name"
+    - action: "click"
+      selector: "text=Save"
+    - action: "wait_for_selector"
+      selector: "text=Product Name"
+      timeout: 5000
+
+- name: "添加字段（Number 类型）"
+  preconditions: ["在 Base 详情页"]
+  steps:
+    - action: "wait_for_selector"
+      selector: "text=+ Field"
+    - action: "click"
+      selector: "text=+ Field"
+    - action: "wait_for_selector"
+      selector: "input[name='name']"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "Price"
+    - action: "click"
+      selector: "text=Number"
+    - action: "click"
+      selector: "text=Save"
+    - action: "wait_for_selector"
+      selector: "text=Price"
+      timeout: 5000
+
+- name: "添加新记录（+ new record 按钮）"
+  preconditions: ["在 Grid 编辑器页"]
+  steps:
+    - action: "wait_for_selector"
+      selector: "text=+ new record"
+      timeout: 5000
+    - action: "click"
+      selector: "text=+ new record"
+    - action: "wait_for_selector"
+      selector: "td:first-child"
+      timeout: 5000
+
+- name: "编辑单元格 — Text 字段"
+  preconditions: ["Grid 中有记录"]
+  steps:
+    - action: "dblclick"
+      selector: "td:has-text('Product Name')"
+    - action: "wait_for_selector"
+      selector: "input[type='text']"
+    - action: "type"
+      selector: "input[type='text']"
+      value: "Widget A"
+    - action: "press"
+      key: "Enter"
+    - action: "wait_for_selector"
+      selector: "text=Widget A"
+      timeout: 5000
+
+- name: "编辑单元格 — Number 字段"
+  preconditions: ["Grid 中有记录且有 Price 列"]
+  steps:
+    - action: "dblclick"
+      selector: "td:has-text('Price')"
+    - action: "type"
+      selector: "input[type='text']"
+      value: "29.99"
+    - action: "press"
+      key: "Enter"
+    - action: "wait_for_selector"
+      selector: "text=29.99"
+      timeout: 5000
+
+- name: "键盘导航 — 方向键移动"
+  preconditions: ["Grid 处于处于非编辑状态"]
+  steps:
+    - action: "click"
+      selector: "td:first-child"
+    - action: "press"
+      key: "ArrowDown"
+    - action: "assert_class"
+      selector: "td.ring-2"
+      present: true
+
+- name: "键盘导航 — Tab 键移动到下一列"
+  preconditions: ["Grid 中有选中单元格"]
+  steps:
+    - action: "press"
+      key: "Tab"
+    - action: "assert_class"
+      selector: "td.ring-2"
+      present: true
+
+- name: "行号点击选中行"
+  preconditions: ["Grid 中有记录"]
+  steps:
+    - action: "click"
+      selector: "td:first-child button"
+    - action: "assert_class"
+      selector: "tr.bg-primary/5"
+      present: true
+
+- name: "复制粘贴单元格"
+  preconditions: ["Grid 中有数据"]
+  steps:
+    - action: "dblclick"
+      selector: "td:has-text('Widget A')"
+    - action: "press"
+      key: "Meta+C"
+    - action: "press"
+      key: "Escape"
+    - action: "click"
+      selector: "td:nth-child(2)"
+    - action: "press"
+      key: "Meta+V"
+    - action: "wait_for_selector"
+      selector: "text=Widget A"
+      timeout: 5000
+
+- name: "删除记录（行号悬停 × 按钮）"
+  preconditions: ["Grid 中有记录"]
+  steps:
+    - action: "hover"
+      selector: "td:first-child"
+    - action: "wait_for_selector"
+      selector: "button[title='Delete record']"
+    - action: "click"
+      selector: "button[title='Delete record']"
+    - action: "wait_for_selector"
+      selector: "text=Record deleted"
+      timeout: 5000
+
+- name: "删除 Base"
+  preconditions: ["在 Base 详情页"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl/settings"
+    - action: "wait_for_selector"
+      selector: "text=Delete base"
+      timeout: 5000
+    - action: "click"
+      selector: "text=Delete base"
+    - action: "wait_for_selector"
+      selector: "text=Delete"
+    - action: "click"
+      selector: "text=Delete"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url"
+      url: "http://localhost:7420/bases"

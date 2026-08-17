@@ -1,0 +1,75 @@
+# 邀请流程 浏览器 E2E 测试
+# 覆盖：Owner 创建邀请 → Bob 接受 → 协作编辑 → Carol viewer 只读
+
+- name: Owner 创建邀请（Bob 为 editor）
+  preconditions: ["Alice 已登录，在 Base 详情页"]
+  steps:
+    - action: "navigate"
+      url: "$ref:baseUrl/settings/members"
+    - action: "wait_for_selector"
+      selector: "input[type='email']"
+      timeout: 5000
+    - action: "type"
+      selector: "input[type='email']"
+      value: "bob-$random_uuid@test.local"
+      register:
+        inviteEmail: "$input_value"
+    - action: "click"
+      selector: "button:has-text('invite')"
+    - action: "wait_for_selector"
+      selector: "text=Invite created"
+      timeout: 5000
+    - action: "wait_for_selector"
+      selector: "text=Invite link copied to clipboard"
+      timeout: 5000
+
+- name: 待处理邀请显示在列表中
+  preconditions: ["邀请已创建"]
+  steps:
+    - action: "assert_text"
+      selector: "li"
+      contains: "$ref:inviteEmail"
+
+- name: Bob 在登录页接受邀请
+  preconditions: ["邀请链接已知"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/register"
+    - action: "wait_for_selector"
+      selector: "input[type='email']"
+      timeout: 5000
+    - action: "type"
+      selector: "input[type='email']"
+      value: "$ref:inviteEmail"
+    - action: "type"
+      selector: "input[type='password']"
+      value: "password123"
+    - action: "type"
+      selector: "input[name='name']"
+      value: "Bob"
+    - action: "click"
+      selector: "button[type='submit']"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url_pattern"
+      pattern: "/bases.*"
+
+- name: Bob 可以直接打开邀请链接并自动接受
+  preconditions: ["Bob 已登录"]
+  steps:
+    - action: "navigate"
+      url: "http://localhost:7420/invite/$ref:inviteToken"
+    - action: "wait_for_navigation"
+      timeout: 10000
+    - action: "assert_url_pattern"
+      pattern: "/bases/[a-f0-9-]+/tables/[a-f0-9-]+"
+
+- name: Bob 看到邀请的 Base 且有编辑权
+  preconditions: ["Bob 已接受邀请"]
+  steps:
+    - action: "wait_for_selector"
+      selector: "text=+ Field"
+      timeout: 5000
+    - action: "assert_selector"
+      selector: "text=+ new record"
+      present: true

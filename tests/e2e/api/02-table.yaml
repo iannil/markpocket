@@ -1,0 +1,60 @@
+# Table CRUD API 测试
+- name: 创建 Table
+  steps:
+    - action: "POST /api/trpc/table.create"
+      body:
+        baseId: "$ref:baseId"
+        name: "Test-Table"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.id is not null"
+        - "$response.body.result.data.name == Test-Table"
+      register:
+        tableId: "$response.body.result.data.id"
+
+- name: 创建 Table 时自动创建默认 Grid 视图
+  steps:
+    - action: "POST /api/trpc/view.list"
+      body:
+        tableId: "$ref:tableId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data is array"
+        - "$response.body.result.data[0].type == grid"
+        - "$response.body.result.data[0].name == Grid"
+
+- name: 列出 Table
+  steps:
+    - action: "POST /api/trpc/table.list"
+      body:
+        baseId: "$ref:baseId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data is array"
+
+- name: 重命名 Table
+  steps:
+    - action: "POST /api/trpc/table.rename"
+      body:
+        id: "$ref:tableId"
+        name: "Renamed-Table"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.name == Renamed-Table"
+
+- name: 删除 Table
+  steps:
+    - action: "POST /api/trpc/table.delete"
+      body:
+        id: "$ref:tableId"
+      asserts:
+        - "$status == 200"
+        - "$response.body.result.data.ok == true"
+
+- name: 删除不存在的 Table 应报错
+  steps:
+    - action: "POST /api/trpc/table.delete"
+      body:
+        id: "nonexistent-table-id"
+      asserts:
+        - "$status == 404"
