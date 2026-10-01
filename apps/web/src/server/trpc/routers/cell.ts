@@ -6,82 +6,12 @@ import { z } from 'zod';
 
 import { FieldType, type FieldOptions } from '@/lib/field-types';
 import { normalizeCellValue } from '@/server/plugins/field-value';
-import { evaluateExpression } from '@/lib/expression-eval';
+import { materializeExpressionsForRecord } from '@/server/expression';
 import { cell, cellHistory, field, record } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
-import { assertRole, baseIdFromTable } from '@/lib/roles';
+import { assertTableRole } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
-
-async function recomputeExpressions(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  tableId: string,
-  recordId: string,
-  changedFieldId: string,
-  userId: string,
-) {
-  // Find expression fields whose dependsOn includes the changed field (Q2).
-  const exprFields = await tx
-    .select()
-    .from(field)
-    .where(and(eq(field.tableId, tableId), eq(field.type, FieldType.Expression)));
-
-  for (const ef of exprFields) {
-    const opts = ef.options as { expression?: string; dependsOn?: string[] };
-    if (!opts.dependsOn?.includes(changedFieldId)) continue;
-
-    // Read current cell values for this record (includes the just-written cell).
-    const currentCells = await tx.select().from(cell).where(eq(cell.recordId, recordId));
-    const values = new Map(currentCells.map((c) => [c.fieldId, c.value]));
-
-    const result = evaluateExpression(opts.expression ?? '', values);
-
-    // Write expression cell: value / error sentinel / delete if empty.
-    const [existing] = await tx
-      .select()
-      .from(cell)
-      .where(and(eq(cell.recordId, recordId), eq(cell.fieldId, ef.id)))
-      .limit(1);
-
-    if ('empty' in result) {
-      if (existing) {
-        await tx.insert(cellHistory).values({
-          id: randomUUID(),
-          cellId: existing.id,
-          oldValue: existing.value,
-          newValue: null,
-          changedBy: userId,
-        });
-        await tx.delete(cell).where(eq(cell.id, existing.id));
-      }
-    } else {
-      const exprValue = 'error' in result ? { __error: result.error } : result.value;
-      if (existing) {
-        await tx
-          .update(cell)
-          .set({ value: exprValue, updatedAt: new Date() })
-          .where(eq(cell.id, existing.id));
-        await tx.insert(cellHistory).values({
-          id: randomUUID(),
-          cellId: existing.id,
-          oldValue: existing.value,
-          newValue: exprValue,
-          changedBy: userId,
-        });
-      } else {
-        const newId = randomUUID();
-        await tx.insert(cell).values({ id: newId, recordId, fieldId: ef.id, value: exprValue });
-        await tx.insert(cellHistory).values({
-          id: randomUUID(),
-          cellId: newId,
-          oldValue: null,
-          newValue: exprValue,
-          changedBy: userId,
-        });
-      }
-    }
-  }
-}
 
 export const cellRouter = router({
   upsert: protectedProcedure
@@ -99,9 +29,18 @@ export const cellRouter = router({
       }
 
       // Role gate: editor+ required
-      const baseId = await baseIdFromTable(fld.tableId);
-      if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
-      await assertRole(baseId, ctx.session.user.id, 'editor');
+      await assertTableRole(fld.tableId, ctx.session.user.id, 'editor');
+
+      // The record must belong to the field's table — otherwise an editor of base A
+      // could hang cells off records in base B.
+      const [rec] = await db
+        .select({ tableId: record.tableId })
+        .from(record)
+        .where(eq(record.id, input.recordId))
+        .limit(1);
+      if (!rec || rec.tableId !== fld.tableId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Record not found in this table' });
+      }
 
       const normalized = normalizeCellValue(
         fld.type as FieldType,
@@ -113,7 +52,8 @@ export const cellRouter = router({
       }
 
       const result = await db.transaction(async (tx) => {
-        // Write the primary cell (user-edited).
+        // Write the primary cell (user-edited). onConflict closes the
+        // select-then-insert race when two writers create the same cell at once.
         const [existing] = await tx
           .select()
           .from(cell)
@@ -147,12 +87,18 @@ export const cellRouter = router({
             });
           } else {
             const newCellId = randomUUID();
-            await tx.insert(cell).values({
-              id: newCellId,
-              recordId: input.recordId,
-              fieldId: input.fieldId,
-              value: newValue,
-            });
+            await tx
+              .insert(cell)
+              .values({
+                id: newCellId,
+                recordId: input.recordId,
+                fieldId: input.fieldId,
+                value: newValue,
+              })
+              .onConflictDoUpdate({
+                target: [cell.recordId, cell.fieldId],
+                set: { value: newValue, updatedAt: new Date() },
+              });
             await tx.insert(cellHistory).values({
               id: randomUUID(),
               cellId: newCellId,
@@ -164,7 +110,7 @@ export const cellRouter = router({
         }
 
         // Recompute dependent expression fields (same record, same transaction, Q2).
-        await recomputeExpressions(
+        await materializeExpressionsForRecord(
           tx,
           fld.tableId,
           input.recordId,

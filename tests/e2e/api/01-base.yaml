@@ -1,122 +1,93 @@
 # Base CRUD API 测试
 - name: 创建新的 Base
   steps:
-    - action: "POST /api/auth/sign-up/email"
+    - action: 'POST /api/auth/sign-up/email'
       body:
-        email: "base-owner-$random_uuid@test.local"
-        password: "password123"
-        name: "BaseOwner"
-    - action: "POST /api/trpc/base.create"
+        email: 'base-owner-$random_uuid@test.local'
+        password: 'password123'
+        name: 'BaseOwner'
+    - action: 'POST /api/trpc/base.create'
       body:
-        name: "E2E-Test-Base-$random_uuid"
+        name: 'E2E-Test-Base-$random_uuid'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.id is not null"
+        - '$status == 200'
+        - '$response.body.result.data.id is not null'
       register:
-        baseId: "$response.body.result.data.id"
+        baseId: '$response.body.result.data.id'
 
 - name: 获取 Base 详情
   steps:
-    - action: "POST /api/trpc/base.get"
+    - action: 'POST /api/trpc/base.get'
       body:
-        id: "$ref:baseId"
+        id: '$ref:baseId'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.id == $ref:baseId"
+        - '$status == 200'
+        - '$response.body.result.data.id == $ref:baseId'
 
-- name: 列出所有 Base
+- name: 列出我所在成员的 Base
   steps:
-    - action: "POST /api/trpc/base.list"
+    - action: 'POST /api/trpc/base.list'
       body: {}
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data is array"
+        - '$status == 200'
+        - '$response.body.result.data is array'
 
 - name: 重命名 Base
   steps:
-    - action: "POST /api/trpc/base.rename"
+    - action: 'POST /api/trpc/base.rename'
       body:
-        id: "$ref:baseId"
-        name: "Renamed-Base-$random_uuid"
+        id: '$ref:baseId'
+        name: 'Renamed-Base-$random_uuid'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.name startswith Renamed-Base"
+        - '$status == 200'
+        - '$response.body.result.data.name startswith Renamed-Base'
 
-- name: 获取不存在的 Base 返回 null
+- name: 获取不存在的 Base 应被拒绝（不泄露存在性）
   steps:
-    - action: "POST /api/trpc/base.get"
+    - action: 'POST /api/trpc/base.get'
       body:
-        id: "nonexistent-base-id"
+        id: 'nonexistent-base-id'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data is null"
-
-- name: 创建 Base 空名称应拒绝
-  steps:
-    - action: "POST /api/trpc/base.create"
-      body:
-        name: ""
-      asserts:
-        - "$status == 400"
-
-- name: 删除 Base
-  steps:
-    - action: "POST /api/trpc/base.delete"
-      body:
-        id: "$ref:baseId"
-      asserts:
-        - "$status == 200"
-        - "$response.body.result.data.ok == true"
-
-- name: 获取 Base 详情
-  steps:
-    - action: "POST /api/trpc/base.get"
-      body:
-        id: "$ref:baseId"
-      asserts:
-        - "$status == 200"
-        - "$response.body.result.data.id == $ref:baseId"
-
-- name: 列出所有 Base
-  steps:
-    - action: "POST /api/trpc/base.list"
-      body: {}
-      asserts:
-        - "$status == 200"
-        - "$response.body.result.data is array"
-
-- name: 重命名 Base
-  steps:
-    - action: "POST /api/trpc/base.rename"
-      body:
-        id: "$ref:baseId"
-        name: "Renamed-Base"
-      asserts:
-        - "$status == 200"
-        - "$response.body.result.data.name == Renamed-Base"
-
-- name: 获取不存在的 Base 返回 null
-  steps:
-    - action: "POST /api/trpc/base.get"
-      body:
-        id: "nonexistent-base-id"
-      asserts:
-        - "$status == 200"
-        - "$response.body.result.data is null"
+        - '$status == 403'
 
 - name: 创建 Base 空名称应拒绝
   steps:
-    - action: "POST /api/trpc/base.create"
+    - action: 'POST /api/trpc/base.create'
       body:
-        name: ""
+        name: ''
       asserts:
-        - "$status == 400"
+        - '$status == 400'
 
-- name: 删除 Base
+- name: 删除 Base（owner）
   steps:
-    - action: "POST /api/trpc/base.delete"
+    - action: 'POST /api/trpc/base.delete'
       body:
-        id: "$ref:baseId"
+        id: '$ref:baseId'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.ok == true"
+        - '$status == 200'
+        - '$response.body.result.data.ok == true'
+
+- name: 删除后的 Base 不可再读
+  steps:
+    - action: 'POST /api/trpc/base.get'
+      body:
+        id: '$ref:baseId'
+      asserts:
+        - '$status == 403'
+
+- name: 删除后的 Base 不可再改名
+  steps:
+    - action: 'POST /api/trpc/base.rename'
+      body:
+        id: '$ref:baseId'
+        name: 'Renamed-Base'
+      asserts:
+        - '$status == 403'
+
+- name: 删除后的 Base 不可重复删除
+  steps:
+    - action: 'POST /api/trpc/base.delete'
+      body:
+        id: '$ref:baseId'
+      asserts:
+        - '$status == 403'

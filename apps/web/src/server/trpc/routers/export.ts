@@ -4,15 +4,19 @@ import { z } from 'zod';
 import { FieldType } from '@/lib/field-types';
 import { formatNumberToString } from '@/lib/format-number';
 import { assertRole } from '@/lib/roles';
-import { listRecordsPivoted } from '@/lib/db-queries';
+import { listRecordsPivoted, countRecords } from '@/lib/db-queries';
 import { field, table } from '../../db/schema';
 import { db } from '../../db';
 import { protectedProcedure, router } from '../init';
 
-// Re-exported from @markpocket/plugin-csv/csv — inline to avoid circular deps
+// Re-exported from @markpocket/plugin-csv/csv — inline to avoid circular deps.
+// Leading = + - @ and tab/CR are neutralized with a leading apostrophe so Excel
+// / Sheets don't execute the cell as a formula (OWASP CSV injection). Import
+// strips the apostrophe again, keeping the round-trip.
 function csvEscape(s: string): string {
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",\n\r]/.test(guarded)) return `"${guarded.replace(/"/g, '""')}"`;
+  return guarded;
 }
 
 function cellToCsv(value: unknown, type: string, options: Record<string, unknown>): string {
@@ -56,7 +60,14 @@ export const exportRouter = router({
         .where(eq(table.baseId, input.baseId))
         .orderBy(table.orderIndex);
 
-      const files: Array<{ name: string; csv: string }> = [];
+      const files: Array<{
+        tableId: string;
+        name: string;
+        csv: string;
+        truncated: boolean;
+        total: number;
+      }> = [];
+      const EXPORT_LIMIT = 10_000;
 
       for (const t of tables) {
         const fields = await db
@@ -71,7 +82,10 @@ export const exportRouter = router({
           .where(eq(field.tableId, t.id));
         fields.sort((a, b) => a.orderIndex - b.orderIndex);
 
-        const records = await listRecordsPivoted(t.id, {}, 0, 10000);
+        const [records, total] = await Promise.all([
+          listRecordsPivoted(t.id, {}, 0, EXPORT_LIMIT),
+          countRecords(t.id),
+        ]);
 
         const header = fields.map((f) => csvEscape(f.name)).join(',');
         const lines = records.map((r) =>
@@ -82,7 +96,13 @@ export const exportRouter = router({
             .join(','),
         );
         const safeName = t.name.replace(/[^a-zA-Z0-9_-]/g, '_') || t.id;
-        files.push({ name: `${safeName}.csv`, csv: [header, ...lines].join('\n') });
+        files.push({
+          tableId: t.id,
+          name: `${safeName}.csv`,
+          csv: [header, ...lines].join('\n'),
+          truncated: total > records.length,
+          total,
+        });
       }
 
       return files;

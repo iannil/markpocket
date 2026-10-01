@@ -22,13 +22,18 @@ export default function RegisterPage() {
       return;
     }
     setLoading(true);
-    const res = await authClient.signUp.email({ email, password, name });
-    setLoading(false);
-    if (res.error) {
-      setError(res.error.message ?? 'Sign up failed');
-      return;
+    try {
+      const res = await authClient.signUp.email({ email, password, name });
+      if (res.error) {
+        setError(res.error.message ?? 'Sign up failed');
+        return;
+      }
+      router.push('/bases');
+    } catch {
+      setError('Network error — please try again');
+    } finally {
+      setLoading(false);
     }
-    router.push('/bases');
   }
 
   return (

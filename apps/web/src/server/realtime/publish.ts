@@ -14,8 +14,11 @@ export interface RealtimeNotice {
   exceptUserId?: string;
 }
 
-function emit(notice: RealtimeNotice): Promise<unknown> {
-  return sql.notify(REALTIME_CHANNEL, JSON.stringify(notice));
+function emit(notice: RealtimeNotice): void {
+  // Fire-and-forget by callers; a failed NOTIFY must never crash the process.
+  sql
+    .notify(REALTIME_CHANNEL, JSON.stringify(notice))
+    .catch((err) => console.error('realtime notify failed', err));
 }
 
 // Resolve the owning base and broadcast a table-scoped change.

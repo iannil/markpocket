@@ -4,7 +4,7 @@ export type ServerMessage =
   | {
       type: 'presence';
       baseId: string;
-      users: Array<{ userId: string; userName: string; userEmail: string }>;
+      users: Array<{ userId: string; userName: string }>;
     };
 
 export interface RealtimeClient {
@@ -20,6 +20,9 @@ export function createRealtimeClient(url: string): RealtimeClient {
   const callbacks = new Set<(msg: ServerMessage) => void>();
   let reconnectDelay = 500;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set by close(): the socket's own onclose must NOT schedule a reconnect,
+  // or a "closed" client resurrects forever (ghost sockets after unmount).
+  let closed = false;
 
   function connect() {
     ws = new WebSocket(url);
@@ -39,6 +42,7 @@ export function createRealtimeClient(url: string): RealtimeClient {
     };
     ws.onclose = () => {
       ws = null;
+      if (closed) return;
       reconnectTimer = setTimeout(() => {
         reconnectDelay = Math.min(reconnectDelay * 2, 10000);
         connect();
@@ -67,6 +71,7 @@ export function createRealtimeClient(url: string): RealtimeClient {
       return () => callbacks.delete(cb);
     },
     close() {
+      closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       ws?.close();
     },

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
+import { toast } from '@/lib/toast';
 import { formatNumberToString } from '@/lib/format-number';
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { LinkCell } from './link-cell';
@@ -68,9 +69,13 @@ export interface CellRendererProps {
   onCommitEdit: () => void;
   onUpsert: (value: unknown) => void;
   readOnly?: boolean;
+  /** Owning base — sent with attachment uploads so the server can scope the ACL. */
+  baseId?: string;
 }
 
-export function CellRenderer({
+// memo'd: the parent re-renders on every keystroke of an inline edit (draft state
+// lives above); stable props keep the untouched cells from re-rendering.
+export const CellRenderer = memo(function CellRenderer({
   field,
   record,
   users,
@@ -81,8 +86,30 @@ export function CellRenderer({
   onCommitEdit,
   onUpsert,
   readOnly = false,
+  baseId,
 }: CellRendererProps) {
   const value = record.cells[field.id];
+  const [uploading, setUploading] = useState(false);
+
+  async function uploadAttachment(file: File) {
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (baseId) fd.append('baseId', baseId);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `Upload failed (${res.status})`);
+      }
+      const json = (await res.json()) as { id: string };
+      onUpsert([...((value as string[] | undefined) ?? []), json.id]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   switch (field.type) {
     case FieldType.Boolean:
@@ -158,29 +185,33 @@ export function CellRenderer({
     case FieldType.MultiSelect: {
       const choices = (field.options.choices as SelectOption[] | undefined) ?? [];
       const selectedIds = (value as string[] | undefined) ?? [];
-      const selectedNames = choices.filter((c) => selectedIds.includes(c.id)).map((c) => c.name);
+      // Chips come from choices (ids are unique) — never key by display name.
+      const selectedChips = choices.filter((c) => selectedIds.includes(c.id));
       function toggle(id: string) {
         const next = selectedIds.includes(id)
           ? selectedIds.filter((x) => x !== id)
           : [...selectedIds, id];
         onUpsert(next);
       }
+      const chips = (
+        <>
+          {selectedChips.slice(0, 2).map((c) => (
+            <span key={c.id} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+              {c.name}
+            </span>
+          ))}
+          {selectedChips.length > 2 ? (
+            <span className="text-xs text-muted-foreground">+{selectedChips.length - 2}</span>
+          ) : null}
+        </>
+      );
       if (readOnly) {
         return (
           <div className="flex min-h-[28px] w-full items-center px-2.5 text-sm">
-            {selectedNames.length === 0 ? (
+            {selectedChips.length === 0 ? (
               EMPTY
             ) : (
-              <span className="flex items-center">
-                {selectedNames.slice(0, 2).map((name) => (
-                  <span key={name} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                    {name}
-                  </span>
-                ))}
-                {selectedNames.length > 2 ? (
-                  <span className="text-xs text-muted-foreground">+{selectedNames.length - 2}</span>
-                ) : null}
-              </span>
+              <span className="flex items-center">{chips}</span>
             )}
           </div>
         );
@@ -188,19 +219,10 @@ export function CellRenderer({
       return (
         <Popover>
           <PopoverTrigger className="flex min-h-[28px] w-full items-start px-2.5 py-1 text-left text-sm">
-            {selectedNames.length === 0 ? (
+            {selectedChips.length === 0 ? (
               EMPTY
             ) : (
-              <span className="flex items-center">
-                {selectedNames.slice(0, 2).map((name) => (
-                  <span key={name} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                    {name}
-                  </span>
-                ))}
-                {selectedNames.length > 2 ? (
-                  <span className="text-xs text-muted-foreground">+{selectedNames.length - 2}</span>
-                ) : null}
-              </span>
+              <span className="flex items-center">{chips}</span>
             )}
           </PopoverTrigger>
           <PopoverContent className="w-56">
@@ -301,20 +323,16 @@ export function CellRenderer({
           ))}
           {!readOnly && (
             <label className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-              +upload
+              {uploading ? 'uploading…' : '+upload'}
               <input
                 type="file"
                 className="hidden"
-                onChange={async (e) => {
+                disabled={uploading}
+                onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  const res = await fetch('/api/upload', { method: 'POST', body: fd });
-                  const json = await res.json();
-                  if (json.id) {
-                    onUpsert([...attIds, json.id]);
-                  }
+                  e.target.value = '';
+                  void uploadAttachment(file);
                 }}
               />
             </label>
@@ -421,4 +439,4 @@ export function CellRenderer({
         </button>
       );
   }
-}
+});

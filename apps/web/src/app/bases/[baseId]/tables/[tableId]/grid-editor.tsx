@@ -2,7 +2,10 @@
 
 import {
   Fragment,
+  memo,
+  useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -49,6 +52,52 @@ interface ViewLike {
 }
 
 const DEFAULT_COL_WIDTH = 160;
+const PAGE_SIZE = 200;
+const PAGE_STEP = 500;
+
+// memo'd cell wrapper: draft is only passed through for the ONE editing cell, so
+// a keystroke re-renders that cell instead of every cell in the table.
+const MemoCell = memo(function MemoCell({
+  field,
+  rec,
+  users,
+  editing,
+  draft,
+  readOnly,
+  baseId,
+  startEdit,
+  commitEdit,
+  upsert,
+  onDraftChange,
+}: {
+  field: FieldLike;
+  rec: RecordLike;
+  users: Array<{ id: string; name: string | null; email: string | null }>;
+  editing: boolean;
+  draft: string;
+  readOnly: boolean;
+  baseId: string;
+  startEdit: (recordId: string, fieldId: string, current: unknown) => void;
+  commitEdit: (type: FieldType, recordId: string, fieldId: string) => void;
+  upsert: (recordId: string, fieldId: string, value: unknown) => void;
+  onDraftChange: (v: string) => void;
+}) {
+  return (
+    <CellRenderer
+      field={field}
+      record={rec}
+      users={users}
+      isEditing={editing}
+      draft={editing ? draft : ''}
+      onDraftChange={onDraftChange}
+      onStartEdit={(current) => startEdit(rec.id, field.id, current)}
+      onCommitEdit={() => commitEdit(field.type, rec.id, field.id)}
+      onUpsert={(v) => upsert(rec.id, field.id, v)}
+      readOnly={readOnly}
+      baseId={baseId}
+    />
+  );
+});
 
 export function GridEditor({ baseId, tableId }: { baseId: string; tableId: string }) {
   const utils = trpc.useUtils();
@@ -66,28 +115,11 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const { data: myMembership } = trpc.member.me.useQuery({ baseId });
   const isViewer = myMembership?.role === 'viewer';
 
-  if (fieldsLoading || viewsLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="space-y-3">
-          <div className="h-8 w-96 animate-pulse rounded bg-muted" />
-          <div className="h-64 w-96 animate-pulse rounded bg-muted" />
-        </div>
-      </div>
-    );
-  }
+  const fields = useMemo(() => (fieldsData ?? []) as FieldLike[], [fieldsData]);
+  const views = useMemo(() => (viewsData ?? []) as ViewLike[], [viewsData]);
+  const users = useMemo(() => usersData ?? [], [usersData]);
 
-  if (fieldsError || viewsError) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-destructive">
-        Failed to load fields. Please try again.
-      </div>
-    );
-  }
-
-  const fields = (fieldsData ?? []) as FieldLike[];
-  const views = (viewsData ?? []) as ViewLike[];
-
+  // --- All hooks above the loading/error early-returns (Rules of Hooks). ---
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   useEffect(() => {
     if (!activeViewId && views.length > 0) setActiveViewId(views[0]!.id);
@@ -102,16 +134,44 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const displayedFields = fields.filter((f) => !hiddenFields.includes(f.id));
   const hasGroup = Boolean(viewOptions.group?.length);
 
+  const [recordLimit, setRecordLimit] = useState(PAGE_SIZE);
+  useEffect(() => setRecordLimit(PAGE_SIZE), [tableId]);
+
   const { data: recordsData } = trpc.record.list.useQuery({
     tableId,
     viewId: activeViewId ?? undefined,
+    limit: recordLimit,
   });
-  const groups = (recordsData?.groups ?? []) as GroupLike[];
+  const groups = useMemo(() => (recordsData?.groups ?? []) as GroupLike[], [recordsData]);
+  const total = recordsData?.total ?? 0;
+  const flatRows = useMemo(() => groups.flatMap((g) => g.records), [groups]);
+  const loadedCount = flatRows.length;
+  // Global (not per-group) row numbers.
+  const rowNumberById = useMemo(() => {
+    const m = new Map<string, number>();
+    flatRows.forEach((r, i) => m.set(r.id, i + 1));
+    return m;
+  }, [flatRows]);
+
+  const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
+  const editingRef = useRef<{ recordId: string; fieldId: string } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
+    null,
+  );
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState('');
+  const draftRef = useRef('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<FieldEditorTarget | undefined>(undefined);
+  const [showFilter, setShowFilter] = useState(false);
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const widthsRef = useRef<Record<string, number>>({});
+  const resizeRef = useRef<{ fieldId: string; startX: number; startW: number } | null>(null);
 
   const upsertCell = trpc.cell.upsert.useMutation({
     onSuccess: () => {
       utils.record.list.invalidate({ tableId });
-      toast.success('Cell updated');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -133,10 +193,70 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     onSuccess: () => {
       utils.view.list.invalidate({ tableId });
       // record.list reads view options (filter/sort/group) server-side, so it must
-      // refetch whenever options change.
-      utils.record.list.invalidate();
+      // refetch whenever options change — scoped to this table.
+      utils.record.list.invalidate({ tableId });
     },
+    onError: (err) => toast.error(err.message),
   });
+
+  useEffect(() => {
+    const w = (viewOptions.columnWidth as Record<string, number> | undefined) ?? {};
+    setWidths(w);
+    widthsRef.current = w;
+  }, [activeViewId, viewOptions.columnWidth]);
+
+  // react-query's `mutate` is referentially stable — depend on it, not on the
+  // mutation object, so the cell callbacks stay stable and memoization holds.
+  const upsertMutate = upsertCell.mutate;
+  const handleDraftChange = useCallback((v: string) => {
+    draftRef.current = v;
+    setDraft(v);
+  }, []);
+  const handleStartEdit = useCallback((recordId: string, fieldId: string, current: unknown) => {
+    setSelectedCell({ recordId, fieldId });
+    setEditing({ recordId, fieldId });
+    editingRef.current = { recordId, fieldId };
+    const d = current == null ? '' : String(current);
+    draftRef.current = d;
+    setDraft(d);
+  }, []);
+  const handleCommitEdit = useCallback(
+    (type: FieldType, recordId: string, fieldId: string) => {
+      if (!editingRef.current) return;
+      editingRef.current = null;
+      let value: unknown = draftRef.current;
+      if (type === FieldType.Number)
+        value = draftRef.current === '' ? '' : Number(draftRef.current);
+      upsertMutate({ recordId, fieldId, value });
+      setEditing(null);
+    },
+    [upsertMutate],
+  );
+  const handleUpsert = useCallback(
+    (recordId: string, fieldId: string, value: unknown) => {
+      upsertMutate({ recordId, fieldId, value });
+    },
+    [upsertMutate],
+  );
+
+  if (fieldsLoading || viewsLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="space-y-3">
+          <div className="h-8 w-96 animate-pulse rounded bg-muted" />
+          <div className="h-64 w-96 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    );
+  }
+
+  if (fieldsError || viewsError) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-destructive">
+        Failed to load fields. Please try again.
+      </div>
+    );
+  }
 
   function patchOptions(patch: Partial<ViewOptions>) {
     if (!activeView) return;
@@ -144,64 +264,41 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     updateOptionsMut.mutate({ id: activeView.id, options: next });
   }
 
-  const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
-  const editingRef = useRef<{ recordId: string; fieldId: string } | null>(null);
-  const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
-    null,
-  );
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [draft, setDraft] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<FieldEditorTarget | undefined>(undefined);
-  const [showFilter, setShowFilter] = useState(false);
-  const [widths, setWidths] = useState<Record<string, number>>({});
-  const widthsRef = useRef<Record<string, number>>({});
-  const resizeRef = useRef<{ fieldId: string; startX: number; startW: number } | null>(null);
-
-  useEffect(() => {
-    const w = (viewOptions.columnWidth as Record<string, number> | undefined) ?? {};
-    setWidths(w);
-    widthsRef.current = w;
-  }, [activeViewId]);
-
   function selectCell(recordId: string, fieldId: string) {
     setSelectedCell({ recordId, fieldId });
     gridRef.current?.focus();
   }
 
   function moveTo(r: number, c: number) {
-    const flat = groups.flatMap((g) => g.records);
-    const rec = flat[r];
+    const rec = flatRows[r];
     const f = displayedFields[c];
     if (rec && f) selectCell(rec.id, f.id);
   }
 
   function onGridKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
     if (!selectedCell) return;
-    const flat = groups.flatMap((g) => g.records);
-    const r = flat.findIndex((x) => x.id === selectedCell.recordId);
+    const r = flatRows.findIndex((x) => x.id === selectedCell.recordId);
     const c = displayedFields.findIndex((f) => f.id === selectedCell.fieldId);
     if (r < 0 || c < 0) return;
     const field = displayedFields[c]!;
-    const rec = flat[r]!;
+    const rec = flatRows[r]!;
     const inline =
       field.type === FieldType.Text ||
       field.type === FieldType.Number ||
       field.type === FieldType.Date;
     const editingNow =
       editing?.recordId === selectedCell.recordId && editing?.fieldId === selectedCell.fieldId;
-    const lastR = flat.length - 1;
+    const lastR = flatRows.length - 1;
     const lastC = displayedFields.length - 1;
 
     if (editingNow) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        commitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
+        handleCommitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
         moveTo(Math.min(r + 1, lastR), c);
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        commitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
+        handleCommitEdit(field.type, selectedCell.recordId, selectedCell.fieldId);
         moveTo(r, Math.min(c + 1, lastC));
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -232,7 +329,11 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         e.preventDefault();
         if (isViewer) break;
         if (inline) {
-          startEdit(selectedCell.recordId, selectedCell.fieldId, rec.cells[selectedCell.fieldId]);
+          handleStartEdit(
+            selectedCell.recordId,
+            selectedCell.fieldId,
+            rec.cells[selectedCell.fieldId],
+          );
         } else if (field.type === FieldType.Boolean) {
           upsertCell.mutate({
             recordId: selectedCell.recordId,
@@ -254,14 +355,24 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         setSelectedCell(null);
         setSelectedRows(new Set());
         break;
+      case 'Delete':
+      case 'Backspace':
+        if (!isViewer) {
+          e.preventDefault();
+          upsertCell.mutate({
+            recordId: selectedCell.recordId,
+            fieldId: selectedCell.fieldId,
+            value: '',
+          });
+        }
+        break;
       case 'c':
         if ((e.metaKey || e.ctrlKey) && selectedCell) {
           e.preventDefault();
-          const flat = groups.flatMap((g) => g.records);
-          const si = flat.findIndex((r) => r.id === selectedCell.recordId);
+          const si = flatRows.findIndex((row) => row.id === selectedCell.recordId);
           const sj = displayedFields.findIndex((f) => f.id === selectedCell.fieldId);
           // Single cell copy
-          const val = flat[si]?.cells[displayedFields[sj]?.id ?? ''];
+          const val = flatRows[si]?.cells[displayedFields[sj]?.id ?? ''];
           navigator.clipboard.writeText(val == null ? '' : String(val));
           return;
         }
@@ -269,34 +380,26 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       case 'v':
         if ((e.metaKey || e.ctrlKey) && selectedCell && !isViewer) {
           e.preventDefault();
-          navigator.clipboard.readText().then((text) => {
-            const trimmed = text.trim();
-            if (!trimmed) return;
-            upsertCell.mutate({
-              recordId: selectedCell.recordId,
-              fieldId: selectedCell.fieldId,
-              value: trimmed,
+          navigator.clipboard
+            .readText()
+            .then((text) => {
+              const trimmed = text.trim();
+              if (!trimmed) return;
+              upsertCell.mutate({
+                recordId: selectedCell.recordId,
+                fieldId: selectedCell.fieldId,
+                value: trimmed,
+              });
+            })
+            .catch(() => {
+              // Clipboard permission denied / unavailable — nothing to paste.
             });
-          });
           return;
         }
         break;
     }
   }
-  function startEdit(recordId: string, fieldId: string, current: unknown) {
-    setSelectedCell({ recordId, fieldId });
-    setEditing({ recordId, fieldId });
-    editingRef.current = { recordId, fieldId };
-    setDraft(current == null ? '' : String(current));
-  }
-  function commitEdit(type: FieldType, recordId: string, fieldId: string) {
-    if (!editingRef.current) return;
-    editingRef.current = null;
-    let value: unknown = draft;
-    if (type === FieldType.Number) value = draft === '' ? '' : Number(draft);
-    upsertCell.mutate({ recordId, fieldId, value });
-    setEditing(null);
-  }
+
   function openCreateField() {
     setEditTarget(undefined);
     setDialogOpen(true);
@@ -430,7 +533,11 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         }}
       >
         <div className="overflow-auto rounded-md border border-border">
-          <table className="markpocket-grid border-collapse text-sm">
+          <table
+            className="markpocket-grid border-collapse text-sm"
+            role="grid"
+            aria-rowcount={total || undefined}
+          >
             <colgroup>
               <col style={{ width: 40 }} />
               {displayedFields.map((f) => (
@@ -444,6 +551,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                 {displayedFields.map((f) => (
                   <th
                     key={f.id}
+                    scope="col"
                     className="relative border-b border-l border-border p-0"
                     onDoubleClick={() => !isViewer && openEditField(f)}
                   >
@@ -484,7 +592,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                   </th>
                 ))}
                 {!isViewer && (
-                  <th className="border-b border-l border-border bg-muted/20 p-0">
+                  <th scope="col" className="border-b border-l border-border bg-muted/20 p-0">
                     <button
                       className="flex h-full w-full items-center justify-center text-muted-foreground hover:text-foreground"
                       onClick={openCreateField}
@@ -503,6 +611,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                     <tr className="border-b border-border bg-muted/30">
                       <th
                         colSpan={displayedFields.length + 2}
+                        scope="rowgroup"
                         className="border-b border-border p-1 text-left text-xs font-medium"
                       >
                         {groupLabel(g.key)}{' '}
@@ -510,7 +619,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                       </th>
                     </tr>
                   )}
-                  {g.records.map((rec, i) => (
+                  {g.records.map((rec) => (
                     <tr
                       key={rec.id}
                       className={`group ${selectedRows.has(rec.id) ? 'bg-primary/5' : ''}`}
@@ -526,11 +635,12 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                             const next = new Set(selectedRows);
                             if (e.shiftKey && selectedCell) {
                               // Range select: from last selected to this one
-                              const flat = groups.flatMap((g) => g.records);
-                              const start = flat.findIndex((r) => r.id === selectedCell.recordId);
-                              const end = flat.findIndex((r) => r.id === rec.id);
+                              const start = flatRows.findIndex(
+                                (r) => r.id === selectedCell.recordId,
+                              );
+                              const end = flatRows.findIndex((r) => r.id === rec.id);
                               const [lo, hi] = start < end ? [start, end] : [end, start];
-                              for (let j = lo; j <= hi; j++) next.add(flat[j]!.id);
+                              for (let j = lo; j <= hi; j++) next.add(flatRows[j]!.id);
                             } else if (e.metaKey || e.ctrlKey) {
                               if (next.has(rec.id)) next.delete(rec.id);
                               else next.add(rec.id);
@@ -542,7 +652,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                           }}
                           onMouseDown={(e) => e.stopPropagation()}
                         >
-                          {i + 1}
+                          {rowNumberById.get(rec.id) ?? ''}
                         </button>
                         {!isViewer && (
                           <button
@@ -557,33 +667,38 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                           </button>
                         )}
                       </td>
-                      {displayedFields.map((f) => (
-                        <td
-                          key={f.id}
-                          onClick={() => selectCell(rec.id, f.id)}
-                          className={cn(
-                            'group relative border-b border-l border-border p-0',
-                            selectedCell?.recordId === rec.id &&
-                              selectedCell?.fieldId === f.id &&
-                              'ring-2 ring-inset ring-foreground',
-                          )}
-                        >
-                          <CellRenderer
-                            field={f}
-                            record={rec}
-                            users={usersData ?? []}
-                            isEditing={editing?.recordId === rec.id && editing?.fieldId === f.id}
-                            draft={draft}
-                            onDraftChange={setDraft}
-                            onStartEdit={(v) => startEdit(rec.id, f.id, v)}
-                            onCommitEdit={() => commitEdit(f.type, rec.id, f.id)}
-                            onUpsert={(v) =>
-                              upsertCell.mutate({ recordId: rec.id, fieldId: f.id, value: v })
-                            }
-                            readOnly={isViewer}
-                          />
-                        </td>
-                      ))}
+                      {displayedFields.map((f) => {
+                        const editingThis =
+                          editing?.recordId === rec.id && editing?.fieldId === f.id;
+                        const selectedThis =
+                          selectedCell?.recordId === rec.id && selectedCell?.fieldId === f.id;
+                        return (
+                          <td
+                            key={f.id}
+                            role="gridcell"
+                            aria-selected={selectedThis || undefined}
+                            onClick={() => selectCell(rec.id, f.id)}
+                            className={cn(
+                              'group relative border-b border-l border-border p-0',
+                              selectedThis && 'ring-2 ring-inset ring-foreground',
+                            )}
+                          >
+                            <MemoCell
+                              field={f}
+                              rec={rec}
+                              users={users}
+                              editing={editingThis}
+                              draft={editingThis ? draft : ''}
+                              readOnly={isViewer}
+                              baseId={baseId}
+                              startEdit={handleStartEdit}
+                              commitEdit={handleCommitEdit}
+                              upsert={handleUpsert}
+                              onDraftChange={handleDraftChange}
+                            />
+                          </td>
+                        );
+                      })}
                       <td className="border-b border-l border-border" />
                     </tr>
                   ))}
@@ -603,26 +718,38 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
             <tfoot>
               <tr>
                 <td colSpan={displayedFields.length + 2} className="p-0">
-                  {!isViewer && (
-                    <button
-                      className="flex w-full items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
-                      onClick={() => createRecord.mutate({ tableId })}
-                      disabled={createRecord.isPending}
-                    >
-                      + new record
-                    </button>
-                  )}
+                  <div className="flex w-full items-stretch">
+                    {!isViewer && (
+                      <button
+                        className="flex flex-1 items-center justify-center gap-1 border border-dashed border-border py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground disabled:opacity-50"
+                        onClick={() => createRecord.mutate({ tableId })}
+                        disabled={createRecord.isPending}
+                      >
+                        + new record
+                      </button>
+                    )}
+                    {loadedCount < total && (
+                      <button
+                        className="border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground hover:border-solid hover:text-foreground"
+                        onClick={() => setRecordLimit((l) => l + PAGE_STEP)}
+                      >
+                        Show more — {loadedCount} of {total}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
+        {loadedCount >= total && total > PAGE_SIZE && (
+          <div className="pt-1 text-xs text-muted-foreground">Showing all {total} records.</div>
+        )}
         {selectedCell &&
           (() => {
-            const flat = groups.flatMap((g) => g.records);
-            const rowNumber = flat.findIndex((r) => r.id === selectedCell.recordId) + 1;
+            const rowNumber = rowNumberById.get(selectedCell.recordId) ?? 0;
             const field = displayedFields.find((f) => f.id === selectedCell.fieldId);
-            const record = flat.find((r) => r.id === selectedCell.recordId);
+            const record = flatRows.find((r) => r.id === selectedCell.recordId);
             if (!field || !record) return null;
             return (
               <CellHistoryDock

@@ -28,16 +28,10 @@ export default function ExportTab() {
     setError(null);
     try {
       const files = await utils.client.export.exportBase.query({ baseId });
-      // Server returns files for ALL tables; filter down to the selected ones by
-      // matching each file name against the selected table's safe name.
-      const filtered = files.filter((f) => {
-        const tableName = f.name.replace(/\.csv$/, '');
-        return [...selectedSet].some((id) => {
-          const t = tables?.find((t2) => t2.id === id);
-          const safeName = t?.name.replace(/[^a-zA-Z0-9_-]/g, '_') || t?.id;
-          return safeName === tableName;
-        });
-      });
+      // Match by tableId, not filename — two tables whose names sanitize to the
+      // same safe name ("A B" / "A_B") must not collide.
+      const filtered = files.filter((f) => selectedSet.has(f.tableId));
+      const truncated = filtered.filter((f) => f.truncated);
 
       for (const file of filtered) {
         const url = URL.createObjectURL(new Blob([file.csv], { type: 'text/csv' }));
@@ -48,6 +42,13 @@ export default function ExportTab() {
         URL.revokeObjectURL(url);
         // Small delay between downloads to avoid browser blocking
         await new Promise((r) => setTimeout(r, 200));
+      }
+      if (truncated.length > 0) {
+        setError(
+          `Note: ${truncated
+            .map((f) => `${f.name} truncated at 10,000 of ${f.total} records`)
+            .join('; ')}`,
+        );
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Export failed');

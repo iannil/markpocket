@@ -8,11 +8,12 @@ import type { FieldType } from '@/lib/field-types';
 
 export default function SharePage() {
   const { token } = useParams<{ token: string }>();
-  const { data: baseInfo } = trpc.publicShare.getBase.useQuery({ token });
+  const { data: baseInfo, isError: baseError } = trpc.publicShare.getBase.useQuery({ token });
   const { data: tables } = trpc.publicShare.getTables.useQuery({ token });
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const [recordLimit, setRecordLimit] = useState(100);
   const { data: tableData } = trpc.publicShare.getRecords.useQuery(
-    { token, tableId: activeTableId ?? '' },
+    { token, tableId: activeTableId ?? '', limit: recordLimit },
     { enabled: Boolean(activeTableId) },
   );
 
@@ -21,8 +22,9 @@ export default function SharePage() {
       setActiveTableId(tables[0]!.id);
     }
   }, [tables, activeTableId]);
+  useEffect(() => setRecordLimit(100), [activeTableId]);
 
-  if (baseInfo === null) {
+  if (baseError || baseInfo === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6">
         <div className="text-center">
@@ -123,6 +125,15 @@ export default function SharePage() {
               )}
             </tbody>
           </table>
+          {tableData.records.length < tableData.total && (
+            <button
+              type="button"
+              className="mt-2 rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setRecordLimit((l) => l + 500)}
+            >
+              Show more — {tableData.records.length} of {tableData.total}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 import { extractDependsOn } from '@/lib/expression-eval';
 import { FieldType, type SelectOption } from '@/lib/field-types';
@@ -33,20 +34,14 @@ function FieldEditorDialogTablePicker({
   value: string;
   onChange: (id: string) => void;
 }) {
-  const [tables, setTables] = useState<Array<{ id: string; name: string }>>([]);
   const basesQ = trpc.base.list.useQuery();
-  const tableListQ = trpc.table.list.useQuery(
-    { baseId: basesQ.data?.[0]?.id ?? '' },
-    { enabled: !!basesQ.data?.length },
+  const firstBaseId = basesQ.data?.[0]?.id ?? '';
+  const { data: tables } = trpc.table.list.useQuery(
+    { baseId: firstBaseId },
+    { enabled: !!firstBaseId },
   );
-  // Flatten all tables from all bases — simple approach for v1
-  const allTables = tables.length > 0 ? tables : [];
-  if (basesQ.data && allTables.length === 0) {
-    // Lazy gather — for v1 just show first base's tables
-    if (tableListQ.data) {
-      setTables(tableListQ.data);
-    }
-  }
+  // v1: link targets come from the first base the user is a member of.
+  const allTables = tables ?? [];
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v)}>
       <SelectTrigger className="w-full">
@@ -80,18 +75,22 @@ export function FieldEditorDialog({
       utils.field.list.invalidate({ tableId });
       onOpenChange(false);
     },
+    onError: (err) => toast.error(err.message),
   });
   const rename = trpc.field.rename.useMutation({
     onSuccess: () => utils.field.list.invalidate({ tableId }),
+    onError: (err) => toast.error(err.message),
   });
   const updateOptions = trpc.field.updateOptions.useMutation({
     onSuccess: () => utils.field.list.invalidate({ tableId }),
+    onError: (err) => toast.error(err.message),
   });
   const remove = trpc.field.delete.useMutation({
     onSuccess: () => {
       utils.field.list.invalidate({ tableId });
       onOpenChange(false);
     },
+    onError: (err) => toast.error(err.message),
   });
 
   const editing = Boolean(field);
@@ -99,6 +98,8 @@ export function FieldEditorDialog({
   const [type, setType] = useState<FieldType>(FieldType.Text);
   const [choices, setChoices] = useState<SelectOption[]>([]);
   const [expression, setExpression] = useState('');
+  // Link-field target — kept separate from `expression` (which is the expression DSL).
+  const [targetTableId, setTargetTableId] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -106,6 +107,7 @@ export function FieldEditorDialog({
       setType(field?.type ?? FieldType.Text);
       setChoices((field?.options?.choices as SelectOption[] | undefined) ?? []);
       setExpression((field?.options?.expression as string | undefined) ?? '');
+      setTargetTableId((field?.options?.targetTableId as string | undefined) ?? '');
     }
   }, [open, field]);
 
@@ -121,7 +123,7 @@ export function FieldEditorDialog({
           options: { expression, dependsOn: extractDependsOn(expression) },
         });
       } else if (field.type === FieldType.Link) {
-        updateOptions.mutate({ id: field.id, options: { targetTableId: expression } });
+        updateOptions.mutate({ id: field.id, options: { targetTableId } });
       }
       onOpenChange(false);
     } else {
@@ -131,7 +133,7 @@ export function FieldEditorDialog({
           : type === FieldType.Expression
             ? { expression, dependsOn: extractDependsOn(expression) }
             : type === FieldType.Link
-              ? { targetTableId: expression }
+              ? { targetTableId }
               : {};
       create.mutate({ tableId, name, type, options });
     }
@@ -180,10 +182,7 @@ export function FieldEditorDialog({
           {type === FieldType.Link && (
             <div className="space-y-1">
               <Label>Link to table</Label>
-              <FieldEditorDialogTablePicker
-                value={(field?.options as { targetTableId?: string })?.targetTableId ?? ''}
-                onChange={(id) => setExpression(id)}
-              />
+              <FieldEditorDialogTablePicker value={targetTableId} onChange={setTargetTableId} />
             </div>
           )}
         </div>

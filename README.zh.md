@@ -9,8 +9,9 @@
 </p>
 
 <p>
-  Base、Table、Field、Record、View（Grid / Form / Kanban / Gallery），<br/>
-  实时协作、cell 级历史、CSV 导入导出 —— 全部装在一个 Docker 容器里。
+  Base、Table、Field、Record、Grid 视图（filter / sort / group / 隐藏列），<br/>
+  实时协作、cell 级历史、CSV 导入导出 —— 全部装在一个 Docker 容器里。<br/>
+  <em>Form / Kanban / Gallery 视图为规划中，尚未实现。</em>
 </p>
 
 ## 快速开始
@@ -32,7 +33,9 @@ cd markpocket
 ```bash
 git clone https://github.com/iannil/markpocket.git
 cd markpocket
+# 两个密钥必填 —— 缺失时 compose 拒绝启动（见 .env.example）
 echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" > .env
+echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)" >> .env
 docker compose up -d --build
 ```
 
@@ -59,15 +62,16 @@ docker compose up -d --build
 
 - **Base 与 Table** —— Airtable 式层级：Workspace → Base → Table → Field / Record / View。
 - **字段类型** —— text、long-text、number、boolean、date、single/multi-select、attachment、user、link、expression。
-- **视图** —— Grid（filter / sort / group / 列宽 / 隐藏列）、Form、Kanban、Gallery。配置 per-view 持久化；视图永不改变底层数据。
+- **视图** —— 当前为 Grid（filter / sort / group / 列宽 / 隐藏列）；Form / Kanban / Gallery 规划中。配置 per-view 持久化；视图永不改变底层数据。
 - **实时** —— per-Base 软实时广播；在线成员实时显示。
 - **Expression 字段** —— `{单价} * {数量}` 式计算列，token 以 field ID 为锚、写时求值、物化到 `cells.value`。
 - **cell 级历史** —— 谁、何时、旧值→新值，append-only 时间轴。
 - **附件** —— 可插拔 storage adapter（默认本地 FS；S3 后续）。
-- **CSV 导入导出** —— 标量数据可靠往返。
+- **CSV 导入导出** —— 标量数据可靠往返，以参考插件形式提供（`packages/plugin-csv`）。
+- **可插拔内核** —— 插件 SDK 已落地两个扩展点（storage adapter、字段类型），外加 tRPC router 与 UI slot 两种集成面（ADR-0006..0009）。
 - **鉴权与分享** —— better-auth（密码 + 可选 OIDC）、per-Base 三层角色（owner / editor / viewer）、限定单视图的只读公开分享链接。
 
-**v1 明确不做**（见 ADR）：AI/聊天/评论、插件/仪表盘、原生 SQL 暴露、多租户、Calendar/Gantt、Lookup/Rollup、OT/CRDT 合并、百万行性能优化。
+**v1 明确不做**（见 ADR）：AI/聊天/评论、仪表盘、原生 SQL 暴露、多租户、Calendar/Gantt、Lookup/Rollup、OT/CRDT 合并、百万行性能优化。
 
 ---
 
@@ -121,7 +125,7 @@ graph LR
 | 实时     | `ws`                              | 软实时 + LWW                       |
 | 鉴权     | better-auth                       | 密码 + OIDC，App Router 一等支持   |
 | UI       | shadcn/ui + Tailwind v4 + Base UI | 可组合，无重型组件库               |
-| 单仓     | pnpm workspaces + Turborepo       | v1 仅两个包，不预拆                |
+| 单仓     | pnpm workspaces + Turborepo       | 一个应用 + 三个小插件包            |
 
 ---
 
@@ -134,10 +138,14 @@ markpocket/
 │       ├── app/           # App Router 页面
 │       ├── server/        # trpc · features · realtime · auth · db · storage
 │       └── components/    # UI 组件
+├── packages/
+│   ├── plugin-sdk/            # 插件 SDK：注册表、贡献、tRPC 辅助
+│   ├── plugin-csv/            # CSV 导入导出插件（参考实现）
+│   └── plugin-storage-local/  # 本地文件系统 storage adapter
 ├── docs/
-│   ├── STATUS.md           # 项目状态总览（v1 + 重设计进度）
+│   ├── STATUS.md           # 项目状态总览
 │   ├── migration/plan.md   # 迁移方案（teable → markpocket）
-│   ├── adr/                # 架构决策记录（0001–0005）
+│   ├── adr/                # 架构决策记录（0001–0009）
 │   └── redesign/           # Paper & Ink 设计 spec + 实施计划 + 进度
 ├── CONTEXT.md             # 领域术语表
 ├── docker-compose.yml     # 生产式 compose（web + postgres）
@@ -154,11 +162,16 @@ markpocket/
 pnpm dev                 # 仅 web（需 Postgres 已启动）
 pnpm db:migrate          # 应用 schema 迁移
 pnpm db:studio           # 打开 Drizzle Studio
-pnpm lint                # eslint
+pnpm lint                # eslint（含 react-hooks 规则）
+pnpm typecheck           # tsc --noEmit（全 workspace）
+pnpm test                # vitest 单元 + 集成测试
+pnpm build               # 生产构建
 pnpm format:check        # prettier 检查
 ```
 
-测试账号与种子数据见 `apps/web/src/server/auth.ts` 中的 auth 配置。本地 Postgres 跑在端口 `7400`（dev.sh 自动配置，避开 5432 冲突）。
+CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 lint → typecheck → test → build；`v*` tag 触发发布 workflow 构建并推送 Docker 镜像。
+
+测试账号与种子数据见 `apps/web/src/server/auth.ts` 中的 auth 配置。本地 Postgres 跑在端口 `7400`（dev.sh 自动配置，避开 5432 冲突）；生产式 docker-compose 将 Postgres 暴露在宿主机 `5433`。
 
 ---
 

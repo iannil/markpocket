@@ -2,6 +2,8 @@ name: release
 on:
   push:
     tags: ['v*']
+
+# Publish-only: ci.yml gates lint/typecheck/test/build on every push/PR.
 jobs:
   docker:
     runs-on: ubuntu-latest
@@ -25,4 +27,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ${{ startsWith(github.ref_name, 'v1.0.0') && !contains(github.ref_name, '-') && format('ghcr.io/{0}:latest', github.repository) || '' }}
+            ${{ !contains(github.ref_name, '-') && format('ghcr.io/{0}:latest', github.repository) || '' }}

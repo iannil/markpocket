@@ -17,14 +17,22 @@ function LoginPageInner() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const res = await authClient.signIn.email({ email, password });
-    setLoading(false);
-    if (res.error) {
-      setError(res.error.message ?? 'Sign in failed');
-      return;
+    try {
+      const res = await authClient.signIn.email({ email, password });
+      if (res.error) {
+        setError(res.error.message ?? 'Sign in failed');
+        return;
+      }
+      // Same-origin only: a leading "//" would resolve to a foreign origin.
+      const callbackUrl = searchParams.get('callbackUrl');
+      const safe =
+        callbackUrl?.startsWith('/') && !callbackUrl.startsWith('//') ? callbackUrl : '/bases';
+      router.push(safe);
+    } catch {
+      setError('Network error — please try again');
+    } finally {
+      setLoading(false);
     }
-    const callbackUrl = searchParams.get('callbackUrl');
-    router.push(callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : '/bases');
   }
 
   return (

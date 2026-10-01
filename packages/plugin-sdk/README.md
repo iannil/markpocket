@@ -28,8 +28,8 @@ Creates a string-keyed registry for a given contribution type. Used internally b
 
 ```typescript
 interface Registry<T> {
-  register(name: string, value: T): void;          // throws on duplicate
-  get(name: string): T;                            // throws with a helpful message if unknown
+  register(name: string, value: T): void; // throws on duplicate
+  get(name: string): T; // throws with a helpful message if unknown
   tryGet(name: string): T | undefined;
   list(): Array<{ name: string; value: T }>;
 }
@@ -47,7 +47,7 @@ Identity function that type-checks a plugin manifest and provides autocompletion
 
 ```typescript
 interface Contribution<T> {
-  name: string;   // unique within its registry
+  name: string; // unique within its registry
   impl: T;
 }
 ```
@@ -61,7 +61,7 @@ interface PluginDefinition {
   name: string;
   version: string;
   storage?: Contribution<StorageProvider>[];
-  fieldTypes?: Contribution<unknown>[];      // loader narrows to FieldTypeContribution
+  fieldTypes?: Contribution<unknown>[]; // loader narrows to FieldTypeContribution
   viewTypes?: Contribution<unknown>[];
   uiSlots?: Contribution<unknown>[];
   events?: Contribution<unknown>[];
@@ -98,7 +98,7 @@ interface OptionsSchema {
 
 interface FieldTypeContribution {
   type: string;
-  optionsSchema: OptionsSchema;          // any zod-like .parse — SDK does not depend on zod
+  optionsSchema: OptionsSchema; // any zod-like .parse — SDK does not depend on zod
   defaultOptions: () => FieldOptions;
   normalizeCellValue: (options: FieldOptions, raw: unknown) => NormalizedCell;
   meta: { label: string; description: string };
@@ -118,7 +118,12 @@ interface CoreSchema {
 }
 
 interface CoreQueries {
-  listRecordsPivoted(tableId: string, opts?, offset?, limit?): Promise<Array<{ id: string; cells: Record<string, unknown> }>>;
+  listRecordsPivoted(
+    tableId: string,
+    opts?,
+    offset?,
+    limit?,
+  ): Promise<Array<{ id: string; cells: Record<string, unknown> }>>;
 }
 
 interface CoreFieldTypes {
@@ -128,7 +133,7 @@ interface CoreFieldTypes {
 }
 
 interface CoreServerApi {
-  db: DrizzleLike;       // minimal drizzle face — avoids SDK depending on app schema
+  db: DrizzleLike; // minimal drizzle face — avoids SDK depending on app schema
   schema: CoreSchema;
   queries: CoreQueries;
   fieldTypes: CoreFieldTypes;
@@ -154,7 +159,7 @@ const myServer: ServerRouterFactory<ReturnType<typeof buildRouter>> = (core) => 
 ```typescript
 interface UiSlotContribution {
   slotId: string;
-  Component: unknown;  // at runtime a React component accepting { ctx?: unknown }
+  Component: unknown; // at runtime a React component accepting { ctx?: unknown }
 }
 ```
 
@@ -191,25 +196,30 @@ import type {
 import { createRegistry, definePlugin } from '@markpocket/plugin-sdk';
 
 // tRPC helpers (subpath)
-import { router, publicProcedure, protectedProcedure, type PluginContext } from '@markpocket/plugin-sdk/trpc';
+import {
+  router,
+  publicProcedure,
+  protectedProcedure,
+  type PluginContext,
+} from '@markpocket/plugin-sdk/trpc';
 ```
 
-| Export | Kind | Description |
-|---|---|---|
-| `createRegistry` | value | Registry factory (`register` / `get` / `tryGet` / `list`) |
-| `definePlugin` | value | Identity helper with type checking for `PluginDefinition` |
-| `router` / `publicProcedure` / `protectedProcedure` | value (trpc) | tRPC builders with `PluginContext` |
-| `PluginContext` | type (trpc) | `{ session: { user: { id: string } } \| null }` |
-| `Registry<T>` | type | Return type of `createRegistry` |
-| `StorageProvider` | type | Storage backend capability surface |
-| `Contribution<T>` | type | `{ name, impl }` named contribution |
-| `PluginDefinition` | type | Plugin manifest |
-| `CoreServerApi` | type | Core services injected into plugin routers |
-| `ServerRouterFactory<TRouter>` | type | `(core) => TRouter` factory shape |
-| `FieldTypeContribution` | type | Server-side field type value semantics |
-| `UiSlotContribution` | type | Client UI slot extension |
-| `CellValue` / `FieldOptions` / `NormalizedCell` / `OptionsSchema` | type | Field type building blocks |
-| `DrizzleLike` / `CoreSchema` / `CoreQueries` / `CoreFieldTypes` | type | Interfaces backing `CoreServerApi` |
+| Export                                                            | Kind         | Description                                               |
+| ----------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
+| `createRegistry`                                                  | value        | Registry factory (`register` / `get` / `tryGet` / `list`) |
+| `definePlugin`                                                    | value        | Identity helper with type checking for `PluginDefinition` |
+| `router` / `publicProcedure` / `protectedProcedure`               | value (trpc) | tRPC builders with `PluginContext`                        |
+| `PluginContext`                                                   | type (trpc)  | `{ session: { user: { id: string } } \| null }`           |
+| `Registry<T>`                                                     | type         | Return type of `createRegistry`                           |
+| `StorageProvider`                                                 | type         | Storage backend capability surface                        |
+| `Contribution<T>`                                                 | type         | `{ name, impl }` named contribution                       |
+| `PluginDefinition`                                                | type         | Plugin manifest                                           |
+| `CoreServerApi`                                                   | type         | Core services injected into plugin routers                |
+| `ServerRouterFactory<TRouter>`                                    | type         | `(core) => TRouter` factory shape                         |
+| `FieldTypeContribution`                                           | type         | Server-side field type value semantics                    |
+| `UiSlotContribution`                                              | type         | Client UI slot extension                                  |
+| `CellValue` / `FieldOptions` / `NormalizedCell` / `OptionsSchema` | type         | Field type building blocks                                |
+| `DrizzleLike` / `CoreSchema` / `CoreQueries` / `CoreFieldTypes`   | type         | Interfaces backing `CoreServerApi`                        |
 
 ## Reference Implementations
 

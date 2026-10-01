@@ -18,8 +18,8 @@
 
 ## 后果
 
-**正面**：第三方可加字段类型（Plan 3b Rating 证明）；ADR-0005 值语义有逐类型 parity 护栏；client bundle 不含 server 注册表。
-**负面**：值语义分发依赖 barrel bootstrap 已注册内建（靠 barrel import 纪律保证，已有测试守）；`FieldType` const 与注册表并存（const 为内建目录，运行时以注册表为准）——`field.create` 校验仍用 `z.enum(FIELD_TYPES)` const，registry-driven 校验待 Plan 3b；`PluginDefinition.fieldTypes` 仍 `Contribution<unknown>[]`（loader 处一个 `as FieldTypeContribution` 桥接），待 Plan 3b 插件真正贡献类型时收紧。
+**正面**：第三方可加字段类型（文档示例 Rating 证明）；ADR-0005 值语义有逐类型 parity 护栏；client bundle 不含 server 注册表。
+**负面**：值语义分发依赖 barrel bootstrap 已注册内建（靠 barrel import 纪律保证，已有测试守）；`FieldType` const 与注册表并存（const 为内建目录，运行时以注册表为准）——`field.create` 校验仍用 `z.enum(FIELD_TYPES)` const，registry-driven 校验待后续计划。（更新：`PluginDefinition.fieldTypes` 已收紧为 `Contribution<FieldTypeContribution>[]`，loader 处的 `as` 桥接已删除。）
 
 ## 备选方案
 

@@ -20,7 +20,6 @@ import { trpc } from '@/lib/trpc/client';
 interface PresenceUser {
   userId: string;
   userName: string;
-  userEmail: string;
 }
 
 interface RealtimeContext {
@@ -64,12 +63,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     if (!client) return;
     return client.onMessage((msg: ServerMessage) => {
       if (msg.type === 'change') {
+        // Scope invalidation to what actually changed — a table edit must not
+        // refetch every table's data in the app.
         if (msg.tableId) {
           utils.field.list.invalidate({ tableId: msg.tableId });
           utils.view.list.invalidate({ tableId: msg.tableId });
+          utils.record.list.invalidate({ tableId: msg.tableId });
+        } else {
+          // Base-level structural change (table/base renamed, created, deleted).
+          utils.base.list.invalidate();
+          utils.table.list.invalidate();
         }
-        utils.record.list.invalidate();
-        utils.base.list.invalidate();
       } else if (msg.type === 'presence') {
         setPresence((prev) => {
           const next = new Map(prev);
@@ -80,8 +84,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     });
   }, [utils]);
 
-  // Close on unmount.
-  useEffect(() => () => clientRef.current?.close(), []);
+  // Close on unmount and drop stale presence state.
+  useEffect(
+    () => () => {
+      clientRef.current?.close();
+      setPresence(new Map());
+    },
+    [],
+  );
 
   const value = useMemo<RealtimeContext>(
     () => ({

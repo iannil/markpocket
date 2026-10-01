@@ -11,6 +11,15 @@ function scalarRaw(): SQL {
   return sql.raw("c.value #>> '{}'");
 }
 
+// Numeric cast that tolerates non-numeric-castable values (expression error
+// sentinels `{"__error":…}`, arrays): they yield NULL instead of a 22P02 error
+// that would fail the whole record.list query.
+function numericRaw(): SQL {
+  return sql.raw(
+    "(CASE WHEN jsonb_typeof(c.value) = 'object' THEN NULL ELSE (c.value #>> '{}')::numeric END)",
+  );
+}
+
 // Escape ILIKE wildcards so a user-supplied operand can't broaden a contains/startsWith
 // match (e.g. "100%" shouldn't match everything). Paired with `ESCAPE '\'` in the SQL.
 function escapeLike(str: string): string {
@@ -19,28 +28,29 @@ function escapeLike(str: string): string {
 
 function valueOp(type: string, operator: string, operand: unknown): SQL | null {
   const s = scalarRaw();
+  const n = numericRaw();
   const escape = sql.raw("ESCAPE '\\'");
   switch (operator) {
     case 'equals':
       return type === FieldType.Number || type === FieldType.Expression
-        ? sql`(${s})::numeric = ${Number(operand)}`
+        ? sql`${n} = ${Number(operand)}`
         : sql`${s} = ${String(operand)}`;
     case 'ne':
       return type === FieldType.Number || type === FieldType.Expression
-        ? sql`(${s})::numeric <> ${Number(operand)}`
+        ? sql`${n} <> ${Number(operand)}`
         : sql`${s} <> ${String(operand)}`;
     case 'contains':
       return sql`${s} ILIKE ${`%${escapeLike(String(operand))}%`} ${escape}`;
     case 'startsWith':
       return sql`${s} ILIKE ${`${escapeLike(String(operand))}%`} ${escape}`;
     case 'gt':
-      return sql`(${s})::numeric > ${Number(operand)}`;
+      return sql`${n} > ${Number(operand)}`;
     case 'lt':
-      return sql`(${s})::numeric < ${Number(operand)}`;
+      return sql`${n} < ${Number(operand)}`;
     case 'gte':
-      return sql`(${s})::numeric >= ${Number(operand)}`;
+      return sql`${n} >= ${Number(operand)}`;
     case 'lte':
-      return sql`(${s})::numeric <= ${Number(operand)}`;
+      return sql`${n} <= ${Number(operand)}`;
     case 'is':
       return sql`(${s})::boolean = ${String(operand) === 'true'}`;
     case 'before':
@@ -92,7 +102,8 @@ export function compileSort(sort: SortSpec[] | undefined, fields: FieldMap): SQL
     const rawText = "c.value #>> '{}'";
     let expr: SQL;
     if (field?.type === FieldType.Number || field?.type === FieldType.Expression) {
-      expr = sql`(${sql.raw(rawText)})::numeric`;
+      // numericRaw: expression error sentinels sort as NULL instead of failing.
+      expr = numericRaw();
     } else if (field?.type === FieldType.Boolean) {
       expr = sql`(${sql.raw(rawText)})::boolean`;
     } else {

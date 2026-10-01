@@ -25,5 +25,8 @@ export function useBreadcrumbSetter(segments: BreadcrumbSegment[]) {
   useEffect(() => {
     setSegments(segments);
     return () => setSegments(DEFAULT_SEGMENTS);
+    // `key` (the serialized segments) is the change signal — `segments` identity
+    // is unstable per render by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, setSegments]);
 }

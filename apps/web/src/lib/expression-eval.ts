@@ -5,6 +5,21 @@
 
 export type EvalResult = { value: number } | { error: string } | { empty: true };
 
+// String(1e21) → "1e+21", String(1e-9) → "1e-9" — exponent notation fails the
+// charset whitelist below. Expand to plain decimal digits instead.
+function toPlainNumberString(num: number): string {
+  const s = String(num);
+  if (!/[eE]/.test(s)) return s;
+  if (Math.abs(num) >= 1e21) {
+    // toFixed() itself returns exponent notation at this magnitude, but doubles
+    // this large are integral — expand through BigInt.
+    return (num < 0 ? '-' : '') + BigInt(Math.abs(num)).toString();
+  }
+  const m = /e-(\d+)$/i.exec(s);
+  const decimals = m ? Math.min(100, Number(m[1]!)) : 0;
+  return num.toFixed(decimals);
+}
+
 export function evaluateExpression(expr: string, values: Map<string, unknown>): EvalResult {
   if (!expr.trim()) return { empty: true };
 
@@ -23,7 +38,7 @@ export function evaluateExpression(expr: string, values: Map<string, unknown>): 
     if (Number.isNaN(num)) {
       return { error: `Non-numeric dependency` };
     }
-    substituted = substituted.replace(match[0], String(num));
+    substituted = substituted.replace(match[0], toPlainNumberString(num));
   }
 
   // Validate: only digits, operators, parentheses, whitespace.

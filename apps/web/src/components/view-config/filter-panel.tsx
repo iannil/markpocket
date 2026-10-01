@@ -58,7 +58,27 @@ const OPS: Record<string, OpDef[]> = {
     { value: 'empty', label: 'is empty', operand: false },
     { value: 'notEmpty', label: 'is not empty', operand: false },
   ],
+  [FieldType.Expression]: [
+    { value: 'equals', label: '=', operand: true },
+    { value: 'gt', label: '>', operand: true },
+    { value: 'lt', label: '<', operand: true },
+    { value: 'empty', label: 'is empty', operand: false },
+    { value: 'notEmpty', label: 'is not empty', operand: false },
+  ],
 };
+
+// Types without dedicated operators (multi-select / user / link / attachment —
+// array-valued or id-valued cells where text comparison is meaningless).
+const EMPTINESS_ONLY_OPS: OpDef[] = [
+  { value: 'empty', label: 'is empty', operand: false },
+  { value: 'notEmpty', label: 'is not empty', operand: false },
+];
+
+// Never undefined — a field type missing from OPS must not crash the panel.
+function opsFor(type: string | undefined): OpDef[] {
+  if (type && OPS[type]) return OPS[type]!;
+  return EMPTINESS_ONLY_OPS;
+}
 
 export function FilterPanel({
   fields,
@@ -86,13 +106,16 @@ export function FilterPanel({
     if (!f) return;
     onChange({
       op: 'and',
-      conditions: [...conditions, { fieldId: f.id, operator: OPS[f.type][0]!.value, operand: '' }],
+      conditions: [
+        ...conditions,
+        { fieldId: f.id, operator: opsFor(f.type)[0]!.value, operand: '' },
+      ],
     });
   }
 
   function renderOperand(cond: FilterCondition, field: FieldLike | undefined, i: number) {
     if (!field) return null;
-    const opDef = OPS[field.type].find((o) => o.value === cond.operator);
+    const opDef = opsFor(field.type).find((o) => o.value === cond.operator);
     if (!opDef || !opDef.operand) return null;
     if (field.type === FieldType.Boolean) {
       return (
@@ -149,7 +172,7 @@ export function FilterPanel({
       )}
       {conditions.map((cond, i) => {
         const field = fieldById.get(cond.fieldId);
-        const ops = field ? OPS[field.type] : [];
+        const ops = opsFor(field?.type);
         return (
           <div key={i} className="flex items-center gap-1">
             <Select
@@ -159,7 +182,7 @@ export function FilterPanel({
                 const f = fieldById.get(fid);
                 update(i, {
                   fieldId: fid,
-                  operator: f ? OPS[f.type][0]!.value : 'equals',
+                  operator: opsFor(f?.type)[0]!.value,
                   operand: '',
                 });
               }}

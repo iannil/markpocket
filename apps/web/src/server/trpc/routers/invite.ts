@@ -128,24 +128,14 @@ export const inviteRouter = router({
         .from(baseMember)
         .where(and(eq(baseMember.baseId, inv.baseId), eq(baseMember.userId, ctx.session.user.id)))
         .limit(1);
-      if (existing) {
-        // Keep the higher of existing vs invited role (never demote).
-        // baseMember uses composite PK (baseId, userId), not a single `id` column.
-        if (existing.role !== 'owner' && inv.role === 'owner') {
-          await db
-            .update(baseMember)
-            .set({ role: 'owner' })
-            .where(
-              and(eq(baseMember.baseId, inv.baseId), eq(baseMember.userId, ctx.session.user.id)),
-            );
-        }
-      } else {
+      if (!existing) {
         await db.insert(baseMember).values({
           baseId: inv.baseId,
           userId: ctx.session.user.id,
           role: inv.role,
         });
       }
+      // Existing members keep their role (never demote on re-invite).
       await db.update(baseInvite).set({ acceptedAt: new Date() }).where(eq(baseInvite.id, inv.id));
       return { baseId: inv.baseId };
     }),

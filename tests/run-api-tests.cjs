@@ -12,12 +12,11 @@
  */
 
 const { readFileSync, readdirSync } = require('node:fs');
-const { join, dirname } = require('node:path');
+const { join } = require('node:path');
 const { randomUUID } = require('node:crypto');
 
-// js-yaml is a transitive dep in the pnpm store
-const YAML_DIR = join(__dirname, '..', 'node_modules', '.pnpm', 'js-yaml@4.3.0', 'node_modules', 'js-yaml');
-const yaml = require(join(YAML_DIR, 'index.js'));
+// Declared root devDependency (see package.json) — resolvable in any checkout.
+const yaml = require('js-yaml');
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:7420';
 const TESTS_DIR = join(__dirname, 'e2e', 'api');

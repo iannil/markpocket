@@ -15,7 +15,14 @@ function getBaseUrl() {
 }
 
 export function TRPCProvider({ children }: { children: ReactNode }) {
-  const [queryClient] = useState(() => new QueryClient());
+  // Grid data changes via WS invalidation, not focus — refetchOnWindowFocus would
+  // repaint the whole grid on every tab switch for no benefit.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } },
+      }),
+  );
   const [trpcClient] = useState(() =>
     trpc.createClient({
       links: [httpBatchLink({ url: `${getBaseUrl()}/api/trpc` })],

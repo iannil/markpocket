@@ -33,6 +33,7 @@ export default function GeneralTab() {
       void utils.base.list.invalidate();
       toast.success('Base renamed');
     },
+    onError: (err) => toast.error(err.message),
   });
   const del = trpc.base.delete.useMutation({
     onSuccess: () => {
@@ -40,6 +41,7 @@ export default function GeneralTab() {
       toast.success('Base deleted');
       router.push('/bases');
     },
+    onError: (err) => toast.error(err.message),
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const importMut = trpc.csv.import.useMutation();
@@ -71,23 +73,43 @@ export default function GeneralTab() {
           ctx={{
             tables: tables.data ?? [],
             onExport: async (tableId: string) => {
-              const { csv } = await utils.client.csv.export.query({ tableId });
-              const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-              const a = document.createElement('a');
-              a.href = url;
-              const tableName = (tables.data ?? []).find((t) => t.id === tableId)?.name;
-              const fileBase = tableName ? tableName.replace(/[^a-zA-Z0-9_-]/g, '_') : tableId;
-              a.download = `${fileBase}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
+              try {
+                const { csv, truncated, exported } = await utils.client.csv.export.query({
+                  tableId,
+                });
+                const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                const a = document.createElement('a');
+                a.href = url;
+                const tableName = (tables.data ?? []).find((t) => t.id === tableId)?.name;
+                const fileBase = tableName ? tableName.replace(/[^a-zA-Z0-9_-]/g, '_') : tableId;
+                a.download = `${fileBase}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                if (truncated) {
+                  toast.info(`Export truncated at 10,000 of ${exported > 0 ? 'more' : ''} records`);
+                }
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Export failed');
+              }
             },
             onImport: async (tableId: string, file: File) => {
-              const csvText = await file.text();
-              const { imported } = await importMut.mutateAsync({ tableId, csvText });
-              toast.success(`Imported ${imported} rows`);
-              // Grid reads records via record.list; invalidate the record query it
-              // actually reads (mirrors grid-editor.tsx) so the Grid repaints.
-              void utils.record.list.invalidate({ tableId });
+              try {
+                const csvText = await file.text();
+                const { imported, skippedHeaders, skippedRows } = await importMut.mutateAsync({
+                  tableId,
+                  csvText,
+                });
+                const notes: string[] = [`Imported ${imported} rows`];
+                if (skippedHeaders.length > 0)
+                  notes.push(`unmatched columns: ${skippedHeaders.join(', ')}`);
+                if (skippedRows.length > 0) notes.push(`${skippedRows.length} rows had no values`);
+                toast.success(notes.join(' · '));
+                // Grid reads records via record.list; invalidate the record query it
+                // actually reads (mirrors grid-editor.tsx) so the Grid repaints.
+                void utils.record.list.invalidate({ tableId });
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Import failed');
+              }
             },
           }}
         />
@@ -109,7 +131,7 @@ export default function GeneralTab() {
             <DialogTitle>Delete base?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            这会删除该 base 下所有表、字段与记录，且不可撤销。
+            This permanently deletes every table, field, and record in this base.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>

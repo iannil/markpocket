@@ -1,16 +1,19 @@
 import type { CoreFieldTypes } from '@markpocket/plugin-sdk';
 
-// —— 逐字来自旧 api/import/route.ts ——
+// Parser kept verbatim from the original REST route, plus a leading-BOM strip
+// (Excel/Windows UTF-8 exports start with \uFEFF, which would otherwise corrupt
+// the first header cell and silently drop that column on import).
 export function parseCsv(text: string): string[][] {
+  const src = text.replace(/^\uFEFF/, '');
   const rows: string[][] = [];
   let cur: string[] = [];
   let field = '';
   let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]!;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]!;
     if (inQuotes) {
       if (c === '"') {
-        if (text[i + 1] === '"') {
+        if (src[i + 1] === '"') {
           field += '"';
           i++;
         } else inQuotes = false;
@@ -37,10 +40,28 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c.trim()));
 }
 
-// —— 逐字来自旧 api/export/route.ts ——
+// Neutralize formula prefixes (= + - @ and tab/CR) with a leading apostrophe so
+// Excel/Sheets don't execute the cell (OWASP CSV injection). parseCsv consumers
+// strip one leading apostrophe on import, keeping the round-trip intact.
 export function csvEscape(s: string): string {
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  if (/[",\n\r]/.test(guarded)) return `"${guarded.replace(/"/g, '""')}"`;
+  return guarded;
+}
+
+// Import-side counterpart of csvEscape: unguard the apostrophe prefix.
+export function csvUnguard(s: string): string {
+  return s.startsWith("'") ? s.slice(1) : s;
+}
+
+const TRUE_LITERALS = new Set(['true', '1', 'yes', 'y', 'on']);
+const FALSE_LITERALS = new Set(['false', '0', 'no', 'n', 'off']);
+
+export function parseCsvBoolean(raw: string): boolean | null {
+  const key = raw.trim().toLowerCase();
+  if (TRUE_LITERALS.has(key)) return true;
+  if (FALSE_LITERALS.has(key)) return false;
+  return null;
 }
 
 export function cellToCsv(

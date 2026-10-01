@@ -13,6 +13,24 @@ const dev = process.env.NODE_ENV !== 'production';
 const hostname = process.env.HOSTNAME ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 3000);
 
+// Fail closed: a weak/missing session secret means forgeable session cookies.
+// The Docker build deliberately ships no secret — operators MUST provide one.
+if (process.env.NODE_ENV === 'production') {
+  const secret = process.env.BETTER_AUTH_SECRET ?? '';
+  if (
+    !secret ||
+    secret.length < 32 ||
+    /^placeholder/i.test(secret) ||
+    /^build-time/i.test(secret)
+  ) {
+    console.error(
+      'FATAL: BETTER_AUTH_SECRET must be set to a random string of at least 32 characters ' +
+        '(e.g. `openssl rand -base64 32`). Refusing to start.',
+    );
+    process.exit(1);
+  }
+}
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 

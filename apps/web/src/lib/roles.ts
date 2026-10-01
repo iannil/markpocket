@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 
-import { baseMember } from '@/server/db/schema';
+import { baseMember, table } from '@/server/db/schema';
 import { db } from '@/server/db';
 
 export type Role = 'owner' | 'editor' | 'viewer';
@@ -32,13 +32,26 @@ export async function assertRole(baseId: string, userId: string, minRole: Role):
   }
 }
 
-// Resolve baseId from tableId for table-scoped mutations
+// Resolve baseId from tableId for table-scoped procedures
 export async function baseIdFromTable(tableId: string): Promise<string | null> {
-  const { table } = await import('@/server/db/schema');
   const [row] = await db
     .select({ baseId: table.baseId })
     .from(table)
     .where(eq(table.id, tableId))
     .limit(1);
   return row?.baseId ?? null;
+}
+
+// Combined gate: resolve the table's base, then assert membership + role.
+// Every table-scoped read AND write goes through this.
+export async function assertTableRole(
+  tableId: string,
+  userId: string,
+  minRole: Role,
+): Promise<void> {
+  const baseId = await baseIdFromTable(tableId);
+  if (!baseId) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });
+  }
+  await assertRole(baseId, userId, minRole);
 }

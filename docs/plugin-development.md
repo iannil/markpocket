@@ -2,7 +2,9 @@
 
 ## Overview
 
-markpocket has a plugin system with six extension points. A plugin is a JavaScript/TypeScript package that contributes functionality to one or more of these extension points. Plugins are statically assembled at build time via `plugins.config.ts`.
+markpocket has a plugin system with two server-side extension points (**storage** and **fieldTypes**) plus two plugin-facing integration surfaces: **tRPC server routers** (injected with a `CoreServerApi`) and **client UI slots** (registered in `apps/web/src/plugins.client.ts`). Plugins are statically assembled at build time via `plugins.config.ts`.
+
+Extension points are added only when a real plugin needs them (the project's "no premature abstraction" rule). viewType / uiSlot / event / authProvider registries existed as unused skeletons and were removed — they return together with the first plugin that requires them.
 
 ## Quick Start
 
@@ -17,16 +19,12 @@ export default definePlugin({
   // optional extension points — only include what you use
   storage: [],
   fieldTypes: [],
-  viewTypes: [],
-  uiSlots: [],
-  events: [],
-  authProviders: [],
 });
 ```
 
 `definePlugin` is an identity function that provides type checking and autocompletion. The return value is a plain `PluginDefinition` object.
 
-## Six Extension Points
+## Extension Points
 
 Each extension point accepts an array of `Contribution<T>` objects, where `Contribution<T>` is `{ name: string; impl: T }`.
 
@@ -67,29 +65,6 @@ type NormalizedCell =
   | { value: CellValue }
   | { error: string };
 ```
-
-### 3. View Type (`viewTypes`)
-
-Contributes a custom view type (Grid, Form, Kanban, Gallery). The `impl` type is currently `unknown`; the concrete shape will be defined in a future plan.
-
-### 4. UI Slot (`uiSlots`)
-
-Contributes a React component that mounts into a named slot in the UI.
-
-```typescript
-interface UiSlotContribution {
-  slotId: string;
-  Component: unknown; // at runtime, a React component accepting { ctx?: unknown }
-}
-```
-
-### 5. Event (`events`)
-
-Contributes an event handler. The `impl` type is currently `unknown`; the concrete shape will be defined in a future plan.
-
-### 6. Auth Provider (`authProviders`)
-
-Contributes an authentication provider. The `impl` type is currently `unknown`; the concrete shape will be defined in a future plan.
 
 ## Registering a Plugin
 
@@ -189,6 +164,7 @@ The `CoreServerApi` object gives plugins access to:
 | `schema` | `{ record, cell, field, table }` table references for Drizzle queries |
 | `queries` | `{ listRecordsPivoted }` — reusable query helpers |
 | `fieldTypes` | `{ FieldType, formatNumberToString, parseStringToNumber }` — field type constants and utilities |
+| `auth` | `{ assertTableRole(tableId, userId, minRole) }` — the same role gate the core routers use; **always call it before touching a table** so the plugin is not an authorization bypass |
 
 ### tRPC Utilities
 
@@ -218,7 +194,7 @@ The app's main router merges these under their respective keys (e.g., `csv.impor
 
 ## UI Slot Plugin
 
-A plugin can mount a React component into a named UI slot. The slot ID determines where in the UI the component renders.
+A plugin can mount a React component into a named UI slot. Slots are registered client-side in `apps/web/src/plugins.client.ts` (there is deliberately no server-side UI-slot registry) and rendered with `<Slot id="…" ctx={…} />` from `@/lib/plugins/ui-slot-client`.
 
 ```typescript
 // packages/plugin-my-ui/src/client.tsx

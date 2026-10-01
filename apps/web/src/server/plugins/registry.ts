@@ -5,11 +5,8 @@ import {
   type FieldTypeContribution,
 } from '@markpocket/plugin-sdk';
 
-// 6 个扩展点注册表，全部同形（createRegistry）。本计划只有 storage 有真实贡献；
-// 其余为骨架，供 Field Type / View / UI Slot / Event / Auth 各自计划填充。
+// Extension-point registries — every one of these has a real consumer today
+// (storage: plugins/storage.ts; fieldType: plugins/field-value.ts). New
+// extension points get a registry when the first plugin needs them, not before.
 export const storageRegistry: Registry<StorageProvider> = createRegistry('storage provider');
 export const fieldTypeRegistry: Registry<FieldTypeContribution> = createRegistry('field type');
-export const viewTypeRegistry: Registry<unknown> = createRegistry('view type');
-export const uiSlotRegistry: Registry<unknown> = createRegistry('ui slot');
-export const eventRegistry: Registry<unknown> = createRegistry('event handler');
-export const authProviderRegistry: Registry<unknown> = createRegistry('auth provider');

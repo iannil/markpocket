@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { base, baseMember } from '../../db/schema';
@@ -11,12 +12,26 @@ import { publishBaseChange } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 
 export const baseRouter = router({
-  list: protectedProcedure.query(async () => {
+  // Only bases the user is a member of — membership is the isolation boundary.
+  list: protectedProcedure.query(async ({ ctx }) => {
     const ws = await ensureDefaultWorkspace();
-    return db.select().from(base).where(eq(base.workspaceId, ws.id)).orderBy(desc(base.createdAt));
+    return db
+      .select({
+        id: base.id,
+        workspaceId: base.workspaceId,
+        name: base.name,
+        icon: base.icon,
+        createdAt: base.createdAt,
+        createdBy: base.createdBy,
+      })
+      .from(base)
+      .innerJoin(baseMember, eq(baseMember.baseId, base.id))
+      .where(and(eq(base.workspaceId, ws.id), eq(baseMember.userId, ctx.session.user.id)))
+      .orderBy(desc(base.createdAt));
   }),
 
-  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ input }) => {
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    await assertRole(input.id, ctx.session.user.id, 'viewer');
     const [row] = await db.select().from(base).where(eq(base.id, input.id)).limit(1);
     return row ?? null;
   }),
@@ -25,22 +40,25 @@ export const baseRouter = router({
     .input(z.object({ name: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const ws = await ensureDefaultWorkspace();
-      const [row] = await db
-        .insert(base)
-        .values({
-          id: randomUUID(),
-          workspaceId: ws.id,
-          name: input.name,
-          createdBy: ctx.session.user.id,
-        })
-        .returning();
-      // Creator becomes owner; nothing can be done without this membership row.
-      await db.insert(baseMember).values({
-        baseId: row!.id,
-        userId: ctx.session.user.id,
-        role: 'owner',
+      // base + owner membership atomically — no ownerless base can survive a failure.
+      return db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(base)
+          .values({
+            id: randomUUID(),
+            workspaceId: ws.id,
+            name: input.name,
+            createdBy: ctx.session.user.id,
+          })
+          .returning();
+        // Creator becomes owner; nothing can be done without this membership row.
+        await tx.insert(baseMember).values({
+          baseId: row!.id,
+          userId: ctx.session.user.id,
+          role: 'owner',
+        });
+        return row!;
       });
-      return row;
     }),
 
   rename: protectedProcedure
@@ -52,6 +70,7 @@ export const baseRouter = router({
         .set({ name: input.name })
         .where(eq(base.id, input.id))
         .returning();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
       void publishBaseChange(input.id);
       return row;
     }),

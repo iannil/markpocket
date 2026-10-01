@@ -9,17 +9,22 @@ let started = false;
 export async function startRealtimeSubscription(): Promise<void> {
   if (started) return;
   started = true;
-  await sql.listen(REALTIME_CHANNEL, (payload) => {
-    let notice: RealtimeNotice;
-    try {
-      notice = JSON.parse(payload) as RealtimeNotice;
-    } catch {
-      return;
-    }
-    const event = notice.tableId
-      ? { type: 'change' as const, tableId: notice.tableId }
-      : { type: 'change' as const };
-    broadcast(notice.baseId, event, notice.exceptUserId);
-  });
-  console.log('> realtime pg subscription ready');
+  try {
+    await sql.listen(REALTIME_CHANNEL, (payload) => {
+      let notice: RealtimeNotice;
+      try {
+        notice = JSON.parse(payload) as RealtimeNotice;
+      } catch {
+        return;
+      }
+      const event = notice.tableId
+        ? { type: 'change' as const, baseId: notice.baseId, tableId: notice.tableId }
+        : { type: 'change' as const, baseId: notice.baseId };
+      broadcast(notice.baseId, event, notice.exceptUserId);
+    });
+    console.log('> realtime pg subscription ready');
+  } catch (err) {
+    started = false;
+    console.error('realtime LISTEN failed (postgres.js will retry on reconnect)', err);
+  }
 }

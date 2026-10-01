@@ -9,8 +9,9 @@
 </p>
 
 <p>
-  Bases, tables, fields, records, and views (Grid / Form / Kanban / Gallery),<br/>
-  real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.
+  Bases, tables, fields, records, and Grid views (filter / sort / group / hide),<br/>
+  real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.<br/>
+  <em>Form / Kanban / Gallery views are planned, not shipped yet.</em>
 </p>
 
 ## Quick Start
@@ -34,7 +35,9 @@ Then open **http://localhost:7420**. Press `Ctrl-C` to stop everything.
 ```bash
 git clone https://github.com/iannil/markpocket.git
 cd markpocket
+# Both secrets are required — compose refuses to start without them (see .env.example).
 echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" > .env
+echo "POSTGRES_PASSWORD=$(openssl rand -base64 24)" >> .env
 docker compose up -d --build
 ```
 
@@ -63,15 +66,16 @@ Sorted by what you'll touch first, not by what was hardest to build.
 
 - **Bases & tables** — the familiar Airtable hierarchy: Workspace → Base → Table → Field / Record / View.
 - **Field types** — text, long-text, number, boolean, date, single/multi-select, attachment, user, link, and expression.
-- **Views** — Grid (filter / sort / group / column width / hidden fields), Form, Kanban, Gallery. Per-view config is persisted; views never mutate underlying data.
+- **Views** — Grid today (filter / sort / group / column width / hidden fields). Form / Kanban / Gallery are planned. Per-view config is persisted; views never mutate underlying data.
 - **Real-time** — soft real-time broadcast per Base; online members shown inline.
 - **Expression fields** — `unit_price * quantity` style columns, written as token chips anchored to field IDs, evaluated on write and materialized into `cells.value`.
 - **Cell-level history** — append-only timeline of who changed what, when, with old/new values.
 - **Attachments** — pluggable storage adapter (local FS by default; S3 later).
-- **CSV import / export** — round-trippable for scalar data.
+- **CSV import / export** — round-trippable for scalar data, shipped as the reference plugin (`packages/plugin-csv`).
+- **Pluggable core** — a plugin SDK with two landed extension points (storage adapters, field types) plus tRPC router + UI-slot integration surfaces (ADR-0006..0009).
 - **Auth & sharing** — better-auth (email/password + optional OIDC), three roles per Base (owner / editor / viewer), and read-only public share links scoped to a single view.
 
-Deliberately **out of scope for v1** (see ADRs): AI/chat/comments, plugins/dashboards, raw SQL exposure, multi-tenancy, Calendar/Gantt, Lookup/Rollup, OT/CRDT merge, and million-row performance work.
+Deliberately **out of scope for v1** (see ADRs): AI/chat/comments, dashboards, raw SQL exposure, multi-tenancy, Calendar/Gantt, Lookup/Rollup, OT/CRDT merge, and million-row performance work.
 
 ---
 
@@ -125,7 +129,7 @@ Every cell is its own row with a JSONB `value` whose shape is decided by `fields
 | Realtime      | `ws`                              | Soft real-time + LWW, no share-db                              |
 | Auth          | better-auth                       | Email/password + optional OIDC, first-class App Router support |
 | UI            | shadcn/ui + Tailwind v4 + Base UI | Composable, no heavy component library to vendor               |
-| Monorepo      | pnpm workspaces + Turborepo       | Only two packages in v1 — no premature split                   |
+| Monorepo      | pnpm workspaces + Turborepo       | One app + three small plugin packages                          |
 
 ---
 
@@ -138,10 +142,14 @@ markpocket/
 │       ├── app/           # App Router pages
 │       ├── server/        # trpc · features · realtime · auth · db · storage
 │       └── components/    # UI
+├── packages/
+│   ├── plugin-sdk/        # Plugin SDK: registries, contributions, tRPC helpers
+│   ├── plugin-csv/        # CSV import/export plugin (reference implementation)
+│   └── plugin-storage-local/  # Local-filesystem storage adapter
 ├── docs/
-│   ├── STATUS.md           # Project status overview (v1 + redesign progress)
+│   ├── STATUS.md           # Project status overview
 │   ├── migration/plan.md   # The full rewrite plan (teable → markpocket)
-│   ├── adr/                # Architecture Decision Records (0001–0005)
+│   ├── adr/                # Architecture Decision Records (0001–0009)
 │   └── redesign/           # Paper & Ink design spec + implementation plan + progress
 ├── CONTEXT.md             # Domain glossary (what words mean here)
 ├── docker-compose.yml     # web + postgres (production-style)
@@ -158,11 +166,16 @@ markpocket/
 pnpm dev                 # just the web dev server (needs Postgres running)
 pnpm db:migrate          # apply schema migrations
 pnpm db:studio           # open Drizzle Studio against the local DB
-pnpm lint                # eslint across the workspace
+pnpm lint                # eslint across the workspace (includes react-hooks rules)
+pnpm typecheck           # tsc --noEmit across the workspace
+pnpm test                # vitest unit + integration suite
+pnpm build               # production build
 pnpm format:check        # prettier check (run `pnpm format` to write)
 ```
 
-Test credentials and seed data live with the auth setup in `apps/web/src/server/auth.ts`. Local Postgres runs on port `7400` (dev) to avoid clashing with other projects on `5432`.
+CI (`.github/workflows/ci.yml`) runs lint → typecheck → test → build on every push and PR; the release workflow publishes a Docker image on `v*` tags.
+
+Test credentials and seed data live with the auth setup in `apps/web/src/server/auth.ts`. Local Postgres runs on port `7400` (dev) to avoid clashing with other projects on `5432`; the production-style docker-compose exposes Postgres on host port `5433`.
 
 ---
 

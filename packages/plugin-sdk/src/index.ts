@@ -16,16 +16,14 @@ export interface Contribution<T> {
 }
 
 // 插件的声明式清单。缺省字段即不贡献该类扩展点。
-// 本计划只有 storage 是真实类型；其余为后续计划收紧的占位。
+// 只有真实存在消费者的扩展点才出现在这里（"no premature abstraction"，
+// ADR-0006 的增量缝原则应用到插件系统自身）。viewType / uiSlot / event /
+// authProvider 曾是占位骨架，已删除 —— 需要时连注册表一起加回。
 export interface PluginDefinition {
   name: string;
   version: string;
   storage?: Contribution<StorageProvider>[];
-  fieldTypes?: Contribution<unknown>[];
-  viewTypes?: Contribution<unknown>[];
-  uiSlots?: Contribution<unknown>[];
-  events?: Contribution<unknown>[];
-  authProviders?: Contribution<unknown>[];
+  fieldTypes?: Contribution<FieldTypeContribution>[];
 }
 
 // 身份函数：给插件作者类型检查与自动补全。
@@ -70,11 +68,22 @@ export interface CoreFieldTypes {
   parseStringToNumber: (input: string) => number | null;
 }
 
+/** Role gate injected from the host so plugin routers enforce base authorization. */
+export interface CoreAuth {
+  /** Throws (FORBIDDEN/NOT_FOUND) unless `userId` holds at least `minRole` on the table's base. */
+  assertTableRole(
+    tableId: string,
+    userId: string,
+    minRole: 'viewer' | 'editor' | 'owner',
+  ): Promise<void>;
+}
+
 export interface CoreServerApi {
   db: DrizzleLike;
   schema: CoreSchema;
   queries: CoreQueries;
   fieldTypes: CoreFieldTypes;
+  auth: CoreAuth;
 }
 
 export type ServerRouterFactory<TRouter> = (core: CoreServerApi) => TRouter;

@@ -11,7 +11,8 @@ import { assertRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const tableRouter = router({
-  list: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ input }) => {
+  list: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ ctx, input }) => {
+    await assertRole(input.baseId, ctx.session.user.id, 'viewer');
     return db.select().from(table).where(eq(table.baseId, input.baseId)).orderBy(table.orderIndex);
   }),
 
@@ -19,21 +20,23 @@ export const tableRouter = router({
     .input(z.object({ baseId: z.string(), name: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await assertRole(input.baseId, ctx.session.user.id, 'editor');
-      return db.transaction(async (tx) => {
-        const [row] = await tx
+      const row = await db.transaction(async (tx) => {
+        const [created] = await tx
           .insert(table)
           .values({ id: randomUUID(), baseId: input.baseId, name: input.name })
           .returning();
         // Each new table ships with one default Grid view.
         await tx.insert(view).values({
           id: randomUUID(),
-          tableId: row!.id,
+          tableId: created!.id,
           type: 'grid',
           name: 'Grid',
         });
-        void publishBaseChange(input.baseId);
-        return row;
+        return created!;
       });
+      // Publish after commit — the notify side-query must see the committed row.
+      void publishBaseChange(input.baseId);
+      return row;
     }),
 
   rename: protectedProcedure

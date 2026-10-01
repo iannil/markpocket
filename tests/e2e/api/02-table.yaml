@@ -1,60 +1,76 @@
 # Table CRUD API 测试
+# Self-contained: creates its own user + base (01-base.yaml deletes its base at the end).
+- name: 准备 — 注册用户并创建 Base
+  steps:
+    - action: 'POST /api/auth/sign-up/email'
+      body:
+        email: 'table-owner-$random_uuid@test.local'
+        password: 'password123'
+        name: 'TableOwner'
+    - action: 'POST /api/trpc/base.create'
+      body:
+        name: 'Table-E2E-Base-$random_uuid'
+      asserts:
+        - '$status == 200'
+      register:
+        baseId: '$response.body.result.data.id'
+
 - name: 创建 Table
   steps:
-    - action: "POST /api/trpc/table.create"
+    - action: 'POST /api/trpc/table.create'
       body:
-        baseId: "$ref:baseId"
-        name: "Test-Table"
+        baseId: '$ref:baseId'
+        name: 'Test-Table'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.id is not null"
-        - "$response.body.result.data.name == Test-Table"
+        - '$status == 200'
+        - '$response.body.result.data.id is not null'
+        - '$response.body.result.data.name == Test-Table'
       register:
-        tableId: "$response.body.result.data.id"
+        tableId: '$response.body.result.data.id'
 
 - name: 创建 Table 时自动创建默认 Grid 视图
   steps:
-    - action: "POST /api/trpc/view.list"
+    - action: 'POST /api/trpc/view.list'
       body:
-        tableId: "$ref:tableId"
+        tableId: '$ref:tableId'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data is array"
-        - "$response.body.result.data[0].type == grid"
-        - "$response.body.result.data[0].name == Grid"
+        - '$status == 200'
+        - '$response.body.result.data is array'
+        - '$response.body.result.data[0].type == grid'
+        - '$response.body.result.data[0].name == Grid'
 
 - name: 列出 Table
   steps:
-    - action: "POST /api/trpc/table.list"
+    - action: 'POST /api/trpc/table.list'
       body:
-        baseId: "$ref:baseId"
+        baseId: '$ref:baseId'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data is array"
+        - '$status == 200'
+        - '$response.body.result.data is array'
 
 - name: 重命名 Table
   steps:
-    - action: "POST /api/trpc/table.rename"
+    - action: 'POST /api/trpc/table.rename'
       body:
-        id: "$ref:tableId"
-        name: "Renamed-Table"
+        id: '$ref:tableId'
+        name: 'Renamed-Table'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.name == Renamed-Table"
+        - '$status == 200'
+        - '$response.body.result.data.name == Renamed-Table'
 
 - name: 删除 Table
   steps:
-    - action: "POST /api/trpc/table.delete"
+    - action: 'POST /api/trpc/table.delete'
       body:
-        id: "$ref:tableId"
+        id: '$ref:tableId'
       asserts:
-        - "$status == 200"
-        - "$response.body.result.data.ok == true"
+        - '$status == 200'
+        - '$response.body.result.data.ok == true'
 
 - name: 删除不存在的 Table 应报错
   steps:
-    - action: "POST /api/trpc/table.delete"
+    - action: 'POST /api/trpc/table.delete'
       body:
-        id: "nonexistent-table-id"
+        id: 'nonexistent-table-id'
       asserts:
-        - "$status == 404"
+        - '$status == 404'

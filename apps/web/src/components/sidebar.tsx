@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Database, Users, Settings, Plus } from 'lucide-react';
+import { Database, Settings, Plus } from 'lucide-react';
 import { useSidebarCollapsed } from '@/lib/use-sidebar-collapsed';
 import { cn } from '@/lib/utils';
 
@@ -96,32 +96,6 @@ export function Sidebar({
           </div>
         )}
       </nav>
-
-      {/* bottom fixed */}
-      <div className="border-t border-sidebar-border p-1.5 space-y-0.5 shrink-0">
-        <Link
-          href="/members"
-          className={cn(
-            'flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-            collapsed && 'justify-center',
-          )}
-          title={collapsed ? 'Members' : undefined}
-        >
-          <Users className="size-3.5" />
-          {!collapsed && <span>members</span>}
-        </Link>
-        <Link
-          href="/settings"
-          className={cn(
-            'flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-            collapsed && 'justify-center',
-          )}
-          title={collapsed ? 'Settings' : undefined}
-        >
-          <Settings className="size-3.5" />
-          {!collapsed && <span>settings</span>}
-        </Link>
-      </div>
     </aside>
   );
 }

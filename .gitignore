@@ -30,6 +30,9 @@ Thumbs.db
 !.vscode/extensions.json
 !.vscode/settings.json
 
+# agent tooling
+.claude/
+
 # playwright MCP artifacts
 .playwright-mcp/
 

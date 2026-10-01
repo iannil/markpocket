@@ -126,9 +126,11 @@ export default function MembersTab() {
 
   const updateRole = trpc.member.updateRole.useMutation({
     onSuccess: () => utils.member.list.invalidate({ baseId }),
+    onError: (err) => toast.error(err.message),
   });
   const removeMember = trpc.member.remove.useMutation({
     onSuccess: () => utils.member.list.invalidate({ baseId }),
+    onError: (err) => toast.error(err.message),
   });
   const createShare = trpc.share.create.useMutation({
     onSuccess: (row) => {

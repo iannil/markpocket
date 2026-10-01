@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc/client';
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const { data: inv, isLoading } = trpc.invite.resolve.useQuery({ token });
+  const { data: inv, isLoading, isError } = trpc.invite.resolve.useQuery({ token });
+  const [error, setError] = useState<string | null>(null);
   const accept = trpc.invite.accept.useMutation({
     onSuccess: (res) => router.push(`/bases/${res.baseId}`),
     onError: (err) => {
-      // If not logged in, redirect to login with callbackUrl
+      // Not signed in → log in and come back (the button re-appears post-login).
       if (err.data?.code === 'UNAUTHORIZED') {
         router.push(`/login?callbackUrl=/invite/${token}`);
         return;
@@ -19,16 +20,6 @@ export default function InvitePage() {
       setError(err.message);
     },
   });
-  const [error, setError] = useState<string | null>(null);
-  const hasAttempted = useRef(false);
-
-  // If a signed-in user opened this and it's valid, accept immediately.
-  useEffect(() => {
-    if (inv && !isLoading && !accept.isPending && !hasAttempted.current) {
-      hasAttempted.current = true;
-      accept.mutate({ token });
-    }
-  }, [inv, isLoading, accept.isPending, token, accept]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -39,7 +30,9 @@ export default function InvitePage() {
           <>
             <h1 className="text-sm font-semibold text-destructive">Invite invalid or expired</h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              This invite link may have expired or been revoked.
+              {isError
+                ? 'Could not load this invite. Check your connection and retry.'
+                : 'This invite link may have expired or been revoked.'}
             </p>
           </>
         ) : (
@@ -50,6 +43,14 @@ export default function InvitePage() {
               <span className="font-medium text-foreground">{inv.email}</span> to join.
             </p>
             {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+            <button
+              type="button"
+              className="mt-4 h-8 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+              onClick={() => accept.mutate({ token })}
+              disabled={accept.isPending}
+            >
+              {accept.isPending ? '···' : 'Accept invite'}
+            </button>
           </>
         )}
       </div>

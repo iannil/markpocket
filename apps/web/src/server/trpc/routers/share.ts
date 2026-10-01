@@ -10,7 +10,9 @@ import { assertRole } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const shareRouter = router({
-  list: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ input }) => {
+  list: protectedProcedure.input(z.object({ baseId: z.string() })).query(async ({ ctx, input }) => {
+    // Tokens grant read access — treat them like the data itself.
+    await assertRole(input.baseId, ctx.session.user.id, 'viewer');
     return db.select().from(baseShare).where(eq(baseShare.baseId, input.baseId));
   }),
 

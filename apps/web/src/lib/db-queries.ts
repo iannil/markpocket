@@ -7,11 +7,10 @@ import { db } from '@/server/db';
 export async function ensureDefaultWorkspace() {
   const existing = await db.select().from(workspace).limit(1);
   if (existing[0]) return existing[0];
-  const [created] = await db
-    .insert(workspace)
-    .values({ id: 'default', name: 'markpocket' })
-    .returning();
-  return created;
+  // onConflictDoNothing closes the concurrent-first-request race on the fixed PK.
+  await db.insert(workspace).values({ id: 'default', name: 'markpocket' }).onConflictDoNothing();
+  const [row] = await db.select().from(workspace).where(eq(workspace.id, 'default')).limit(1);
+  return row!;
 }
 
 // Two-stage query (ADR-0005 / Q1): SQL paginates record ids with the view's

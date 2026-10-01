@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
 
 interface ViewLike {
@@ -28,12 +29,15 @@ export function ViewTabs({
   const utils = trpc.useUtils();
   const create = trpc.view.create.useMutation({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
+    onError: (err) => toast.error(err.message),
   });
   const rename = trpc.view.rename.useMutation({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
+    onError: (err) => toast.error(err.message),
   });
   const remove = trpc.view.delete.useMutation({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
+    onError: (err) => toast.error(err.message),
   });
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');

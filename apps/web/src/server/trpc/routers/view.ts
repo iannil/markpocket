@@ -1,23 +1,26 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, asc, eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { view } from '../../db/schema';
 import { db } from '../../db';
 import { publishTableChange } from '../../realtime/publish';
-import { assertRole, baseIdFromTable } from '@/lib/roles';
+import { assertRole, baseIdFromTable, assertTableRole } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 export const viewRouter = router({
-  list: protectedProcedure.input(z.object({ tableId: z.string() })).query(async ({ input }) => {
-    return db
-      .select()
-      .from(view)
-      .where(eq(view.tableId, input.tableId))
-      .orderBy(asc(view.orderIndex));
-  }),
+  list: protectedProcedure
+    .input(z.object({ tableId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
+      return db
+        .select()
+        .from(view)
+        .where(eq(view.tableId, input.tableId))
+        .orderBy(asc(view.orderIndex));
+    }),
 
   create: protectedProcedure
     .input(
@@ -72,7 +75,7 @@ export const viewRouter = router({
       const [row] = await db
         .update(view)
         .set({ options: input.options })
-        .where(and(eq(view.id, input.id)))
+        .where(eq(view.id, input.id))
         .returning();
       if (row) void publishTableChange(row.tableId);
       return row;

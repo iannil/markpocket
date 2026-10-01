@@ -1,86 +1,86 @@
 # Grid 交互 浏览器 E2E 测试
 # 覆盖：表达式列头 chip、视图切换、过滤/排序/分组、列宽调整
 
-- name: "表达式列头显示 chip"
-  preconditions: ["已有表包含 Expression 字段"]
+- name: '表达式列头显示 chip'
+  preconditions: ['已有表包含 Expression 字段']
   steps:
-    - action: "navigate"
-      url: "$ref:baseUrl"
-    - action: "wait_for_selector"
-      selector: "span.rounded.bg-muted.px-1.font-mono"
+    - action: 'navigate'
+      url: '$ref:baseUrl'
+    - action: 'wait_for_selector'
+      selector: 'span.rounded.bg-muted.px-1.font-mono'
       timeout: 5000
-    - action: "assert_text"
-      selector: "span.rounded.bg-muted.px-1.font-mono"
-      contains: "{"  # 表达式内容包含 {fieldId} 语法
+    - action: 'assert_text'
+      selector: 'span.rounded.bg-muted.px-1.font-mono'
+      contains: '{' # 表达式内容包含 {fieldId} 语法
 
-- name: "创建新的视图（Form 视图）"
-  preconditions: ["在 Grid 编辑器页"]
+- name: '创建新的视图（Form 视图）'
+  preconditions: ['在 Grid 编辑器页']
   steps:
-    - action: "wait_for_selector"
-      selector: "text=+ view"
+    - action: 'wait_for_selector'
+      selector: 'text=+ view'
       timeout: 5000
-    - action: "click"
-      selector: "text=+ view"
-    - action: "wait_for_selector"
+    - action: 'click'
+      selector: 'text=+ view'
+    - action: 'wait_for_selector'
       selector: "input[placeholder='View name']"
-    - action: "type"
+    - action: 'type'
       selector: "input[placeholder='View name']"
-      value: "Form View"
-    - action: "click"
-      selector: "text=Form"
-    - action: "click"
-      selector: "text=Save"
-    - action: "wait_for_selector"
-      selector: "text=Form View"
+      value: 'Form View'
+    - action: 'click'
+      selector: 'text=Form'
+    - action: 'click'
+      selector: 'text=Save'
+    - action: 'wait_for_selector'
+      selector: 'text=Form View'
       timeout: 5000
 
-- name: "切换到另一个视图"
-  preconditions: ["至少有 2 个视图"]
+- name: '切换到另一个视图'
+  preconditions: ['至少有 2 个视图']
   steps:
-    - action: "click"
-      selector: "text=Form View"
-    - action: "wait_for_selector"
-      selector: "text=Form View"
+    - action: 'click'
+      selector: 'text=Form View'
+    - action: 'wait_for_selector'
+      selector: 'text=Form View'
       timeout: 5000
-    - action: "assert_class"
+    - action: 'assert_class'
       selector: "button:has-text('Form View')"
-      class: "bg-primary"
+      class: 'bg-primary'
 
-- name: "添加过滤条件"
-  preconditions: ["在 Grid 编辑器页"]
+- name: '添加过滤条件'
+  preconditions: ['在 Grid 编辑器页']
   steps:
-    - action: "click"
-      selector: "text=Filter"
-    - action: "wait_for_selector"
-      selector: "text=+ Add filter"
+    - action: 'click'
+      selector: 'text=Filter'
+    - action: 'wait_for_selector'
+      selector: 'text=+ Add filter'
       timeout: 5000
-    - action: "click"
-      selector: "text=+ Add filter"
-    - action: "wait_for_selector"
-      selector: "select"
-    - action: "select_option"
-      selector: "select"
+    - action: 'click'
+      selector: 'text=+ Add filter'
+    - action: 'wait_for_selector'
+      selector: 'select'
+    - action: 'select_option'
+      selector: 'select'
       index: 0
-    - action: "type"
+    - action: 'type'
       selector: "input[placeholder='Value']"
-      value: "Widget A"
-    - action: "click"
-      selector: "text=Filter"  # 关闭过滤面板
-    - action: "assert_text"
-      selector: "text=Filter"
-      contains: "("  # 过滤面板显示 (1) 表示有过滤条件
+      value: 'Widget A'
+    - action: 'click'
+      selector: 'text=Filter' # 关闭过滤面板
+    - action: 'assert_text'
+      selector: 'text=Filter'
+      contains: '(' # 过滤面板显示 (1) 表示有过滤条件
 
-- name: "调整列宽"
-  preconditions: ["在 Grid 编辑器页"]
+- name: '调整列宽'
+  preconditions: ['在 Grid 编辑器页']
   steps:
-    - action: "hover"
-      selector: "div.cursor-col-resize"
-    - action: "mouse_down"
-    - action: "mouse_move"
+    - action: 'hover'
+      selector: 'div.cursor-col-resize'
+    - action: 'mouse_down'
+    - action: 'mouse_move'
       x: 50
       y: 0
-    - action: "mouse_up"
-    - action: "assert_attribute"
-      selector: "col"
-      attribute: "style"
-      contains: "width"
+    - action: 'mouse_up'
+    - action: 'assert_attribute'
+      selector: 'col'
+      attribute: 'style'
+      contains: 'width'

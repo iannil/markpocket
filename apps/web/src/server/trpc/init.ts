@@ -13,7 +13,16 @@ export async function createContext() {
 
 export type Context = Awaited<ReturnType<typeof createContext>>;
 
-const t = initTRPC.context<Context>().create();
+const t = initTRPC.context<Context>().create({
+  // Raw driver errors (constraint violations, syntax errors) must not leak
+  // table/column names to clients — surface a generic message instead.
+  errorFormatter({ shape, error }) {
+    if (error.code === 'INTERNAL_SERVER_ERROR' && !(error.cause instanceof TRPCError)) {
+      return { ...shape, message: 'Internal server error' };
+    }
+    return shape;
+  },
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

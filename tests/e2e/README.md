@@ -4,34 +4,26 @@
 
 ## 目录结构
 
+API 用例按域拆分（编号即执行顺序）；浏览器用例为 agent-browser YAML 场景。
+**以目录中的实际文件为准** —— 下面是当前清单：
+
 ```
 tests/
 ├── e2e/
-│   ├── api/                          # API 集成测试（YAML 格式，curl 可执行）
-│   │   ├── 00-auth.yaml              # 鉴权模块
-│   │   ├── 01-base.yaml              # Base CRUD
+│   ├── api/                          # API 集成测试（YAML，node tests/run-api-tests.cjs 执行）
+│   │   ├── 00-auth.yaml              # 鉴权（注册/登录/会话）
+│   │   ├── 01-base.yaml              # Base CRUD + 权限
 │   │   ├── 02-table.yaml             # Table CRUD
-│   │   ├── 03-field.yaml             # Field CRUD + 字段类型
-│   │   ├── 04-record.yaml            # Record CRUD
-│   │   ├── 05-cell.yaml              # Cell 写入 + 规范化
-│   │   ├── 06-view.yaml              # View CRUD + 配置
-│   │   ├── 07-share.yaml             # 公开分享
-│   │   ├── 08-invite.yaml            # 邀请机制
-│   │   ├── 09-member.yaml            # 成员 + 角色
-│   │   ├── 10-export.yaml            # 导出
-│   │   ├── 11-history.yaml           # 历史
-│   │   ├── 12-expression.yaml        # 表达式字段
-│   │   └── 99-permission.yaml        # 权限矩阵全量校验
+│   │   └── 03-field-cell-record.yaml # Field/Cell/Record 全链路
 │   │
-│   └── browser/                      # 浏览器 E2E 测试（agent-browser YAML 格式）
+│   └── browser/                      # 浏览器 E2E（tests/run-browser-e2e.sh 驱动 agent-browser）
 │       ├── 00-auth-flow.yaml         # 登录/注册/退出
 │       ├── 01-base-lifecycle.yaml    # Base 创建 → 编辑 → 删除
 │       ├── 02-grid-interaction.yaml  # Grid 编辑器交互
 │       ├── 03-share-flow.yaml        # 分享链接创建 → 公开页访问
 │       ├── 04-invite-flow.yaml       # 邀请 → 接受 → 协作
-│       ├── 05-export-flow.yaml       # 导出流程
-│       ├── 06-history-flow.yaml      # 历史变更 → 恢复
-│       └── 07-role-gating.yaml       # 角色权限 UI 验证
+│       ├── 05-export-history.yaml    # 导出 + 历史
+│       └── 06-role-gating.yaml       # 角色权限 UI 验证
 ```
 
 ## 前置条件（所有测试）
@@ -42,11 +34,11 @@ tests/
 
 ## 测试账户
 
-| 账户 | 邮箱 | 密码 | 角色 |
-|------|------|------|------|
-| Alice (owner) | alice@test.local | password123 | 测试用 Base 的 Owner |
-| Bob (editor) | bob@test.local | password123 | 被邀请为 Editor |
-| Carol (viewer) | carol@test.local | password123 | 被邀请为 Viewer |
+| 账户           | 邮箱             | 密码        | 角色                 |
+| -------------- | ---------------- | ----------- | -------------------- |
+| Alice (owner)  | alice@test.local | password123 | 测试用 Base 的 Owner |
+| Bob (editor)   | bob@test.local   | password123 | 被邀请为 Editor      |
+| Carol (viewer) | carol@test.local | password123 | 被邀请为 Viewer      |
 
 ## 测试数据约定
 

@@ -13,5 +13,9 @@
   },
   "devDependencies": {
     "@types/node": "^26.0.1"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts*\""
   }
 }

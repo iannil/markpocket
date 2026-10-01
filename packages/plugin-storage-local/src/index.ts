@@ -4,29 +4,45 @@ import { join } from 'node:path';
 
 import { definePlugin, type StorageProvider } from '@markpocket/plugin-sdk';
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads');
+// Storage keys are strictly `<uuid>.<safe-ext>` — no path separators, no dots
+// beyond the extension. Every put/get/remove validates, so a hostile key can
+// never traverse out of UPLOAD_DIR.
+const KEY_RE = /^[a-f0-9-]{8,64}\.[A-Za-z0-9]{1,8}$/;
 
-async function ensureDir() {
-  await mkdir(UPLOAD_DIR, { recursive: true });
+function uploadDir(): string {
+  return process.env.UPLOAD_DIR ?? join(process.cwd(), 'uploads');
+}
+
+async function ensureDir(dir: string) {
+  await mkdir(dir, { recursive: true });
+}
+
+function assertSafeKey(key: string): string {
+  if (!KEY_RE.test(key)) {
+    throw new Error(`Refusing unsafe storage key: ${JSON.stringify(key)}`);
+  }
+  return join(uploadDir(), key);
 }
 
 export const localProvider: StorageProvider = {
   makeKey(filename) {
-    const ext = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
+    const ext = (filename.match(/\.[A-Za-z0-9]{1,8}$/) ?? [''])[0];
     return `${randomUUID()}${ext}`;
   },
   async put(key, data) {
-    await ensureDir();
-    await writeFile(join(UPLOAD_DIR, key), data);
+    const path = assertSafeKey(key);
+    await ensureDir(uploadDir());
+    await writeFile(path, data);
   },
   async get(key) {
-    return readFile(join(UPLOAD_DIR, key));
+    return readFile(assertSafeKey(key));
   },
   async remove(key) {
     try {
-      await unlink(join(UPLOAD_DIR, key));
-    } catch {
-      // ignore if already gone
+      await unlink(assertSafeKey(key));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw err;
     }
   },
 };

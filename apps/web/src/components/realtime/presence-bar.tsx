@@ -9,12 +9,8 @@ export function PresenceBar({ baseId }: { baseId: string }) {
     <div className="flex items-center gap-1">
       <span className="text-xs text-muted-foreground">online:</span>
       {users.map((u) => (
-        <span
-          key={u.userId}
-          className="rounded-full border px-2 py-0.5 text-xs"
-          title={u.userEmail}
-        >
-          {u.userName || u.userEmail}
+        <span key={u.userId} className="rounded-full border px-2 py-0.5 text-xs" title={u.userName}>
+          {u.userName || u.userId.slice(0, 8)}
         </span>
       ))}
     </div>

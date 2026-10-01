@@ -14,13 +14,26 @@ function timeAgo(ts: string | number | Date): string {
 }
 
 export default function BasesPage() {
-  const { data: bases, isLoading } = trpc.base.list.useQuery();
+  const { data: bases, isLoading, isError } = trpc.base.list.useQuery();
 
   if (isLoading) {
     return (
       <div className="flex-1 p-6">
         <div className="mx-auto max-w-3xl">
           <div className="h-12 animate-pulse rounded bg-muted" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="text-center">
+          <h1 className="text-sm font-semibold text-destructive">Failed to load bases</h1>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Check your connection and reload the page.
+          </p>
         </div>
       </div>
     );

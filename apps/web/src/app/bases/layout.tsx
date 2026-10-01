@@ -18,8 +18,8 @@ export default async function BasesLayout({ children }: { children: React.ReactN
     tables: [], // Task 1.6: table-level expansion is a later concern
   }));
 
-  // TODO Task 1.6: wire online presence when presence tracking is added
-  // For now, show only the current user (handled by Statusbar default)
+  // Topbar-level presence avatars are a redesign-phase item; per-base presence
+  // is already live inside the table page via <PresenceBar>.
   const onlineUsers: never[] = [];
 
   return (

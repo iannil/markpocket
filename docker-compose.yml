@@ -4,10 +4,9 @@ services:
     container_name: markpocket-postgres
     environment:
       POSTGRES_USER: markpocket
-      POSTGRES_PASSWORD: markpocket_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       POSTGRES_DB: markpocket
     ports:
-      # Host 5432 is taken by another project (hintcard-postgres); use 5433 on the host.
       - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -16,20 +15,22 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   web:
     build: .
     container_name: markpocket-web
     environment:
-      DATABASE_URL: postgresql://markpocket:markpocket_dev_password@postgres:5432/markpocket
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
-      BETTER_AUTH_URL: http://localhost:3000
+      DATABASE_URL: postgresql://markpocket:${POSTGRES_PASSWORD}@postgres:5432/markpocket
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       NODE_ENV: production
     ports:
       - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

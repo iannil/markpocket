@@ -34,6 +34,17 @@ describe('evaluateExpression', () => {
     expect(evaluateExpression('{f1} / {f2}', values)).toEqual({ error: 'Division by zero' });
   });
 
+  it('handles dependencies whose String() uses exponent notation', () => {
+    // String(1e21) === '1e+21' — must expand, not fail the charset whitelist.
+    const values = new Map([
+      ['f1', 1e21],
+      ['f2', 2],
+    ]);
+    expect(evaluateExpression('{f1} + {f2}', values)).toEqual({ value: 1e21 + 2 });
+    const tiny = new Map([['f1', 1e-9]]);
+    expect(evaluateExpression('{f1} * 2', tiny)).toEqual({ value: 2e-9 });
+  });
+
   it('rejects invalid expression characters', () => {
     expect(evaluateExpression('console.log("x")', new Map())).toEqual({
       error: 'Invalid expression',

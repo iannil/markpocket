@@ -1,91 +1,91 @@
 # 分享流程 浏览器 E2E 测试
 # 覆盖：创建分享链接 → 复制链接 → 公开页访问 → 过期处理
 
-- name: "在 Members tab 创建分享链接"
-  preconditions: ["用户已登录，在 Base 详情页"]
+- name: '在 Members tab 创建分享链接'
+  preconditions: ['用户已登录，在 Base 详情页']
   steps:
-    - action: "navigate"
-      url: "$ref:baseUrl/settings/members"
-    - action: "wait_for_selector"
-      selector: "text=+ create link"
+    - action: 'navigate'
+      url: '$ref:baseUrl/settings/members'
+    - action: 'wait_for_selector'
+      selector: 'text=+ create link'
       timeout: 5000
-    - action: "click"
-      selector: "text=+ create link"
-    - action: "wait_for_selector"
-      selector: "text=Share link created"
+    - action: 'click'
+      selector: 'text=+ create link'
+    - action: 'wait_for_selector'
+      selector: 'text=Share link created'
       timeout: 5000
-    - action: "wait_for_selector"
-      selector: "text=Link copied to clipboard"
+    - action: 'wait_for_selector'
+      selector: 'text=Link copied to clipboard'
       timeout: 5000
 
-- name: "分享链接显示在列表中"
-  preconditions: ["分享链接已创建"]
+- name: '分享链接显示在列表中'
+  preconditions: ['分享链接已创建']
   steps:
-    - action: "wait_for_selector"
-      selector: "code"
+    - action: 'wait_for_selector'
+      selector: 'code'
       timeout: 5000
-    - action: "assert_text"
-      selector: "code"
-      contains: "/share/"
+    - action: 'assert_text'
+      selector: 'code'
+      contains: '/share/'
 
-- name: "复制分享链接"
-  preconditions: ["分享链接存在于列表中"]
+- name: '复制分享链接'
+  preconditions: ['分享链接存在于列表中']
   steps:
-    - action: "click"
-      selector: "text=copy"
-    - action: "wait_for_selector"
-      selector: "text=Link copied"
+    - action: 'click'
+      selector: 'text=copy'
+    - action: 'wait_for_selector'
+      selector: 'text=Link copied'
       timeout: 5000
 
-- name: "公开页访问 — 显示 Base 名称和只读 Grid"
-  preconditions: ["分享链接 token 已知"]
+- name: '公开页访问 — 显示 Base 名称和只读 Grid'
+  preconditions: ['分享链接 token 已知']
   steps:
-    - action: "navigate"
-      url: "http://localhost:7420/share/$ref:shareToken"
-    - action: "wait_for_selector"
-      selector: "text=shared view"
+    - action: 'navigate'
+      url: 'http://localhost:7420/share/$ref:shareToken'
+    - action: 'wait_for_selector'
+      selector: 'text=shared view'
       timeout: 5000
-    - action: "assert_text"
-      selector: "h1"
-      contains: "E2E"  # Base 名称中包含 E2E
-    - action: "assert_selector"
-      selector: "td"  # 有数据单元格
+    - action: 'assert_text'
+      selector: 'h1'
+      contains: 'E2E' # Base 名称中包含 E2E
+    - action: 'assert_selector'
+      selector: 'td' # 有数据单元格
       present: true
-    - action: "assert_selector"
-      selector: "button:has-text('+')"  # 没有编辑按钮
+    - action: 'assert_selector'
+      selector: "button:has-text('+')" # 没有编辑按钮
       present: false
 
-- name: "公开页 — 多表切换"
-  preconditions: ["Base 中包含多个表"]
+- name: '公开页 — 多表切换'
+  preconditions: ['Base 中包含多个表']
   steps:
-    - action: "wait_for_selector"
+    - action: 'wait_for_selector'
       selector: "button:has-text('Products')"
       timeout: 5000
-    - action: "click"
+    - action: 'click'
       selector: "button:has-text('Products')"
-    - action: "wait_for_selector"
+    - action: 'wait_for_selector'
       selector: "th:has-text('Product Name')"
       timeout: 5000
 
-- name: "过期 token 显示过期提示"
-  preconditions: ["token 已过期或无效"]
+- name: '过期 token 显示过期提示'
+  preconditions: ['token 已过期或无效']
   steps:
-    - action: "navigate"
-      url: "http://localhost:7420/share/invalid-token-12345"
-    - action: "wait_for_selector"
-      selector: "text=Link expired or not found"
+    - action: 'navigate'
+      url: 'http://localhost:7420/share/invalid-token-12345'
+    - action: 'wait_for_selector'
+      selector: 'text=Link expired or not found'
       timeout: 5000
 
-- name: "删除分享链接"
-  preconditions: ["在 Members tab"]
+- name: '删除分享链接'
+  preconditions: ['在 Members tab']
   steps:
-    - action: "navigate"
-      url: "$ref:baseUrl/settings/members"
-    - action: "wait_for_selector"
-      selector: "text=delete"
+    - action: 'navigate'
+      url: '$ref:baseUrl/settings/members'
+    - action: 'wait_for_selector'
+      selector: 'text=delete'
       timeout: 5000
-    - action: "click"
-      selector: "text=delete"
-    - action: "wait_for_selector"
-      selector: "text=No public links yet"
+    - action: 'click'
+      selector: 'text=delete'
+    - action: 'wait_for_selector'
+      selector: 'text=No public links yet'
       timeout: 5000
