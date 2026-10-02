@@ -1,0 +1,287 @@
+# Agent access layer E2E（ADR-0010）：API token → REST /api/v1 → MCP /api/mcp → RSS /feed → Skill
+# 覆盖：token 创建/吊销、REST 全链路 CRUD、MCP 握手与工具调用、feed XML、skill 文档。
+
+- name: 注册并创建 API token
+  steps:
+    - action: 'POST /api/auth/sign-up/email'
+      body:
+        email: 'agent-$random_uuid@test.local'
+        password: 'password123'
+        name: 'AgentUser'
+    - action: 'POST /api/trpc/token.create'
+      body:
+        name: 'e2e-token'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.data.token startswith mpk_'
+        - '$response.body.result.data.row.tokenPrefix startswith mpk_'
+      register:
+        apiToken: '$response.body.result.data.token'
+        apiTokenId: '$response.body.result.data.row.id'
+
+- name: REST 无 token 应 401
+  steps:
+    - action: 'GET /api/v1/bases'
+      asserts:
+        - '$status == 401'
+
+- name: REST 假 token 应 401
+  steps:
+    - action: 'GET /api/v1/bases'
+      bearer: 'mpk_deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+      asserts:
+        - '$status == 401'
+
+- name: REST 创建 Base → 201
+  steps:
+    - action: 'POST /api/v1/bases'
+      bearer: '$ref:apiToken'
+      body:
+        name: 'Agent-E2E-$random_uuid'
+      asserts:
+        - '$status == 201'
+        - '$response.body.id is not null'
+      register:
+        baseId: '$response.body.id'
+
+- name: REST 列出 Base（token 与用户同权）
+  steps:
+    - action: 'GET /api/v1/bases'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body is array'
+
+- name: REST 创建 Table 与 Field
+  steps:
+    - action: 'POST /api/v1/bases/$ref:baseId/tables'
+      bearer: '$ref:apiToken'
+      body:
+        name: 'Tasks'
+      asserts:
+        - '$status == 201'
+      register:
+        tableId: '$response.body.id'
+    - action: 'POST /api/v1/tables/$ref:tableId/fields'
+      bearer: '$ref:apiToken'
+      body:
+        name: 'Title'
+        type: 'text'
+      asserts:
+        - '$status == 201'
+      register:
+        fieldId: '$response.body.id'
+
+- name: REST 创建带 cells 的 Record（fieldId 为键）
+  steps:
+    - action: 'POST /api/v1/tables/$ref:tableId/records'
+      bearer: '$ref:apiToken'
+      body:
+        cells:
+          '$ref:fieldId': 'hello-agent'
+      asserts:
+        - '$status == 201'
+        - '$response.body.record.id is not null'
+        - '$response.body.record.cells.$ref:fieldId == hello-agent'
+      register:
+        recordId: '$response.body.record.id'
+
+- name: REST 更新与读取单条 Record
+  steps:
+    - action: 'PATCH /api/v1/records/$ref:recordId'
+      bearer: '$ref:apiToken'
+      body:
+        cells:
+          '$ref:fieldId': 'updated-value'
+      asserts:
+        - '$status == 200'
+        - '$response.body.record.cells.$ref:fieldId == updated-value'
+    - action: 'GET /api/v1/records/$ref:recordId'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body.cells.$ref:fieldId == updated-value'
+
+- name: REST 分页列表与非法参数
+  steps:
+    - action: 'GET /api/v1/tables/$ref:tableId/records?limit=1'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body.total is not null'
+    - action: 'GET /api/v1/tables/$ref:tableId/records?limit=9999'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 400'
+
+- name: REST 删除 Record
+  steps:
+    - action: 'DELETE /api/v1/records/$ref:recordId'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body.ok == true'
+    - action: 'GET /api/v1/records/$ref:recordId'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 404'
+
+- name: OpenAPI 文档可达
+  steps:
+    - action: 'GET /api/v1/openapi.json'
+      asserts:
+        - '$status == 200'
+        - '$response.body.openapi startswith 3.'
+
+- name: MCP initialize 握手
+  steps:
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 1
+        method: 'initialize'
+        params:
+          protocolVersion: '2025-06-18'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.serverInfo.name == markpocket'
+        - '$response.body.result.protocolVersion == 2025-06-18'
+
+- name: MCP 未知协议版本回退到最新
+  steps:
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 2
+        method: 'initialize'
+        params:
+          protocolVersion: '1999-01-01'
+      asserts:
+        - '$response.body.result.protocolVersion == 2025-06-18'
+
+- name: MCP 无 token 应 401
+  steps:
+    - action: 'POST /api/mcp'
+      body:
+        jsonrpc: '2.0'
+        id: 3
+        method: 'ping'
+      asserts:
+        - '$status == 401'
+
+- name: MCP tools/list 暴露工具集
+  steps:
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 4
+        method: 'tools/list'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.tools[0].name is not null'
+
+- name: MCP tools/call 创建 Record 并经 REST 验证
+  steps:
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 5
+        method: 'tools/call'
+        params:
+          name: 'create_record'
+          arguments:
+            tableId: '$ref:tableId'
+            cells:
+              '$ref:fieldId': 'via-mcp'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.isError != true'
+        - '$response.body.result.content[0].text contains via-mcp'
+    - action: 'GET /api/v1/tables/$ref:tableId/records'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body.total == 1'
+      register:
+        mcpRecordId: '$response.body.groups[0].records[0].id'
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 6
+        method: 'tools/call'
+        params:
+          name: 'get_record'
+          arguments:
+            recordId: '$ref:mcpRecordId'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.content[0].text contains via-mcp'
+
+- name: MCP 未知工具报 -32601
+  steps:
+    - action: 'POST /api/mcp'
+      bearer: '$ref:apiToken'
+      body:
+        jsonrpc: '2.0'
+        id: 7
+        method: 'tools/call'
+        params:
+          name: 'no_such_tool'
+      asserts:
+        - '$response.body.error.code == -32601'
+
+- name: RSS：分享视图后 feed 可达
+  steps:
+    - action: 'GET /api/v1/tables/$ref:tableId/views'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 200'
+      register:
+        viewId: '$response.body[0].id'
+    - action: 'POST /api/trpc/share.create'
+      body:
+        baseId: '$ref:baseId'
+        viewId: '$ref:viewId'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.data.token is not null'
+      register:
+        shareToken: '$response.body.result.data.token'
+    - action: 'GET /feed/$ref:shareToken'
+      asserts:
+        - '$status == 200'
+        - '$response.body contains <rss version="2.0">'
+        - '$response.body contains via-mcp'
+
+- name: RSS：未知 token 应 404
+  steps:
+    - action: 'GET /feed/nonexistent-share-token'
+      asserts:
+        - '$status == 404'
+
+- name: Skill 文档可达且含四通道
+  steps:
+    - action: 'GET /api/skill'
+      asserts:
+        - '$status == 200'
+        - '$response.body contains name: markpocket'
+        - '$response.body contains /api/v1'
+        - '$response.body contains /api/mcp'
+
+- name: 吊销 token 后 REST 立即 401
+  steps:
+    - action: 'POST /api/trpc/token.revoke'
+      body:
+        id: '$ref:apiTokenId'
+      asserts:
+        - '$status == 200'
+        - '$response.body.result.data.ok == true'
+    - action: 'GET /api/v1/bases'
+      bearer: '$ref:apiToken'
+      asserts:
+        - '$status == 401'

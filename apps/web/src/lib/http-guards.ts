@@ -94,6 +94,75 @@ export const MAX_TRPC_BODY_BYTES = 12 * 1024 * 1024;
 // 55MB rejects clearly-oversized uploads before req.formData() buffers them.
 export const MAX_UPLOAD_BODY_BYTES = 55 * 1024 * 1024;
 
+// Agent-access payloads (REST /api/v1, MCP /api/mcp): JSON envelopes whose
+// largest legitimate member is a record's cells map — bounded per-cell by the
+// 256KB cell-value cap with at most a few hundred fields. 1MB is comfortably
+// above that and far below the tRPC budget: agent endpoints are unauthenticated
+// at the edge (token resolved AFTER the cap check), so their budget stays tight.
+export const MAX_API_BODY_BYTES = 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// Fixed-window rate limiter (agent access)
+// ---------------------------------------------------------------------------
+
+// Counting fixed window keyed by an opaque id (API token id). Same
+// in-process-single-container tradeoff as createUserConcurrencyLimiter above:
+// a Map in module scope IS the instance-wide truth; 0 disables the limit
+// (explicit opt-out, same convention as the other knobs).
+export interface FixedWindowRateLimiter {
+  /** Registers one event; false means the window is exhausted (429). */
+  allow(key: string, now?: number): boolean;
+}
+export function createFixedWindowRateLimiter(
+  getLimit: () => number,
+  windowMs: number,
+): FixedWindowRateLimiter {
+  const hits = new Map<string, { windowStart: number; count: number }>();
+  return {
+    allow(key, now = Date.now()) {
+      const limit = getLimit();
+      if (limit <= 0) return true; // 0 = 不限流（显式关闭）
+      const entry = hits.get(key);
+      if (!entry || now - entry.windowStart >= windowMs) {
+        // Prune opportunistic expired entries on window rollover so an
+        // unbounded key space (token ids) can't accumulate stale windows.
+        if (hits.size > 10_000) {
+          for (const [k, v] of hits) {
+            if (now - v.windowStart >= windowMs) hits.delete(k);
+          }
+        }
+        hits.set(key, { windowStart: now, count: 1 });
+        return true;
+      }
+      entry.count += 1;
+      return entry.count <= limit;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cross-site request gate
+// ---------------------------------------------------------------------------
+
+// Browsers always attach Origin to cross-site POSTs; it must point back at the
+// host serving the request, or the ambient credential (session cookie on the
+// tRPC path) would ride along. Missing Origin (curl, agents, tests) is allowed.
+// Agent endpoints authenticate by Bearer token rather than cookie, but the same
+// check keeps a browser-based client from being aimed at them with a stolen
+// token. Same rule as the tRPC/upload routes — canonicalized here for the
+// agent-access endpoints (ADR-0010); older routes keep their local copies.
+export function originAllowed(req: { headers: Headers }): boolean {
+  const origin = req.headers.get('origin');
+  if (!origin) return true; // non-browser clients
+  const host = req.headers.get('host');
+  try {
+    const originHost = new URL(origin).host;
+    return originHost.length > 0 && !!host && originHost === host;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Chunked (Content-Length-less) body reads
 // ---------------------------------------------------------------------------

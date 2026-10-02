@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-10-02
+> **最后更新**：2026-10-03
 > 本文档是项目层面的状态快照。历史版本（2026-07-02）中的多处陈述已过时
 > （"无测试框架"、"公开分享未实现"、"packages/ 不存在"、"四种视图类型"等），
 > 本版按当前实际状态重写。逐 commit 的功能演进见 `CHANGELOG.md` 与 git log。
@@ -20,7 +20,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 | Dev 打包器 | **Rspack**（next-rspack）——Turbopack 有内存泄漏 |
 | 部署形态 | 单 Docker Compose（web + postgres，多阶段镜像、生产依赖 only）；启动迁移由 `server.ts` 内置（pg advisory lock 防并发）；dev 拆 `next dev` + 独立 realtime 网关 |
 | 插件系统 | plugin-sdk + plugin-csv + plugin-storage-local（ADR-0006..0009） |
-| 测试 | vitest 单元 + 集成（**393 用例**）；tRPC 集成测试走 createCaller mock 模式（见 `docs/testing.md`） |
+| 测试 | vitest 单元 + 集成（**550+ 用例**）；tRPC 集成测试走 createCaller mock 模式（见 `docs/testing.md`） |
 | CI | `.github/workflows/ci.yml`：format → lint → typecheck → test → build + **e2e job**（真实 Postgres + 生产构建 + API 场景）；release.yml 在 `v*` tag 先 verify 再发布镜像并做启动冒烟；dependabot 周更 |
 | 发布状态 | 未发布到 registry，无 tagged release，master 视作 unstable |
 | 许可证 | AGPL-3.0（见 LICENSE） |
@@ -42,6 +42,7 @@ markpocket 是一个面向小团队的自托管数据库（Airtable 替代品）
 | 附件（plugin-storage-local，上传白名单 + 下载 ACL；compose 以 `./data` 卷持久化） | ✅ |
 | 鉴权（better-auth 密码 + 可选 OIDC；per-Base 三角色；`DISABLE_SIGNUP` 可关闭注册） | ✅ |
 | 大表分页 + 虚拟滚动（`@tanstack/react-virtual`，行高 32px） | ✅ |
+| Agent 接入层（ADR-0010：`api_token` Bearer token + REST `/api/v1`（OpenAPI）/ MCP `/api/mcp` / RSS `/feed/{token}` / Agent Skill `/api/skill`，与用户同权 + 每分钟限流） | ✅ |
 
 **安全基线（2026-10 两轮加固）**：全部读接口有角色校验（viewer 起）；写接口校验
 record/field/table 归属一致性；公开分享按视图级隔离（getTables 只返回分享视图的表、

@@ -12,6 +12,7 @@ import { publicShareRouter } from './routers/public-share';
 import { recordRouter } from './routers/record';
 import { shareRouter } from './routers/share';
 import { tableRouter } from './routers/table';
+import { tokenRouter } from './routers/token';
 import { viewRouter } from './routers/view';
 import { workspaceRouter } from './routers/workspace';
 
@@ -30,6 +31,7 @@ export const appRouter = router({
   share: shareRouter,
   member: memberRouter,
   publicShare: publicShareRouter,
+  token: tokenRouter,
   ...pluginRouters,
 });
 

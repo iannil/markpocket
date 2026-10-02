@@ -32,6 +32,7 @@ Thumbs.db
 
 # agent tooling
 .claude/
+.zcode/
 
 # playwright MCP artifacts
 .playwright-mcp/

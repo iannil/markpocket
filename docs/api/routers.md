@@ -150,3 +150,16 @@ Auth column: **P** = protectedProcedure (requires session), **Pub** = publicProc
 | `getBase` | Pub | `{ token: string }` | `{ id: string; name: string; icon: string \| null; viewId: string \| null; shareId: string } \| null` | Fetches public base metadata by share token. Returns null if expired or not found. |
 | `getTables` | Pub | `{ token: string }` | `{ id: string; name: string }[]` | Lists tables in a publicly shared base. Returns empty array if token is invalid or expired. |
 | `getRecords` | Pub | `{ token: string; tableId: string }` | `{ fields: Field[]; records: PivotedRecord[] } \| null` | Fetches records from a publicly shared table. If the share was created with a `viewId`, applies the view's filter, sort, and hiddenFields. Scope-guarded: the table must belong to the shared base. Returns null if the token is invalid/expired or the table doesn't belong to the shared base. |
+
+
+---
+
+## token
+
+Personal API tokens for the agent access layer (ADR-0010). A token carries its creator's full authority — see [agent-access.md](agent-access.md).
+
+| Procedure | Auth | Input | Output | Description |
+|-----------|------|-------|--------|-------------|
+| `list` | P | — | `{ id, name, tokenPrefix, createdAt, lastUsedAt, expiresAt }[]` | Lists the caller's live (non-revoked) tokens, newest first. Never returns the secret — only the display prefix. |
+| `create` | P | `{ name: string }` | `{ token: string, row: { id, name, tokenPrefix, createdAt } }` | Mints a new Bearer token. The plaintext `token` crosses the wire exactly once, in this response; only the sha256 digest is stored. |
+| `revoke` | P | `{ id: string }` | `{ ok: true }` | Soft-revokes a token (sets `revokedAt`). Only the creator's own token; unknown ids and other users' tokens both answer NOT_FOUND. |

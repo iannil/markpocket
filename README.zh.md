@@ -85,6 +85,7 @@ docker compose up -d --build
 - **CSV 导入导出** —— 标量数据可靠往返，以参考插件形式提供（`packages/plugin-csv`）。
 - **可插拔内核** —— 插件 SDK 已落地两个扩展点（storage adapter、字段类型），外加 tRPC router 与 UI slot 两种集成面（ADR-0006..0009）。
 - **鉴权与分享** —— better-auth（密码 + 可选 OIDC）、per-Base 三层角色（owner / editor / viewer）、限定单视图的只读公开分享链接。
+- **Agent 接入** —— 同一套 Bearer token 层上的四条机器接入通道（ADR-0010）：带 OpenAPI 规范的 REST API（`/api/v1`）、面向 Claude Code / Cursor 的 MCP 服务器（`/api/mcp`）、分享视图的 RSS 订阅（`/feed/{token}`）、可下载的 Agent Skill（`/api/skill`）。见 [docs/api/agent-access.md](docs/api/agent-access.md)。
 
 **v1 明确不做**（见 ADR）：AI/聊天/评论、仪表盘、原生 SQL 暴露、多租户、Calendar/Gantt、Lookup/Rollup、OT/CRDT 合并、百万行性能优化。
 

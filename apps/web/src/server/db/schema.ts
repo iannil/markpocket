@@ -206,6 +206,31 @@ export const baseMember = pgTable(
   }),
 );
 
+// Bearer tokens for the agent access layer (REST /api/v1, MCP, …). A token acts
+// as its creator: authorization goes through the same base_member role checks as
+// a signed-in user (ADR-0010). Only the sha256 hex digest is stored — the
+// plaintext `mpk_…` value is shown once at creation and never recoverable.
+// userId has no FK (app-layer integrity, like the rest of the schema).
+export const apiToken = pgTable(
+  'api_token',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    tokenPrefix: text('token_prefix').notNull(), // first 12 chars of `mpk_…`, display-only
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    // Lookup path on every agent request: hash the presented token, seek here.
+    tokenHashUq: uniqueIndex('api_token_hash_uq').on(t.tokenHash),
+    userIdx: index('api_token_user_id_idx').on(t.userId),
+  }),
+);
+
 // Pending collaborator invites for a base. Soft-deleted by setting acceptedAt
 // (delete marks it consumed; create deactivates prior pending invites). invitedBy
 // has no FK (app-layer integrity, like the rest of the schema). Token is a UUID

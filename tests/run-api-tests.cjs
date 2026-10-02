@@ -82,7 +82,17 @@ function deepResolve(obj, ctx) {
   if (Array.isArray(obj)) return obj.map((v) => deepResolve(v, ctx));
   if (typeof obj === 'object') {
     const r = {};
-    for (const [k, v] of Object.entries(obj)) r[k] = deepResolve(v, ctx);
+    for (const [k, v] of Object.entries(obj)) {
+      // Object KEYS can reference variables too — cells maps are keyed by
+      // fieldId, and the scenario only knows the id after the create step
+      // ("cells": {"$ref:fieldId": "hello"}). Value-space only; a key that
+      // resolves to a non-string is a scenario bug and will surface as a
+      // JSON.stringify type coercion downstream.
+      const key = k.match(/^\$ref:(\w+)$/)
+        ? String(resolve(k, ctx))
+        : k;
+      r[key] = deepResolve(v, ctx);
+    }
     return r;
   }
   if (typeof obj === 'string') return resolve(obj, ctx);
@@ -146,15 +156,46 @@ async function callAuth(path, body) {
   }
 }
 
+// Generic HTTP call for the agent-access surface (REST /api/v1, MCP /api/mcp,
+// feeds /feed/*, skill /api/skill). `bearer` becomes an Authorization header;
+// JSON bodies are stringified, non-JSON responses (XML/markdown) stay text.
+async function callHttp(method, path, { body, bearer, cookie }) {
+  // fetch() rejects GET/HEAD with a body — and runTest defaults step.body to
+  // {} — so gate on method before sending.
+  const hasBody = body !== undefined && method !== 'GET' && method !== 'HEAD';
+  const headers = { Origin: ORIGIN };
+  if (hasBody) headers['Content-Type'] = 'application/json';
+  if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+  if (cookie) headers['Cookie'] = cookie;
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: hasBody ? JSON.stringify(body) : undefined,
+  });
+  const text = await res.text();
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('json')) {
+    try {
+      return { status: res.status, body: JSON.parse(text) };
+    } catch {
+      return { status: res.status, body: text };
+    }
+  }
+  return { status: res.status, body: text };
+}
+
 function extractResult(resp) {
   // tRPC batch envelope: [{ "result": { "data": ... } }] or { "result": { "data": ... } }
   return resp?.body?.result?.data ?? resp?.body?.data ?? resp?.body;
 }
 
 function extractHttpStatus(resp) {
-  // tRPC returns HTTP 200 even for errors; check the body for a tRPC error
+  // tRPC returns HTTP 200 even for errors; check the body for a tRPC error.
+  // The error.data guard keeps REST/MCP responses (whose error envelope is
+  // {code, message} without data.httpStatus) on the real HTTP status — a
+  // REST 401 would otherwise be misreported as 400.
   if (resp?.body?.error?.data?.httpStatus) return resp.body.error.data.httpStatus;
-  if (resp?.body?.error) return 400; // Generic tRPC error
+  if (resp?.body?.error?.data) return 400; // tRPC-shaped error without status
   return resp.status;
 }
 
@@ -204,13 +245,43 @@ function checkAssert(assertText, resp, result) {
   }
 
   m = s.match(
-    /^\$response\.body(?:\.result\.data)?(?:\.result)?(?:\.data)?\.?([\w.[\]]+)?\s*(==|!=|contains|startswith|endswith)\s*(\S.*)?/,
+    /^\$response\.body([.\w:[\]$]+)?\s*(==|!=|contains|startswith|endswith)\s*(\S.*)?/,
   );
   if (m) {
-    const fieldPath = m[1];
+    // Paths may reference variables segment-wise — record cells are keyed by
+    // fieldId, which the scenario only learns from a create response
+    // ("cells.$ref:fieldId"). Resolve those segments against env/ctx; a
+    // dangling reference throws like any other Unknown variable.
+    const rawPath = (m[1] ?? '').replace(/^\./, '');
+    const fieldPath = rawPath.replace(/\$ref:(\w+)/g, (_, k) =>
+      String(resolve(`$ref:${k}`, result)),
+    );
     const op = m[2];
     let expected = (m[3] ?? '').trim().replace(/^['"]|['"]$/g, '');
-    let val = getByPath(result, fieldPath);
+    // `result` (extractResult) is already-unwrapped tRPC data, a plain REST
+    // body, or a whole JSON-RPC envelope — the canonical assert path style
+    // ($response.body.result.data.x) must keep working for all of them, so try
+    // the path as written and with the tRPC envelope prefixes stripped (the
+    // remainder may continue with '.' or '[' — "result.data[0].x"). First
+    // candidate that resolves to !== undefined wins; all-undefined falls
+    // through to the empty-string compare (fail-loud for bad paths).
+    const candidates = [fieldPath];
+    for (const prefix of ['result.data', 'result', 'data']) {
+      if (fieldPath.startsWith(prefix)) {
+        const rest = fieldPath.slice(prefix.length);
+        if (rest.startsWith('.') || rest.startsWith('[')) {
+          candidates.push(rest.replace(/^\./, ''));
+        }
+      }
+    }
+    let val;
+    for (const c of candidates) {
+      const v = c === '' ? result : getByPath(result, c);
+      if (v !== undefined) {
+        val = v;
+        break;
+      }
+    }
     let sVal = String(val ?? '');
     // Resolve $ref:/$env: in expected value
     if (/^\$(ref|env):/.test(expected)) {
@@ -279,12 +350,20 @@ async function runTest(test) {
 
       const m = action.match(/^POST\s+\/api\/trpc\/(.+)/);
       const authM = action.match(/^POST\s+\/api\/auth\/(.+)/);
+      // Generic agent-access action: "METHOD /path" with optional bearer:.
+      const httpM = action.match(/^(GET|POST|PATCH|DELETE|PUT|HEAD)\s+(\/\S*)$/);
 
       let resp;
       if (m) {
         resp = await callTrpc(m[1], body, cookie);
       } else if (authM) {
         resp = await callAuth(`/api/auth/${authM[1]}`, body);
+      } else if (httpM) {
+        resp = await callHttp(httpM[1], resolve(httpM[2], lastResult), {
+          body,
+          bearer: step.bearer !== undefined ? resolve(step.bearer, lastResult) : undefined,
+          cookie,
+        });
       } else {
         throw new Error(`Unparseable action: ${action}`);
       }

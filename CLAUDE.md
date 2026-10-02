@@ -67,7 +67,7 @@ markpocket/
 │   └── src/
 │       ├── app/                        # Next.js App Router pages
 │       │   ├── (auth)/                 # login, register
-│       │   ├── api/                    # tRPC, auth, file/upload routes
+│       │   ├── api/                    # tRPC, auth, file/upload, v1 (agent REST), mcp, skill routes
 │       │   └── bases/                  # base list, base detail, table pages
 │       ├── components/                 # UI components
 │       │   ├── ui/                     # shadcn/ui primitives
@@ -97,7 +97,14 @@ markpocket/
 │       │   │       ├── base.ts, table.ts, field.ts, record.ts, cell.ts
 │       │   │       ├── view.ts, workspace.ts, auth.ts
 │       │   │       ├── history.ts, member.ts, share.ts, invite.ts
-│       │   │       ├── export.ts, public-share.ts
+│       │   │       ├── export.ts, public-share.ts, token.ts
+│       │   ├── agent-access/           # Agent access layer (ADR-0010)
+│       │   │   ├── tokens.ts           # Bearer token mint/verify (sha256, api_token table)
+│       │   │   ├── agent-caller.ts     # appRouter.createCaller with synthetic session
+│       │   │   ├── http.ts             # Shared edge: origin/body-cap/rate-limit/error mapping
+│       │   │   ├── records-service.ts  # create-with-cells / update-cells composites
+│       │   │   ├── rss.ts, skill-template.ts
+│       │   │   └── mcp/                # Hand-rolled MCP streamable HTTP (json-rpc, tools, server)
 │       │   ├── plugins/                # Plugin system
 │       │   │   ├── registry.ts         # 2 registries with real consumers (storage, fieldType)
 │       │   │   ├── index.ts            # Barrel: loads plugins + registers builtin fields

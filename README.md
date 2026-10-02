@@ -89,6 +89,7 @@ Sorted by what you'll touch first, not by what was hardest to build.
 - **CSV import / export** — round-trippable for scalar data, shipped as the reference plugin (`packages/plugin-csv`).
 - **Pluggable core** — a plugin SDK with two landed extension points (storage adapters, field types) plus tRPC router + UI-slot integration surfaces (ADR-0006..0009).
 - **Auth & sharing** — better-auth (email/password + optional OIDC), three roles per Base (owner / editor / viewer), and read-only public share links scoped to a single view.
+- **Agent access** — four machine-facing channels on one Bearer-token layer (ADR-0010): a REST API with OpenAPI spec (`/api/v1`), an MCP server for Claude Code / Cursor (`/api/mcp`), RSS feeds of shared views (`/feed/{token}`), and a downloadable Agent Skill (`/api/skill`). See [docs/api/agent-access.md](docs/api/agent-access.md).
 
 Deliberately **out of scope for v1** (see ADRs): AI/chat/comments, dashboards, raw SQL exposure, multi-tenancy, Calendar/Gantt, Lookup/Rollup, OT/CRDT merge, and million-row performance work.
 

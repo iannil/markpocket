@@ -6,8 +6,9 @@ import { db } from '../../db';
 import { parseViewOptionsStrict, type ViewOptions } from '@/lib/view-ast';
 import { publicProcedure, router } from '../init';
 // Token lookup shared by all three procedures. Returns null for missing,
-// consumed (deleted), or expired shares.
-async function findLiveShare(token: string) {
+// consumed (deleted), or expired shares. Exported for the RSS feed route,
+// which must apply the exact same fail-closed semantics (ADR-0010).
+export async function findLiveShare(token: string) {
   const [share] = await db.select().from(baseShare).where(eq(baseShare.token, token)).limit(1);
   if (!share) return null;
   if (share.expiresAt && new Date(share.expiresAt) < new Date()) return null;
@@ -19,7 +20,7 @@ async function findLiveShare(token: string) {
 // the current schema — is treated as invalid (null), never as "share
 // everything": the tolerant fallback would silently drop filter AND
 // hiddenFields and widen the share to the full table (review M-1).
-async function findSharedView(share: {
+export async function findSharedView(share: {
   baseId: string;
   viewId: string | null;
 }): Promise<{ id: string; tableId: string; options: ViewOptions } | null> {

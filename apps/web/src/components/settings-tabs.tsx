@@ -11,6 +11,7 @@ export function SettingsTabs({ baseId }: { baseId: string }) {
   const tabs = [
     { label: 'Tables', href: root },
     { label: 'Members', href: `${root}/members` },
+    { label: 'Agents', href: `${root}/agent` },
     { label: 'Settings', href: `${root}/general` },
     { label: 'History', href: `${root}/history` },
     { label: 'Export', href: `${root}/export` },

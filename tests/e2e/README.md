@@ -53,6 +53,7 @@ tests/
 - `$env:VAR_NAME` 引用 runner 进程的环境变量
 - **变量解析 fail-loud**：`$ref:`/`$env:`/`$response.body...` 引用解析不到时直接报错（`Unknown variable reference`），不会静默落成字面量字符串（与 `Unknown assert` 的 fail-loud 哲学一致）
 - **断言操作符白名单**：仅支持 `==` / `!=` / `contains` / `startswith` / `endswith`（如 `$status == 200`、`$response.body.result.data[0].name == Grid`）。`===` / `!==` 直接报 `Unknown assert`（fail-loud）——历史上它们曾被正则吞成 `!=` 且期望值偏移为 `= y` 而恒真（假绿），现在在匹配前显式拒绝；其余未知断言语法同样抛 `Unknown assert`
+- **通用 HTTP action**（agent-access 场景用）：`GET|POST|PATCH|DELETE|PUT /任意路径` 直接请求实例；步骤级 `bearer: $ref:tokenVar`（或字面量）加 `Authorization: Bearer` 头；路径、body 值、body 对象键、断言路径中都可嵌 `$ref:`（如 `cells: {"$ref:fieldId": "v"}`）。非 JSON 响应（RSS XML、Skill markdown）以纯文本体参与 `contains` 断言
 - `requires_env: VAR_NAME`（用例级字段，也接受数组 `[VAR1, VAR2]`）：仅当列出的环境变量**全部**为真值（空串与 `0/false/no/off` 视为缺）时执行本用例，否则记为 SKIP。用于需要特殊服务端配置的场景（如 `04-disable-signup.yaml`：前两例需要服务端 `DISABLE_SIGNUP=1` 且 runner 侧设置 `DISABLE_SIGNUP_TESTS=1`；第三例需要 `E2E_EXISTING_EMAIL` + `E2E_EXISTING_PASSWORD`）
 
 ## BASE_URL

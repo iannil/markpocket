@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased — agent access layer (2026-10-03)
+
+Four machine-facing channels on one Bearer-token layer (ADR-0010: [docs/api/agent-access.md](docs/api/agent-access.md)).
+
+### Features
+
+- **API tokens** (`api_token` table, migration `0013`): `mpk_`-prefixed Bearer tokens, sha256-digest storage, shown once at creation, soft-revoke, throttled `lastUsedAt`. A token acts as its creator — every request re-runs the same `assertRole`/`assertTableRole` checks as a signed-in user. Managed via the new `token.*` tRPC router and the base-settings **Agents** tab.
+- **REST API** `/api/v1` (+ `openapi.json`): full CRUD over bases, tables, fields, views, records. New composite write semantics (`records-service.ts`): create-with-cells / update-cells collect per-field rejections in `cellErrors` instead of failing the whole request; single-request cell fan-out capped at 200.
+- **MCP server** `/api/mcp`: hand-rolled stateless streamable-HTTP JSON-RPC subset (initialize / ping / tools/list / tools/call / notifications; protocol versions 2024-11-05 / 2025-03-26 / 2025-06-18) with 21 tools mirroring the REST surface 1:1. Zero new dependencies — zod 4's native `z.toJSONSchema` covers tool descriptors (the official SDK peer-depends on zod 3).
+- **RSS feeds** `/feed/{shareToken}`: every public share pinned to a view exposes an RSS 2.0 feed (newest-first, view filter + hidden-field projection, fail-closed share semantics shared with the public share page; base-wide shares deliberately have no feed). Full XML 1.0 escaping with unit tests.
+- **Agent Skill** `/api/skill`: per-instance installable skill document (REST/MCP/RSS usage with the instance origin interpolated); `?download=1` serves it as `markpocket-SKILL.md`.
+- **UI**: new **Agents** settings tab (token create/one-time reveal/revoke with confirm dialogs, MCP config copy, OpenAPI link, feed URLs, skill download); `copyToClipboard` extracted to `lib/clipboard.ts`.
+
+### Security
+
+- Shared agent edge (`agent-access/http.ts`) for all token-authenticated endpoints: Origin gate → 1MB body cap (before auth) → Bearer resolution → per-token fixed-window rate limit (`AGENT_RATE_LIMIT_PER_MIN`, default 120/min, 0 disables) → uniform `{error:{code,message}}` envelope; 401 carries `WWW-Authenticate: Bearer`. Non-TRPC failures are masked as generic 500s.
+- Token secrets never persisted or logged; lists return only the 12-char display prefix; revoked/expired tokens fail closed.
+
+### Engineering
+
+- e2e runner: generic `METHOD /path` actions with `bearer:` headers, `$ref:` resolution in paths / object keys / assert paths, and candidate-path assertion resolution (tRPC, REST and JSON-RPC envelope bodies all work); new `tests/e2e/api/05-agent-access.yaml` (21 cases, full token → REST → MCP → RSS → skill → revoke round trip).
+- `listRecordsPivoted` now also returns `createdAt` (additive; feeds key pubDate off it).
+- Docs: ADR-0010, `docs/api/agent-access.md`, token router in `docs/api/routers.md`, README/README.zh feature bullets, STATUS.md, CONTEXT.md glossary terms, CLAUDE.md layout.
+- Tests 487 → 550 (token lifecycle, rate limiting, MCP dispatch, RSS escaping, REST route guards, records-service composites).
+
 ## Unreleased — security & quality hardening (2026-10-01)
 
 ### Security

@@ -36,6 +36,14 @@
 - **Import** —— 从外部文件（v1：CSV）解析并写入为某 Table 的 Record。
 - **Export** —— 将某 Table 的 Record 序列化导出（v1：CSV）。
 
+## Agent 接入
+
+- **API Token** —— 用户创建的 Bearer 凭证（`mpk_` 前缀），**与创建者同权**：请求以创建者身份通过成员关系与角色校验。仅在创建时展示一次完整值，库中只存摘要。
+- **Agent Access（Agent 接入层）** —— 面向 AI agent 与脚本的机器接入层，四条通道共享同一 token 认证：REST API、MCP 服务器、RSS 订阅、Agent Skill 文档。
+- **REST API** —— `/api/v1` 下的 HTTP JSON 接口，覆盖五实体（Base/Table/Field/View/Record）的全量 CRUD。
+- **MCP 服务器** —— `/api/mcp` 上的 Model Context Protocol 端点（streamable HTTP），工具集与 REST 面一一对应。
+- **Feed** —— 公开分享链接（锁定视图）的 RSS 2.0 投影：视图的 filter 与隐藏字段投影生效，按记录创建时间倒序。
+
 ## 非术语（避免使用）
 
 - **Formula** —— 不使用。在 markpocket 语境里一律称为 Expression Field。历史代码里出现的 "formula" 一律视为 teable 遗留，迁移时降级为 Expression Field 或丢弃。

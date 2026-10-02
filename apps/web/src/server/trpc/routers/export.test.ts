@@ -90,8 +90,8 @@ describe('exportRouter.exportBase — CSV assembly', () => {
   it('builds one file per table: fields sorted by orderIndex, rows via cellToCsv, sanitized filename', async () => {
     queueSelects([TABLES, FIELDS]);
     vi.mocked(listRecordsPivoted).mockResolvedValue([
-      { id: 'r1', cells: { f1: 'Widget, "Pro"', f2: 42, f3: '=SUM(A1)' } },
-      { id: 'r2', cells: {} },
+      { id: 'r1', createdAt: new Date(), cells: { f1: 'Widget, "Pro"', f2: 42, f3: '=SUM(A1)' } },
+      { id: 'r2', createdAt: new Date(), cells: {} },
     ]);
     vi.mocked(countRecords).mockResolvedValue(2);
 
@@ -114,7 +114,9 @@ describe('exportRouter.exportBase — CSV assembly', () => {
 
   it('marks a file truncated when the row total exceeds the exported page', async () => {
     queueSelects([TABLES, FIELDS]);
-    vi.mocked(listRecordsPivoted).mockResolvedValue([{ id: 'r1', cells: {} }]);
+    vi.mocked(listRecordsPivoted).mockResolvedValue([
+      { id: 'r1', createdAt: new Date(), cells: {} },
+    ]);
     vi.mocked(countRecords).mockResolvedValue(3);
 
     const files = await exportRouter.createCaller(session()).exportBase({ baseId: 'b1' });
@@ -146,8 +148,8 @@ describe('exportRouter.exportBase — CSV assembly', () => {
       [{ id: 'g1', name: 'Solo', type: 'text', options: {}, orderIndex: 0 }], // fields for t2
     ]);
     vi.mocked(listRecordsPivoted)
-      .mockResolvedValueOnce([{ id: 'r1', cells: { f1: 'a' } }])
-      .mockResolvedValueOnce([{ id: 'r2', cells: { g1: 'b' } }]);
+      .mockResolvedValueOnce([{ id: 'r1', createdAt: new Date(), cells: { f1: 'a' } }])
+      .mockResolvedValueOnce([{ id: 'r2', createdAt: new Date(), cells: { g1: 'b' } }]);
     vi.mocked(countRecords).mockResolvedValue(1);
 
     const files = await exportRouter.createCaller(session()).exportBase({ baseId: 'b1' });

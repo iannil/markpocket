@@ -52,7 +52,13 @@ export async function listRecordsPivoted(
     cellsByRecord.set(c.recordId, map);
   }
 
-  return records.map((r) => ({ id: r.id, cells: cellsByRecord.get(r.id) ?? {} }));
+  return records.map((r) => ({
+    id: r.id,
+    // Additive (ADR-0010): feeds key pubDate off the record's creation time;
+    // older consumers destructure only {id, cells} and ignore it.
+    createdAt: r.createdAt,
+    cells: cellsByRecord.get(r.id) ?? {},
+  }));
 }
 
 export async function countRecords(tableId: string, where?: SQL | null) {

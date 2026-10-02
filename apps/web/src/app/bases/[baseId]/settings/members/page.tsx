@@ -5,18 +5,12 @@ import { useParams } from 'next/navigation';
 
 import { toast } from '@/lib/toast';
 import { initials } from '@/lib/initials';
+import { copyToClipboard } from '@/lib/clipboard';
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc/client';
 
 type InviteRole = 'editor' | 'viewer';
-
-function copyToClipboard(text: string, successMessage: string) {
-  navigator.clipboard.writeText(text).then(
-    () => toast.success(successMessage),
-    () => toast.error('Copy failed'),
-  );
-}
 
 function InviteSection({ baseId }: { baseId: string }) {
   const utils = trpc.useUtils();
