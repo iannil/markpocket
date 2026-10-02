@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Stage 1: builder — full install (incl. devDependencies) + next build ──
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 RUN apk add --no-cache libc6-compat && corepack enable
 WORKDIR /app
 
@@ -27,7 +27,7 @@ RUN DATABASE_URL=postgresql://placeholder:placeholder@placeholder:5432/placehold
     pnpm --filter @markpocket/web build
 
 # ── Stage 2: runner — production dependencies only, no devDependencies ──
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 # libc6-compat: Next's native bindings need glibc compat on musl. No wget
 # package: alpine's busybox wget covers the HEALTHCHECK below (plain HTTP on
 # loopback). corepack is enabled for the pnpm install layer ONLY — the runtime
