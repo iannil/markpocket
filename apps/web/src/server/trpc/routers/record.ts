@@ -11,6 +11,7 @@ import { parseViewOptions } from '@/lib/view-ast';
 import { materializeExpressionsForRecord } from '@/server/expression';
 import { cellHistory, field, record, view } from '../../db/schema';
 import { db } from '../../db';
+import { mapBusyToConflict } from '../../db/pg-errors';
 import { publishTableChange } from '../../realtime/publish';
 import { assertTableRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
@@ -30,7 +31,15 @@ export const recordRouter = router({
       let viewOptions = parseViewOptions({});
       if (input.viewId) {
         const [v] = await db.select().from(view).where(eq(view.id, input.viewId)).limit(1);
-        if (v) viewOptions = parseViewOptions(v.options);
+        // The view must belong to the table being listed — a viewId from
+        // another table would apply an unrelated filter/sort to this one.
+        if (!v || v.tableId !== input.tableId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'View does not belong to this table',
+          });
+        }
+        viewOptions = parseViewOptions(v.options);
       }
 
       const fields = await db.select().from(field).where(eq(field.tableId, input.tableId));
@@ -98,36 +107,86 @@ export const recordRouter = router({
 
       // Q6 cascade-clear: find all link cells referencing this record id and
       // remove it. Scoped to the same base so the scan can't touch other bases.
-      await db.transaction(async (tx) => {
-        const linked = await tx.execute(
-          sql`SELECT c.id, c.value FROM cell c
+      // `FOR UPDATE OF c` closes the lost-update race the table.delete cleanup
+      // also guards against: without the row lock, two concurrent cleaners
+      // (this scan and a table.delete chunk) snapshot the same cell, filter
+      // out different dead ids in JS, and the later blind UPDATE resurrects
+      // the other's dead id. The lock makes the loser re-read the winner's
+      // committed value and filter from that.
+      // The referencing-table ids ride out of the transaction so the notices
+      // fire strictly post-commit (a pre-commit NOTIFY could describe a
+      // rollback).
+      const affectedTableIds = await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          // Lock the doomed record's row FIRST. A concurrent cell.upsert that
+          // writes a link to this record holds a FOR SHARE lock on it (its
+          // in-transaction existence re-check) until it commits: locking here
+          // means either that upsert committed and the scan below sees its cell
+          // (cleans it), or this delete commits first and the upsert's re-check
+          // finds the record gone (rejected). Without this, the scan could pass
+          // in the gap between the upsert's re-check and its cell write, and the
+          // freshly-written link would outlive the cascade as a dead reference.
+          const locked = await tx
+            .select({ id: record.id })
+            .from(record)
+            .where(eq(record.id, input.id))
+            .limit(1)
+            .for('update');
+          if (locked.length === 0) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: 'Record not found' });
+          }
+          const linked = await tx.execute(
+            sql`SELECT c.id, c.value, f.table_id AS table_id FROM cell c
               JOIN field f ON f.id = c.field_id
               JOIN "table" t ON t.id = f.table_id
-              WHERE t.base_id = ${baseId} AND c.value @> ${JSON.stringify([input.id])}::jsonb`,
-        );
-        for (const row of linked as unknown as Array<{ id: string; value: unknown }>) {
-          const arr = Array.isArray(row.value) ? row.value : [];
-          const next = arr.filter((v: unknown) => v !== input.id);
-          // ADR-0005 decision 5: every value change appends a cell_history row.
-          await tx.insert(cellHistory).values({
-            id: randomUUID(),
-            cellId: row.id,
-            oldValue: row.value,
-            newValue: next.length > 0 ? next : null,
-            changedBy: ctx.session.user.id,
-          });
-          if (next.length === 0) {
-            await tx.execute(sql`DELETE FROM cell WHERE id = ${row.id}`);
-          } else {
-            await tx.execute(
-              sql`UPDATE cell SET value = ${JSON.stringify(next)}::jsonb, updated_at = now() WHERE id = ${row.id}`,
-            );
+              WHERE t.base_id = ${baseId} AND c.value @> ${JSON.stringify([input.id])}::jsonb
+              FOR UPDATE OF c`,
+          );
+          // Referencing cells can live in other tables of the base — the loop
+          // below rewrites (and histories) their values, so each owning table
+          // is collected for its own post-commit notice. A Set dedupes per
+          // table (many cells per table), and the deleted record's own table
+          // is excluded: it gets its notice below like every delete does.
+          const affectedTableIds = new Set<string>();
+          for (const row of linked as unknown as Array<{
+            id: string;
+            value: unknown;
+            table_id: string;
+          }>) {
+            if (row.table_id !== input.tableId) affectedTableIds.add(row.table_id);
+            const arr = Array.isArray(row.value) ? row.value : [];
+            const next = arr.filter((v: unknown) => v !== input.id);
+            // ADR-0005 decision 5: every value change appends a cell_history row.
+            await tx.insert(cellHistory).values({
+              id: randomUUID(),
+              cellId: row.id,
+              oldValue: row.value,
+              newValue: next.length > 0 ? next : null,
+              changedBy: ctx.session.user.id,
+            });
+            if (next.length === 0) {
+              await tx.execute(sql`DELETE FROM cell WHERE id = ${row.id}`);
+            } else {
+              await tx.execute(
+                sql`UPDATE cell SET value = ${JSON.stringify(next)}::jsonb, updated_at = now() WHERE id = ${row.id}`,
+              );
+            }
           }
-        }
-        // Delete the record (FK cascade clears its cells).
-        await tx.delete(record).where(eq(record.id, input.id));
-      });
-      void publishTableChange(input.tableId);
+          // Delete the record (FK cascade clears its cells).
+          await tx.delete(record).where(eq(record.id, input.id));
+          return affectedTableIds;
+        }),
+      );
+      void publishTableChange(input.tableId, ctx.session.user.id);
+      // ADR-0002: clients are told which table changed and refetch that
+      // table. Without these notices the referencing tables' clients keep
+      // rendering link cells that point at the deleted record until some
+      // local edit happens to invalidate their cache — the cleanup above
+      // landed, they just never hear about it. Same echo suppression as the
+      // delete's own notice.
+      for (const tableId of affectedTableIds) {
+        void publishTableChange(tableId, ctx.session.user.id);
+      }
       return { ok: true };
     }),
 });

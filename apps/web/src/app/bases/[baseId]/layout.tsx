@@ -1,27 +1,30 @@
-'use client';
+import type { Metadata } from 'next';
 
-import { useEffect, type ReactNode } from 'react';
-import { useParams } from 'next/navigation';
+import { BaseContextProvider } from '@/components/base-context';
+import { baseName } from '@/lib/base-meta';
 
-import { PresenceBar } from '@/components/realtime/presence-bar';
-import { useRealtime } from '@/components/realtime/realtime-provider';
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ baseId: string }>;
+}): Promise<Metadata> {
+  const { baseId } = await params;
+  return { title: (await baseName(baseId)) ?? 'Base' };
+}
 
-export default function BaseLayout({ children }: { children: ReactNode }) {
-  const params = useParams<{ baseId: string }>();
-  const baseId = params.baseId;
-  const { subscribe, unsubscribe } = useRealtime();
-
-  useEffect(() => {
-    subscribe(baseId);
-    return () => unsubscribe(baseId);
-  }, [baseId, subscribe, unsubscribe]);
-
+export default async function BaseLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ baseId: string }>;
+}) {
+  const { baseId } = await params;
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center border-b border-border px-4 py-1.5">
-        <PresenceBar baseId={baseId} />
+      <div className="flex-1 overflow-hidden">
+        <BaseContextProvider baseId={baseId}>{children}</BaseContextProvider>
       </div>
-      <div className="flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }

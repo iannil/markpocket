@@ -23,6 +23,7 @@ export function mockQuery<T>(resolveValue: T) {
     leftJoin: vi.fn(() => chain),
     innerJoin: vi.fn(() => chain),
     onConflictDoNothing: vi.fn(() => chain),
+    for: vi.fn(() => chain),
     onConflictDoUpdate: vi.fn(() => chain),
     then: (onfulfilled: (v: T) => any) => Promise.resolve(resolveValue).then(onfulfilled),
     catch: (onrejected: any) => Promise.resolve(resolveValue).catch(onrejected),

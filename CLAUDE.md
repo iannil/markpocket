@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**markpocket** is a self-hosted Airtable alternative — bases, tables, fields, records, views (Grid / Form / Kanban / Gallery), real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.
+**markpocket** is a self-hosted Airtable alternative — bases, tables, fields, records, views (Grid shipped; Form / Kanban / Gallery planned), real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.
 
 - **Single-tenant self-hosted** (ADR-0004): one container per team, no SaaS
 - **Row-per-cell storage** (ADR-0001): every cell is its own DB row with JSONB value
@@ -20,11 +20,13 @@ pnpm dev                  # start dev servers (turbo)
 pnpm build                # build all packages
 pnpm test                 # run all tests (vitest)
 pnpm lint                 # eslint across workspace
+pnpm typecheck            # tsc --noEmit across workspace
 pnpm format               # prettier write
 pnpm format:check         # prettier check
+pnpm test:e2e-api         # API e2e scenarios (needs a running instance)
 pnpm db:generate          # run drizzle-kit generate
 pnpm db:migrate           # run drizzle-kit migrate
-pnpm db:studio            # open Drizzle Studio
+pnpm db:studio            # open drizzle-kit studio
 ```
 
 ### One-shot dev environment
@@ -53,7 +55,7 @@ pnpm test -- --watch                  # watch mode
 pnpm test -- -t "field type"          # filter by test name
 ```
 
-Tests use `vitest` with `jsdom` for React components. Test files are co-located: `*.test.ts`, `*.test.tsx`, and `*.test-d.ts` (type-level tests).
+Tests use `vitest` (default `node` environment); React component tests opt into `jsdom` per file with a `// @vitest-environment jsdom` pragma. Test files are co-located: `*.test.ts`, `*.test.tsx`, and `*.test-d.ts` (type-level tests).
 
 ## Architecture
 
@@ -94,7 +96,8 @@ markpocket/
 │       │   │   └── routers/            # Per-entity routers
 │       │   │       ├── base.ts, table.ts, field.ts, record.ts, cell.ts
 │       │   │       ├── view.ts, workspace.ts, auth.ts
-│       │   │       ├── history.ts, member.ts, share.ts
+│       │   │       ├── history.ts, member.ts, share.ts, invite.ts
+│       │   │       ├── export.ts, public-share.ts
 │       │   ├── plugins/                # Plugin system
 │       │   │   ├── registry.ts         # 2 registries with real consumers (storage, fieldType)
 │       │   │   ├── index.ts            # Barrel: loads plugins + registers builtin fields

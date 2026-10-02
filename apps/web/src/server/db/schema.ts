@@ -96,7 +96,11 @@ export const record = pgTable(
     createdBy: text('created_by'),
   },
   (t) => ({
-    tableIdx: index('record_table_id_idx').on(t.tableId),
+    // No standalone table_id index: this composite's leading column covers it
+    // (dropped record_table_id_idx in migration 0012 as redundant).
+    // Default view ordering is (table_id, created_at desc) — listRecordsPivoted's
+    // fallback sort; a covering composite avoids a per-request sort of the table.
+    tableCreatedIdx: index('record_table_created_at_idx').on(t.tableId, t.createdAt.desc()),
   }),
 );
 
@@ -114,9 +118,10 @@ export const cell = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
+    // No standalone record_id index: cell_record_field_uq's leading column
+    // covers it (dropped cell_record_id_idx in migration 0012 as redundant).
     recordFieldUq: uniqueIndex('cell_record_field_uq').on(t.recordId, t.fieldId),
     fieldIdx: index('cell_field_id_idx').on(t.fieldId),
-    recordIdx: index('cell_record_id_idx').on(t.recordId),
     // GIN for `value @> '[...]'` link-cell scans (record.delete cascade-clear).
     valueGinIdx: index('cell_value_gin').using('gin', t.value),
   }),
@@ -136,21 +141,34 @@ export const cellHistory = pgTable(
   },
   (t) => ({
     cellIdx: index('cell_history_cell_id_idx').on(t.cellId, t.changedAt),
+    // listByBase/listByTable page by (changed_at DESC, id DESC) — the unique id
+    // is the tiebreaker that keeps offset paging deterministic when a bulk
+    // write (dead-ref cleanup, backfill, import) stamps many rows identically.
+    // The composite backs the full ORDER BY; it replaced the former
+    // single-column (changed_at DESC) index in migration 0011.
+    changedAtIdIdx: index('cell_history_changed_at_id_idx').on(t.changedAt.desc(), t.id.desc()),
   }),
 );
 
-export const attachment = pgTable('attachment', {
-  id: text('id').primaryKey(),
-  // Owning base for download authorization. Nullable: rows created before this
-  // column existed (download falls back to uploader-only access).
-  baseId: text('base_id').references(() => base.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  mime: text('mime').notNull(),
-  size: integer('size').notNull(),
-  storageKey: text('storage_key').notNull(),
-  uploadedBy: text('uploaded_by'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const attachment = pgTable(
+  'attachment',
+  {
+    id: text('id').primaryKey(),
+    // Owning base for download authorization. Nullable: rows created before this
+    // column existed (download falls back to uploader-only access).
+    baseId: text('base_id').references(() => base.id, { onDelete: 'cascade' }),
+    filename: text('filename').notNull(),
+    mime: text('mime').notNull(),
+    size: integer('size').notNull(),
+    storageKey: text('storage_key').notNull(),
+    uploadedBy: text('uploaded_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // share.list / base deletion cascade scan attachments by base.
+    baseIdx: index('attachment_base_id_idx').on(t.baseId),
+  }),
+);
 
 export const baseShare = pgTable(
   'base_share',
@@ -167,6 +185,8 @@ export const baseShare = pgTable(
   },
   (t) => ({
     tokenUq: uniqueIndex('base_share_token_uq').on(t.token),
+    // share.list filters by base; base deletion cascades over shares.
+    baseIdx: index('base_share_base_id_idx').on(t.baseId),
   }),
 );
 
@@ -207,5 +227,7 @@ export const baseInvite = pgTable(
   },
   (t) => ({
     tokenUq: uniqueIndex('base_invite_token_uq').on(t.token),
+    // invite.list filters by base; base deletion cascades over invites.
+    baseIdx: index('base_invite_base_id_idx').on(t.baseId),
   }),
 );

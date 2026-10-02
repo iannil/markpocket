@@ -17,6 +17,9 @@ const mockDb = vi.hoisted(() => {
       set: vi.fn(() => chain),
       delete: vi.fn(() => chain),
       leftJoin: vi.fn(() => chain),
+      onConflictDoUpdate: vi.fn(() => chain),
+      // assertCellValueReferable locks referenced record rows with .for('share').
+      for: vi.fn(() => chain),
       then: (onfulfilled: (v: T) => any) => Promise.resolve(resolveValue).then(onfulfilled),
       catch: (onrejected: any) => Promise.resolve(resolveValue).catch(onrejected),
     };
@@ -48,7 +51,14 @@ vi.mock('@/lib/expression-eval', () => ({
   evaluateExpression: vi.fn().mockReturnValue({ value: 1 }),
   extractDependsOn: vi.fn().mockReturnValue([]),
 }));
-vi.mock('@/lib/view-ast', () => ({ parseViewOptions: vi.fn().mockReturnValue({}) }));
+vi.mock('@/lib/view-ast', () => ({
+  parseViewOptions: vi.fn().mockReturnValue({}),
+  // field.delete cleanup helpers — identity/no-op mocks keep delete tests on
+  // the "no view references the field" path.
+  filterReferencesField: vi.fn().mockReturnValue(false),
+  removeFieldReferences: vi.fn((options: unknown) => options),
+  viewOptionsSchema: { safeParse: vi.fn().mockReturnValue({ success: true, data: {} }) },
+}));
 vi.mock('@/lib/view-query', () => ({
   compileFilter: vi.fn().mockReturnValue(null),
   compileSort: vi.fn().mockReturnValue(null),
@@ -67,6 +77,7 @@ vi.mock('@/server/plugins/field-value', () => ({
 import { fieldRouter } from './field';
 import { recordRouter } from './record';
 import { cellRouter } from './cell';
+import { record as recordTable } from '../../db/schema';
 
 describe('fieldRouter', () => {
   it('list returns an array', async () => {
@@ -184,6 +195,27 @@ describe('recordRouter', () => {
     expect(result.groups).toBeDefined();
   });
 
+  it('list rejects a viewId from another table', async () => {
+    // The shared chain may carry a then-override from an earlier test — reset
+    // it so the view lookup finds nothing.
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    ch.then = (onfulfilled: any) => Promise.resolve([]).then(onfulfilled);
+    await expect(
+      recordRouter.createCaller(session()).list({ tableId: 't1', viewId: 'vX' }),
+    ).rejects.toThrow('View does not belong to this table');
+  });
+
+  it('list rejects a viewId bound to a different table', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    ch.then = (onfulfilled: any) =>
+      Promise.resolve([{ id: 'vX', tableId: 't2', options: {} }]).then(onfulfilled);
+    await expect(
+      recordRouter.createCaller(session()).list({ tableId: 't1', viewId: 'vX' }),
+    ).rejects.toThrow('View does not belong to this table');
+  });
+
   it('create returns a record', async () => {
     // create() runs inside db.transaction; materializeExpressions reads the same
     // mocked chain (rows carry no expression fields).
@@ -209,6 +241,15 @@ describe('recordRouter', () => {
 });
 
 describe('cellRouter', () => {
+  // Route each awaited thenable in the shared chain to the next queued result.
+  function queueChainResults(ch: any, results: unknown[][]) {
+    let call = 0;
+    ch.then = (onfulfilled: any) => {
+      const v = results[Math.min(call++, results.length - 1)] ?? [];
+      return Promise.resolve(v).then(onfulfilled);
+    };
+  }
+
   it('upsert returns normalized value', async () => {
     const ch = (mockDb.db.select as any)();
     ch.limit.mockReturnValue(ch);
@@ -220,6 +261,229 @@ describe('cellRouter', () => {
       .createCaller(session())
       .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
     expect(result).toBeDefined();
+  });
+
+  it('upsert rejects values over the 256KB serialized cap', async () => {
+    await expect(
+      cellRouter
+        .createCaller(session())
+        .upsert({ recordId: 'r1', fieldId: 'f1', value: 'x'.repeat(256 * 1024 + 1) }),
+    ).rejects.toThrow('Cell value too large');
+  });
+
+  it('upsert measures the cap in bytes, not UTF-16 code units', async () => {
+    // 200,001 code units — passes the old string-length check, over the byte cap.
+    await expect(
+      cellRouter
+        .createCaller(session())
+        .upsert({ recordId: 'r1', fieldId: 'f1', value: 'あ'.repeat(200_001) }),
+    ).rejects.toThrow('Cell value too large');
+  });
+
+  it('upsert rejects a link value pointing at a missing record', async () => {
+    const { normalizeCellValue } = await import('@/server/plugins/field-value');
+    (normalizeCellValue as any).mockReturnValue({ value: ['rMissing'] });
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    // Awaited reads in order: field (link), record scope, existingRecordIds.
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ tableId: 't1' }],
+      [{ id: 'rOther' }], // only rOther exists in t2 — rMissing is dangling
+    ]);
+    await expect(
+      cellRouter
+        .createCaller(session())
+        .upsert({ recordId: 'r1', fieldId: 'f1', value: ['rMissing'] }),
+    ).rejects.toThrow('Unknown record id: rMissing');
+    (normalizeCellValue as any).mockReturnValue({ value: 'hello' });
+  });
+
+  it('upsert accepts a link value whose ids all exist in the target table', async () => {
+    const { normalizeCellValue } = await import('@/server/plugins/field-value');
+    (normalizeCellValue as any).mockReturnValue({ value: ['rOk'] });
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    ch.for.mockClear();
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    // Awaited reads in order: field (link), record scope, existingRecordIds
+    // (pre-transaction fast fail), the early record-row UPDATE (locks the
+    // target of the write before any cell row), existingRecordIds again
+    // (authoritative re-check under the advisory lock), existing cell
+    // (none → insert path).
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ tableId: 't1' }],
+      [{ id: 'rOk' }],
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [{ id: 'rOk' }], // in-transaction re-validation still sees rOk
+      [], // no existing cell → insert path
+    ]);
+    const result = await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: ['rOk'] });
+    expect(result).toBeDefined();
+    // The existence checks lock the referenced rows FOR SHARE: held to commit
+    // inside the transaction, they block a concurrent record/table delete
+    // long enough for its cleanup to see (and strip) this write's dead ids.
+    expect(ch.for).toHaveBeenCalledWith('share');
+    (normalizeCellValue as any).mockReturnValue({ value: 'hello' });
+  });
+
+  it('upsert rejects a link value whose record vanished before the lock', async () => {
+    const { normalizeCellValue } = await import('@/server/plugins/field-value');
+    (normalizeCellValue as any).mockReturnValue({ value: ['rVanished'] });
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    // The pre-transaction pass still sees the record; the in-transaction
+    // re-check (after the advisory lock) finds it gone — the lock-side verdict
+    // wins and the write is rejected (TOCTOU).
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ tableId: 't1' }],
+      [{ id: 'rVanished' }], // fast-fail pass: exists
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [], // in-lock re-check: deleted meanwhile
+    ]);
+    await expect(
+      cellRouter
+        .createCaller(session())
+        .upsert({ recordId: 'r1', fieldId: 'f1', value: ['rVanished'] }),
+    ).rejects.toThrow('Unknown record id: rVanished');
+    (normalizeCellValue as any).mockReturnValue({ value: 'hello' });
+  });
+
+  it('upsert maps a lock-timeout failure to a retryable CONFLICT', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    ch.for.mockReturnValue(ch);
+    ch.then = (onfulfilled: any) =>
+      Promise.resolve([{ id: 'f1', tableId: 't1', type: 'text', options: {} }]).then(onfulfilled);
+    // Awaited reads in order: field lookup, record scope check — then the
+    // transaction itself rejects with a Postgres lock-timeout error.
+    let calls = 0;
+    ch.then = (onfulfilled: any) =>
+      Promise.resolve(
+        calls++ === 0
+          ? [{ id: 'f1', tableId: 't1', type: 'text', options: {} }]
+          : [{ tableId: 't1' }],
+      ).then(onfulfilled);
+    (mockDb.db.transaction as any).mockRejectedValueOnce(
+      Object.assign(new Error('lock timeout'), { code: '55P03' }),
+    );
+    await expect(
+      cellRouter.createCaller(session()).upsert({ recordId: 'r1', fieldId: 'f1', value: 'v' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('upsert flags overwriting a recent edit by another user', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    // Awaited reads in order: field, record, the early record-row UPDATE,
+    // existing cell, recent history, then write-path thenables and
+    // materialize selects.
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ tableId: 't1' }],
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [{ id: 'c1', recordId: 'r1', fieldId: 'f1', value: 'old', updatedAt: new Date() }],
+      [{ changedBy: 'u2', changedAt: new Date() }],
+    ]);
+    const result = await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+    expect((result as any).value).toBe('hello');
+    expect(result.overwroteRecentBy).toEqual({ userId: 'u2' });
+  });
+
+  it('upsert does not flag the caller overwriting their own recent edit', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ tableId: 't1' }],
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [{ id: 'c1', recordId: 'r1', fieldId: 'f1', value: 'old', updatedAt: new Date() }],
+      [{ changedBy: 'u1', changedAt: new Date() }], // u1 = session user
+    ]);
+    const result = await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+    expect(result.overwroteRecentBy).toBeNull();
+  });
+
+  it('upsert does not flag stale (>60s) edits by other users', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ tableId: 't1' }],
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [{ id: 'c1', recordId: 'r1', fieldId: 'f1', value: 'old', updatedAt: new Date() }],
+      [{ changedBy: 'u2', changedAt: new Date(Date.now() - 120_000) }],
+    ]);
+    const result = await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+    expect(result.overwroteRecentBy).toBeNull();
+  });
+
+  it('upsert on a new cell attaches history to the surviving row id', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    // The shared chain accumulates insert calls across tests — assert only
+    // what this test wrote.
+    ch.values.mockClear();
+    // Awaited reads: field, record, early UPDATE record, existing cell (none),
+    // insert…returning (concurrent writer won → real id c9), recent history
+    // for c9.
+    queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ tableId: 't1' }],
+      [{ id: 'r1' }], // early UPDATE record returning — row still exists
+      [], // no existing cell
+      [{ id: 'c9' }],
+      [{ changedBy: 'u2', changedAt: new Date() }],
+    ]);
+    const result = await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+    expect((result as any).value).toBe('hello');
+    expect(result.overwroteRecentBy).toEqual({ userId: 'u2' });
+    // The history insert must use the returning id, not a fabricated uuid.
+    const historyValues = ch.values.mock.calls.find((args: any[]) => args[0]?.cellId !== undefined);
+    expect((historyValues?.[0] as { cellId: string }).cellId).toBe('c9');
+  });
+
+  it('upsert locks the record row before any cell row (AB-BA with record.delete)', async () => {
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    ch.update.mockClear();
+    ch.select.mockClear();
+    ch.then = (onfulfilled: any) =>
+      Promise.resolve([{ id: 'f1', tableId: 't1', type: 'text', options: {} }]).then(onfulfilled);
+    await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+
+    // record.delete reaches the record row last (its cell scan runs first, and
+    // the DELETE's cascade re-locks this record's cells after the record row),
+    // so upsert must reach it first — otherwise cell-then-record vs
+    // record-then-cell forms an AB-BA deadlock on the {record, cell} pair.
+    // The first in-transaction statement after the advisory lock is therefore
+    // the record UPDATE, before the existing-cell select.
+    const recordUpdates = ch.update.mock.calls.filter((args: any[]) => args[0] === recordTable);
+    expect(recordUpdates).toHaveLength(1);
+    expect(ch.update.mock.invocationCallOrder[0]).toBeLessThan(
+      ch.select.mock.invocationCallOrder[0],
+    );
   });
 
   it('upsert rejects error from normalizeCellValue', async () => {

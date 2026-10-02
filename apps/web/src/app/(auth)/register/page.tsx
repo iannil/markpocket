@@ -5,6 +5,20 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 
+// Map raw better-auth messages to user-facing copy. The server can reject
+// sign-ups (e.g. DISABLE_SIGNUP=1) — surface that case clearly instead of the
+// raw API wording. No client-side toggle: the server is the source of truth.
+function friendlySignUpError(message: string | undefined): string {
+  const msg = message ?? '';
+  if (/sign\s*up.*disabled|registration.*disabled|not accepting/i.test(msg)) {
+    return 'Registration is currently disabled on this server.';
+  }
+  if (/already (exists|registered)/i.test(msg)) {
+    return 'An account with this email already exists.';
+  }
+  return msg || 'Sign up failed';
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -25,7 +39,7 @@ export default function RegisterPage() {
     try {
       const res = await authClient.signUp.email({ email, password, name });
       if (res.error) {
-        setError(res.error.message ?? 'Sign up failed');
+        setError(friendlySignUpError(res.error.message));
         return;
       }
       router.push('/bases');
@@ -48,6 +62,7 @@ export default function RegisterPage() {
           <span className="text-xs text-muted-foreground">name</span>
           <input
             required
+            autoComplete="name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -58,6 +73,7 @@ export default function RegisterPage() {
           <input
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -68,6 +84,7 @@ export default function RegisterPage() {
           <input
             type="password"
             required
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -78,6 +95,7 @@ export default function RegisterPage() {
           <input
             type="password"
             required
+            autoComplete="new-password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"

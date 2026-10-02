@@ -3,13 +3,39 @@ import { z } from 'zod';
 
 import { baseShare, base, table, field, view } from '../../db/schema';
 import { db } from '../../db';
-import { publicProcedure, router } from '../init'; // Token lookup shared by all three procedures. Returns null for missing,
+import { parseViewOptionsStrict, type ViewOptions } from '@/lib/view-ast';
+import { publicProcedure, router } from '../init';
+// Token lookup shared by all three procedures. Returns null for missing,
 // consumed (deleted), or expired shares.
 async function findLiveShare(token: string) {
   const [share] = await db.select().from(baseShare).where(eq(baseShare.token, token)).limit(1);
   if (!share) return null;
   if (share.expiresAt && new Date(share.expiresAt) < new Date()) return null;
   return share;
+}
+
+// Resolve the view a share is pinned to, scoped to the shared base. A share
+// whose view was deleted — or whose stored options no longer parse against
+// the current schema — is treated as invalid (null), never as "share
+// everything": the tolerant fallback would silently drop filter AND
+// hiddenFields and widen the share to the full table (review M-1).
+async function findSharedView(share: {
+  baseId: string;
+  viewId: string | null;
+}): Promise<{ id: string; tableId: string; options: ViewOptions } | null> {
+  if (!share.viewId) return null;
+  const [v] = await db
+    .select({ id: view.id, tableId: view.tableId, options: view.options })
+    .from(view)
+    .innerJoin(table, eq(view.tableId, table.id))
+    .where(and(eq(view.id, share.viewId), eq(table.baseId, share.baseId)))
+    .limit(1);
+  if (!v) return null;
+  // Strict parse on the public path: legacy option shapes the current schema
+  // rejects invalidate the share (fail closed), same as a deleted view.
+  const options = parseViewOptionsStrict(v.options);
+  if (!options) return null;
+  return { id: v.id, tableId: v.tableId, options };
 }
 
 export const publicShareRouter = router({
@@ -22,12 +48,27 @@ export const publicShareRouter = router({
       .where(eq(base.id, share.baseId))
       .limit(1);
     if (!baseRow) return null;
+    if (share.viewId && !(await findSharedView(share))) return null;
     return { ...baseRow, viewId: share.viewId, shareId: share.id };
   }),
 
   getTables: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
     const share = await findLiveShare(input.token);
     if (!share) return [];
+    if (share.viewId) {
+      // Same fail-closed rule as getBase/getRecords: a view-bound share whose
+      // view is gone — or whose stored options fail the strict parse — exposes
+      // NOTHING, not even the base's table names. [] here mirrors getBase's
+      // null: an untrustworthy pinned view invalidates the whole share.
+      const v = await findSharedView(share);
+      if (!v) return [];
+      // A view-bound share exposes exactly the view's table — listing every
+      // table in the base would leak structure the share never granted.
+      return db
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(and(eq(table.id, v.tableId), eq(table.baseId, share.baseId)));
+    }
     return db
       .select({ id: table.id, name: table.name })
       .from(table)
@@ -40,6 +81,11 @@ export const publicShareRouter = router({
         token: z.string(),
         tableId: z.string(),
         limit: z.number().int().min(1).max(1000).optional(),
+        // Page offset so the share page can append pages instead of growing
+        // the limit forever (listRecordsPivoted pages with a deterministic
+        // createdAt/id ordering, so offsets are stable across fetches).
+        // Capped to keep an unauthenticated endpoint from forcing deep scans.
+        offset: z.number().int().min(0).max(1_000_000).optional(),
       }),
     )
     .query(async ({ input }) => {
@@ -54,7 +100,7 @@ export const publicShareRouter = router({
         .limit(1);
       if (!tableRow || tableRow.baseId !== share.baseId) return null;
 
-      let fields = await db
+      const fields = await db
         .select({ id: field.id, name: field.name, type: field.type, options: field.options })
         .from(field)
         .where(eq(field.tableId, input.tableId));
@@ -63,23 +109,28 @@ export const publicShareRouter = router({
 
       let records;
       let total: number;
+      let visibleFields = fields;
       if (share.viewId) {
-        // The view must belong to the shared base — a stale cross-base viewId
-        // must not leak another base's view config.
-        const [v] = await db
-          .select({ id: view.id, options: view.options })
-          .from(view)
-          .innerJoin(table, eq(view.tableId, table.id))
-          .where(and(eq(view.id, share.viewId), eq(table.baseId, share.baseId)))
-          .limit(1);
+        const v = await findSharedView(share);
+        // Stale viewId (view deleted) invalidates the share — never fall
+        // through to an unfiltered listing of the whole table.
+        if (!v) return null;
+        // The share only ever exposes the pinned view's own table.
+        if (v.tableId !== input.tableId) return null;
+
         const { compileFilter, compileSort } = await import('@/lib/view-query');
-        const { parseViewOptions } = await import('@/lib/view-ast');
-        const viewOptions = v ? parseViewOptions(v.options) : {};
-        // Apply hiddenFields from the view
+        // Options are already strictly parsed by findSharedView — a share
+        // whose stored options fail the schema never reaches this point.
+        const viewOptions = v.options;
+        // Hidden fields are metadata + data: drop them from the field list
+        // returned to the client…
         const hiddenFields = (viewOptions.hiddenFields ?? []) as string[];
         if (hiddenFields.length > 0) {
-          fields = fields.filter((f) => !hiddenFields.includes(f.id));
+          const hidden = new Set(hiddenFields);
+          visibleFields = fields.filter((f) => !hidden.has(f.id));
         }
+        // …but compile filter/sort against the FULL field map so a condition
+        // on a hidden field keeps filtering instead of being dropped.
         const fieldsById = new Map(
           fields.map((f) => [
             f.id,
@@ -92,18 +143,28 @@ export const publicShareRouter = router({
           listRecordsPivoted(
             input.tableId,
             { where: whereFrag, orderBy: orderByFrag },
-            0,
+            input.offset ?? 0,
             input.limit ?? 100,
           ),
           countRecords(input.tableId, whereFrag),
         ]);
+        // Project cells down to the visible whitelist (copy — never return
+        // the raw row map). Field ids outside the list are hidden-field data.
+        const visibleIds = new Set(visibleFields.map((f) => f.id));
+        records = records.map((r: { id: string; cells: Record<string, unknown> }) => {
+          const cells: Record<string, unknown> = {};
+          for (const [fieldId, value] of Object.entries(r.cells)) {
+            if (visibleIds.has(fieldId)) cells[fieldId] = value;
+          }
+          return { id: r.id, cells };
+        });
       } else {
         [records, total] = await Promise.all([
-          listRecordsPivoted(input.tableId, {}, 0, input.limit ?? 100),
+          listRecordsPivoted(input.tableId, {}, input.offset ?? 0, input.limit ?? 100),
           countRecords(input.tableId),
         ]);
       }
 
-      return { fields, records, total };
+      return { fields: visibleFields, records, total };
     }),
 });

@@ -71,6 +71,27 @@
       "when": 1790868532027,
       "tag": "0009_groovy_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790954932027,
+      "tag": "0010_record_sort_and_history_time_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790954933000,
+      "tag": "0011_redundant_sentry",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790915347054,
+      "tag": "0012_worthless_ozymandias",
+      "breakpoints": true
     }
   ]
 }

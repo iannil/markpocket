@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Slot } from '@/lib/plugins/ui-slot-client';
 import { toast } from '@/lib/toast';
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
 
 export default function GeneralTab() {
@@ -21,6 +22,7 @@ export default function GeneralTab() {
   const utils = trpc.useUtils();
   const base = trpc.base.get.useQuery({ id: baseId });
   const tables = trpc.table.list.useQuery({ baseId });
+  useBreadcrumbSetter([{ label: 'Settings' }]);
 
   const [name, setName] = useState('');
   useEffect(() => {
@@ -95,19 +97,28 @@ export default function GeneralTab() {
             onImport: async (tableId: string, file: File) => {
               try {
                 const csvText = await file.text();
-                const { imported, skippedHeaders, skippedRows } = await importMut.mutateAsync({
+                const { imported, skippedHeaders, emptyCellRows } = await importMut.mutateAsync({
                   tableId,
                   csvText,
                 });
                 const notes: string[] = [`Imported ${imported} rows`];
                 if (skippedHeaders.length > 0)
                   notes.push(`unmatched columns: ${skippedHeaders.join(', ')}`);
-                if (skippedRows.length > 0) notes.push(`${skippedRows.length} rows had no values`);
+                if (emptyCellRows.length > 0)
+                  notes.push(`${emptyCellRows.length} rows had no values`);
                 toast.success(notes.join(' · '));
                 // Grid reads records via record.list; invalidate the record query it
                 // actually reads (mirrors grid-editor.tsx) so the Grid repaints.
                 void utils.record.list.invalidate({ tableId });
               } catch (err) {
+                // The import commits in batches — a mid-way failure still leaves the
+                // already-imported rows in the table, so refresh the grid too.
+                // Matched via the stable contract token plugin-csv's server
+                // appends to partial-failure messages; matching prose (e.g.
+                // "were imported") breaks the moment the wording changes.
+                if (err instanceof Error && /\[partial-import\]/.test(err.message)) {
+                  void utils.record.list.invalidate({ tableId });
+                }
                 toast.error(err instanceof Error ? err.message : 'Import failed');
               }
             },

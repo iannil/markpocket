@@ -1,9 +1,18 @@
 'use client';
 
-import { redirect } from 'next/navigation';
-import { useParams } from 'next/navigation';
+import { BaseHistoryList } from '@/components/base-history-list';
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 
+// Rendered inside the settings tabs — no redirect out of the tab layout.
 export default function HistoryTab() {
-  const { baseId } = useParams<{ baseId: string }>();
-  redirect(`/bases/${baseId}/history`);
+  useBreadcrumbSetter([{ label: 'History' }]);
+
+  return (
+    <div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        All changes across this base, newest first.
+      </p>
+      <BaseHistoryList />
+    </div>
+  );
 }

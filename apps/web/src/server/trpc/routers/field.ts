@@ -1,18 +1,94 @@
 import { randomUUID } from 'node:crypto';
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 import { FIELD_TYPES, FieldType, type FieldOptions } from '@/lib/field-types';
 import { extractDependsOn } from '@/lib/expression-eval';
+import {
+  filterReferencesField,
+  parseViewOptions,
+  removeFieldReferences,
+  viewOptionsSchema,
+} from '@/lib/view-ast';
 import { defaultOptions, parseOptions } from '@/server/plugins/field-value';
 import { backfillExpressionField } from '@/server/expression';
-import { field } from '../../db/schema';
+import { baseShare, cell, field, table, view } from '../../db/schema';
 import { db } from '../../db';
+import { mapBusyToConflict } from '../../db/pg-errors';
 import { publishTableChange } from '../../realtime/publish';
 import { assertRole, assertTableRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
+
+// Hard ceiling independent of type-specific schemas — future field types must
+// not be able to smuggle megabyte option blobs into every field.list payload.
+const MAX_OPTIONS_BYTES = 64 * 1024;
+
+function assertOptionsBounded(options: unknown): void {
+  const serialized = JSON.stringify(options) ?? '';
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_OPTIONS_BYTES) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Field options too large (limit ${MAX_OPTIONS_BYTES / 1024}KB serialized)`,
+    });
+  }
+}
+
+// Link targets must live in the same base — cross-base links would dangle
+// outside every base-scoped cleanup scan (table/base delete, record.delete).
+// The FOR UPDATE row lock serializes against table.delete's final
+// transaction (which locks the target row before its referrer guard):
+// whichever side commits first, the other sees either the new referrer
+// field (delete aborts) or a missing target (create/retarget aborts).
+async function assertLinkTargetInBase(
+  targetTableId: unknown,
+  baseId: string,
+  executor: Pick<typeof db, 'select'> = db,
+): Promise<void> {
+  if (typeof targetTableId !== 'string' || !targetTableId) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Link field requires a target table' });
+  }
+  const [target] = await executor
+    .select({ baseId: table.baseId })
+    .from(table)
+    .where(eq(table.id, targetTableId))
+    .limit(1)
+    .for('update');
+  if (!target || target.baseId !== baseId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Link target table must exist and belong to the same base',
+    });
+  }
+}
+
+// ADR-0003: expressions may only reference existing non-expression fields of
+// their own table — expression-on-expression would need recursive evaluation
+// and dependsOn would never settle.
+async function assertDependsOnValid(tableId: string, dependsOn: string[]): Promise<void> {
+  if (dependsOn.length === 0) return;
+  const fields = await db
+    .select({ id: field.id, type: field.type })
+    .from(field)
+    .where(eq(field.tableId, tableId));
+  const byId = new Map(fields.map((f) => [f.id, f]));
+  for (const id of dependsOn) {
+    const ref = byId.get(id);
+    if (!ref) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Expression references unknown field ${id}`,
+      });
+    }
+    if (ref.type === FieldType.Expression) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Expression cannot reference expression field ${id}`,
+      });
+    }
+  }
+}
 
 export const fieldRouter = router({
   list: protectedProcedure
@@ -38,37 +114,55 @@ export const fieldRouter = router({
     .mutation(async ({ ctx, input }) => {
       await assertTableRole(input.tableId, ctx.session.user.id, 'editor');
       const options = parseOptions(input.type, input.options ?? defaultOptions(input.type));
+      assertOptionsBounded(options);
       // dependsOn is server-derived — a client-supplied value is never trusted.
       if (input.type === FieldType.Expression) {
-        (options as { dependsOn?: string[] }).dependsOn = extractDependsOn(
-          (options as { expression?: string }).expression ?? '',
+        const dependsOn = extractDependsOn((options as { expression?: string }).expression ?? '');
+        (options as { dependsOn?: string[] }).dependsOn = dependsOn;
+        await assertDependsOnValid(input.tableId, dependsOn);
+      }
+      const baseId = input.type === FieldType.Link ? await baseIdFromTable(input.tableId) : null;
+      if (input.type === FieldType.Link && !baseId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      }
+      const row = await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          // Link validation runs in-transaction with the FOR UPDATE target-row
+          // lock (see assertLinkTargetInBase) so it serializes against
+          // table.delete's final transaction.
+          if (input.type === FieldType.Link) {
+            await assertLinkTargetInBase(
+              (options as { targetTableId?: unknown }).targetTableId,
+              baseId!,
+              tx,
+            );
+          }
+          const [created] = await tx
+            .insert(field)
+            .values({
+              id: randomUUID(),
+              tableId: input.tableId,
+              name: input.name,
+              type: input.type,
+              options,
+            })
+            .returning();
+          return created!;
+        }),
+      );
+      // New expression field: materialize values for existing records. Runs
+      // after the definition commit — the backfill batches its own
+      // transactions and must not nest inside the field's.
+      if (input.type === FieldType.Expression) {
+        const exprOpts = options as { expression?: string };
+        await backfillExpressionField(
+          input.tableId,
+          row.id,
+          exprOpts.expression ?? '',
+          ctx.session.user.id,
         );
       }
-      const row = await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(field)
-          .values({
-            id: randomUUID(),
-            tableId: input.tableId,
-            name: input.name,
-            type: input.type,
-            options,
-          })
-          .returning();
-        // New expression field: materialize values for existing records.
-        if (input.type === FieldType.Expression) {
-          const exprOpts = options as { expression?: string };
-          await backfillExpressionField(
-            tx,
-            input.tableId,
-            created!.id,
-            exprOpts.expression ?? '',
-            ctx.session.user.id,
-          );
-        }
-        return created!;
-      });
-      void publishTableChange(input.tableId);
+      void publishTableChange(input.tableId, ctx.session.user.id);
       return row;
     }),
 
@@ -83,7 +177,7 @@ export const fieldRouter = router({
         .set({ name: input.name })
         .where(eq(field.id, input.id))
         .returning();
-      if (row) void publishTableChange(row.tableId);
+      if (row) void publishTableChange(row.tableId, ctx.session.user.id);
       return row;
     }),
 
@@ -98,32 +192,77 @@ export const fieldRouter = router({
       }
       await assertTableRole(existing.tableId, ctx.session.user.id, 'editor');
       const options = parseOptions(existing.type as FieldType, input.options) as FieldOptions;
+      assertOptionsBounded(options);
       // dependsOn is server-derived on every expression write.
       if (existing.type === FieldType.Expression) {
-        (options as { dependsOn?: string[] }).dependsOn = extractDependsOn(
-          (options as { expression?: string }).expression ?? '',
+        const dependsOn = extractDependsOn((options as { expression?: string }).expression ?? '');
+        (options as { dependsOn?: string[] }).dependsOn = dependsOn;
+        await assertDependsOnValid(existing.tableId, dependsOn);
+      }
+      const linkBaseId =
+        existing.type === FieldType.Link ? await baseIdFromTable(existing.tableId) : null;
+      if (existing.type === FieldType.Link && !linkBaseId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
+      }
+      const row = await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          if (existing.type === FieldType.Link) {
+            // In-transaction with the FOR UPDATE target-row lock — same
+            // serialization against table.delete as field.create.
+            await assertLinkTargetInBase(
+              (options as { targetTableId?: unknown }).targetTableId,
+              linkBaseId!,
+              tx,
+            );
+            // Retargeting a link that already stores values would orphan them: the
+            // cells keep pointing at the old table's records (dead links rendered,
+            // every future write rejected against the new target). Redirecting an
+            // empty column is fine — there is nothing to orphan.
+            const oldTarget = (existing.options as { targetTableId?: unknown } | null)
+              ?.targetTableId;
+            const newTarget = (options as { targetTableId?: unknown }).targetTableId;
+            if (newTarget !== oldTarget) {
+              const [stored] = await tx
+                .select({ id: cell.id })
+                .from(cell)
+                .where(eq(cell.fieldId, input.id))
+                .limit(1);
+              if (stored) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message:
+                    'Cannot retarget a link field with existing values. Clear the column first.',
+                });
+              }
+            }
+          }
+          const [updated] = await tx
+            .update(field)
+            .set({ options })
+            .where(eq(field.id, input.id))
+            .returning();
+          // The pre-transaction read is long stale by now: a concurrent
+          // field.delete commits in between and this update matches 0 rows.
+          // Returning [] must surface as NOT_FOUND, not fall through the old
+          // non-null assertion and blow up on row.tableId after commit (500).
+          if (!updated) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
+          }
+          return updated;
+        }),
+      );
+      // Expression definition changed: re-materialize every existing record.
+      // Runs after the definition commit (the backfill owns its transactions).
+      if (existing.type === FieldType.Expression) {
+        const exprOpts = options as { expression?: string };
+        await backfillExpressionField(
+          existing.tableId,
+          input.id,
+          exprOpts.expression ?? '',
+          ctx.session.user.id,
         );
       }
-      const row = await db.transaction(async (tx) => {
-        const [updated] = await tx
-          .update(field)
-          .set({ options })
-          .where(eq(field.id, input.id))
-          .returning();
-        // Expression definition changed: re-materialize every existing record.
-        if (existing.type === FieldType.Expression) {
-          const exprOpts = options as { expression?: string };
-          await backfillExpressionField(
-            tx,
-            existing.tableId,
-            input.id,
-            exprOpts.expression ?? '',
-            ctx.session.user.id,
-          );
-        }
-        return updated!;
-      });
-      void publishTableChange(row.tableId);
+      void publishTableChange(row.tableId, ctx.session.user.id);
       return row;
     }),
 
@@ -135,9 +274,75 @@ export const fieldRouter = router({
       const baseId = await baseIdFromTable(existing.tableId);
       if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
       await assertRole(baseId, ctx.session.user.id, 'editor');
-      // FK cascade clears cells; cell_history rows persist (no FK on cellId).
-      await db.delete(field).where(eq(field.id, input.id));
-      void publishTableChange(existing.tableId);
+      // ADR-0003: a field referenced by a live expression can't vanish — the
+      // dependent expression would evaluate against a missing input forever.
+      const siblings = await db
+        .select({ id: field.id, name: field.name, options: field.options })
+        .from(field)
+        .where(eq(field.tableId, existing.tableId));
+      const dependentNames = siblings
+        .filter(
+          (f) =>
+            f.id !== input.id &&
+            ((f.options as { dependsOn?: string[] } | null)?.dependsOn ?? []).includes(input.id),
+        )
+        .map((f) => f.name);
+      if (dependentNames.length > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Field is referenced by expression field(s) ${dependentNames.join(', ')} — delete or edit them first`,
+        });
+      }
+      // Review M-2: deleting a field its views still reference would let
+      // compileCondition silently drop the filter condition (unknown fieldId
+      // → null) and widen every share pinned to those views. Cleanup instead:
+      // prune the references from every view of the table, and invalidate the
+      // shares of views whose FILTER referenced the field — losing a condition
+      // widens the row set, so those shares must not outlive the field. Views
+      // without a bound share only get their options pruned (sort/group/
+      // hiddenFields references don't change which rows a share exposes).
+      await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          // Serialize against view.updateOptions writers on this table: under
+          // READ COMMITTED an options write committing after the view scan below
+          // stays invisible to this transaction — a filter referencing the dying
+          // field would land post-cleanup and every share pinned to the view
+          // silently widens (compileFilter drops the dead condition). The
+          // 'view-options:' namespace keeps this lock disjoint from cell.ts's
+          // per-cell locks; view.ts takes the same lock around options writes.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext('view-options:' || ${existing.tableId}))`,
+          );
+          const views = await tx
+            .select({ id: view.id, options: view.options })
+            .from(view)
+            .where(eq(view.tableId, existing.tableId));
+          const filterHitViewIds: string[] = [];
+          for (const v of views) {
+            const parsed = parseViewOptions(v.options);
+            if (filterReferencesField(parsed.filter, input.id)) filterHitViewIds.push(v.id);
+            const cleaned = removeFieldReferences(parsed, input.id);
+            // Identity means nothing referenced the field — skip the rewrite.
+            if (cleaned === parsed) continue;
+            // Cleanup only removes nodes from an already-valid tree, so this
+            // cannot fail in practice — revalidate anyway so a malformed write
+            // can never reach the options column.
+            const check = viewOptionsSchema.safeParse(cleaned);
+            if (check.success) {
+              await tx.update(view).set({ options: check.data }).where(eq(view.id, v.id));
+            }
+          }
+          if (filterHitViewIds.length > 0) {
+            // Fail-closed: revoke the share rows outright (same end state the
+            // holder sees as shareRouter.delete — token dead, recreate to
+            // re-share). baseShare.viewId has no FK, so this is manual.
+            await tx.delete(baseShare).where(inArray(baseShare.viewId, filterHitViewIds));
+          }
+          // FK cascade clears cells; cell_history rows persist (no FK on cellId).
+          await tx.delete(field).where(eq(field.id, input.id));
+        }),
+      );
+      void publishTableChange(existing.tableId, ctx.session.user.id);
       return { ok: true };
     }),
 });

@@ -27,6 +27,9 @@ export async function listRecordsPivoted(
   const orderBys: SQL[] = [];
   if (opts.orderBy) orderBys.push(opts.orderBy);
   orderBys.push(desc(record.createdAt));
+  // Unique tiebreaker — createdAt collisions would otherwise make offset pages
+  // overlap or skip rows between "Show more" fetches.
+  orderBys.push(desc(record.id));
 
   const records = await db
     .select()

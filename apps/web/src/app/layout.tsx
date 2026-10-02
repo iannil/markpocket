@@ -7,7 +7,11 @@ import { Toaster } from '@/components/toaster';
 import '@/plugins.client';
 
 export const metadata: Metadata = {
-  title: 'markpocket',
+  title: {
+    default: 'markpocket',
+    // Route-level titles ("Workspace", "<Base> · table", …) compose with this.
+    template: '%s · markpocket',
+  },
   description: 'the airtable you own',
 };
 

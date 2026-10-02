@@ -5,12 +5,14 @@ import { useParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { EmptyState } from '@/components/empty-state';
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
 
 export default function TablesTab() {
   const { baseId } = useParams<{ baseId: string }>();
   const utils = trpc.useUtils();
   const { data: tables, isLoading } = trpc.table.list.useQuery({ baseId });
+  useBreadcrumbSetter([{ label: 'Settings' }]);
   const [name, setName] = useState('');
   const create = trpc.table.create.useMutation({
     onSuccess: () => {

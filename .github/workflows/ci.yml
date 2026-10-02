@@ -8,18 +8,34 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Actions are pinned to full commit SHAs (supply-chain hardening — a hijacked
+# tag must not silently change what CI runs). Dependabot (github-actions
+# ecosystem, weekly — see .github/dependabot.yml) rebumps the SHAs, so forks
+# still get updates via PRs.
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
           cache: pnpm
+      # Turbo local cache (.turbo) — restored across runs so lint/typecheck/
+      # build hits skip cleanly.
+      - name: Cache turbo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
       - name: Install
         run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm format:check
       - name: Lint
         run: pnpm lint
       - name: Typecheck
@@ -32,3 +48,80 @@ jobs:
           DATABASE_URL: postgresql://placeholder:placeholder@placeholder:5432/placeholder
           BETTER_AUTH_SECRET: ci-placeholder-secret-32-chars-minimum
           BETTER_AUTH_URL: http://localhost:3000
+
+  # Full-stack API e2e: build the app, boot it against a real Postgres service
+  # (the custom server applies migrations on startup), then run the YAML
+  # scenarios in tests/e2e/api/ via tests/run-api-tests.cjs. Postgres flavor
+  # matches docker-compose.yml (postgres:16-alpine) so CI exercises the same
+  # image users deploy.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: markpocket
+          POSTGRES_PASSWORD: markpocket
+          POSTGRES_DB: markpocket
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U markpocket -d markpocket"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://markpocket:markpocket@localhost:5432/markpocket
+      # Must be >= 32 chars and not start with "placeholder"/"build-time"
+      # (src/server.ts refuses to boot otherwise).
+      BETTER_AUTH_SECRET: ci-e2e-secret-0123456789abcdef0123456789abcdef
+      BETTER_AUTH_URL: http://localhost:3000
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Cache turbo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .turbo
+          # Distinct primary key from the verify job: two jobs saving the same
+          # key race and the slower save is silently dropped. The shared
+          # restore-key prefix still lets either job reuse the other's cache.
+          key: turbo-${{ runner.os }}-${{ github.sha }}-e2e
+          restore-keys: |
+            turbo-${{ runner.os }}-
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Start server
+        env:
+          # Serve the production build (dev=false also enables boot migrations
+          # and the fail-closed secret check in src/server.ts).
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+        run: |
+          pnpm --filter @markpocket/web start 2>&1 | tee /tmp/web-server.log &
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "✓ server healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "✗ server did not become healthy in 180s — last server logs:"
+          tail -n 100 /tmp/web-server.log || true
+          exit 1
+      - name: API e2e tests
+        run: node tests/run-api-tests.cjs
+      # The server runs in the background with its output redirected — without
+      # this step a later failure (e.g. an e2e scenario) would leave its logs
+      # invisible.
+      - name: Dump server log
+        if: failure()
+        run: tail -n 500 /tmp/web-server.log || true

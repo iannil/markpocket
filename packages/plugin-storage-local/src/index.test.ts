@@ -28,6 +28,17 @@ describe('plugin-storage-local', () => {
     await expect(localProvider.get(key)).rejects.toThrow();
   });
 
+  it('round-trips extensionless files the same as extended ones', async () => {
+    const { localProvider } = await import('./index');
+    // makeKey used to emit a bare uuid that assertSafeKey then rejected (500
+    // on upload) — extension must be optional end-to-end.
+    const key = localProvider.makeKey('Makefile');
+    expect(key).toMatch(/^[a-f0-9-]{36}$/);
+    await localProvider.put(key, Buffer.from('data'));
+    expect((await localProvider.get(key)).toString()).toBe('data');
+    await localProvider.remove(key);
+  });
+
   it('makeKey never lets filename parts reach the key', async () => {
     const { localProvider } = await import('./index');
     // Traversal payloads must collapse to a safe uuid(+ext) or no ext at all.
@@ -54,7 +65,29 @@ describe('plugin-storage-local', () => {
     ]) {
       await expect(localProvider.put(key, Buffer.from('x'))).rejects.toThrow(/unsafe storage key/);
       await expect(localProvider.get(key)).rejects.toThrow(/unsafe storage key/);
+      await expect(localProvider.getStream?.(key)).rejects.toThrow(/unsafe storage key/);
       await expect(localProvider.remove(key)).rejects.toThrow(/unsafe storage key/);
     }
+  });
+
+  it('streams the same bytes get() returns (download path, L-6)', async () => {
+    const { localProvider } = await import('./index');
+    const key = localProvider.makeKey('big.bin');
+    // 多段 payload：断言流式读会按序拼回全部块，而不是只送第一块。
+    const payload = Buffer.concat([
+      Buffer.from('block-0.'.repeat(64_000)),
+      Buffer.from('block-1.'.repeat(64_000)),
+      Buffer.from('block-2.'),
+    ]);
+    await localProvider.put(key, payload);
+    const stream = await localProvider.getStream!(key);
+    const chunks: Buffer[] = [];
+    stream.on('data', (c: Buffer) => chunks.push(c));
+    await new Promise<void>((resolve, reject) => {
+      stream.on('end', () => resolve());
+      stream.on('error', reject);
+    });
+    expect(Buffer.concat(chunks).equals(payload)).toBe(true);
+    await localProvider.remove(key);
   });
 });

@@ -1,0 +1,68 @@
+# Actions are pinned to commit SHAs (`@<sha> # vN.N.N`) in the workflows —
+# weekly dependabot PRs bump the SHAs/tags. pnpm workspaces need one npm entry
+# per manifest directory; minor/patch bumps are grouped to keep PR count sane.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(ci)'
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      root-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps-web)'
+    groups:
+      web-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/plugin-sdk
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps-sdk)'
+    groups:
+      sdk-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/plugin-csv
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps-csv)'
+    groups:
+      csv-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /packages/plugin-storage-local
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(deps-storage)'
+    groups:
+      storage-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: 'chore(docker)'

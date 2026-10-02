@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import { toast } from '@/lib/toast';
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
 
 export default function NewBasePage() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const [name, setName] = useState('');
+  useBreadcrumbSetter([{ label: 'New base' }]);
   const create = trpc.base.create.useMutation({
     onSuccess: (row) => {
       void utils.base.list.invalidate();

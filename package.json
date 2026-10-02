@@ -1,6 +1,7 @@
 {
   "name": "markpocket",
   "version": "1.0.0-alpha.1",
+  "license": "AGPL-3.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
@@ -17,7 +18,7 @@
     "db:migrate": "pnpm --filter @markpocket/web exec drizzle-kit migrate",
     "db:studio": "pnpm --filter @markpocket/web exec drizzle-kit studio",
     "test": "vitest run",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "typecheck": "turbo run typecheck",
     "test:e2e-api": "node tests/run-api-tests.cjs"
   },

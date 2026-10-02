@@ -1,9 +1,15 @@
 import { sql, type SQL } from 'drizzle-orm';
+import { TRPCError } from '@trpc/server';
 
 import { FieldType, type FieldOptions } from './field-types';
 import { isFilterGroup, type FilterNode, type GroupSpec, type SortSpec } from './view-ast';
 
 type FieldMap = Map<string, { type: string; options: FieldOptions }>;
+
+// Matches view-ast's write-time limit. Options rows written before schema
+// validation existed may nest deeper than allowed — fail closed with a client
+// error instead of overflowing the stack.
+const MAX_FILTER_COMPILE_DEPTH = 10;
 
 // `c.value #>> '{}'` extracts the JSONB scalar as text. Injected literally (constant
 // string — not user input), so sql.raw is safe here.
@@ -81,11 +87,18 @@ function compileCondition(
   return sql`EXISTS (SELECT 1 FROM cell c WHERE c.record_id = record.id AND c.field_id = ${cond.fieldId} AND ${op})`;
 }
 
-export function compileFilter(node: FilterNode | undefined, fields: FieldMap): SQL | null {
+export function compileFilter(
+  node: FilterNode | undefined,
+  fields: FieldMap,
+  depth = 0,
+): SQL | null {
   if (!node) return null;
+  if (depth > MAX_FILTER_COMPILE_DEPTH) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Filter nesting exceeds 10 levels' });
+  }
   if (isFilterGroup(node)) {
     const parts = node.conditions
-      .map((c) => compileFilter(c, fields))
+      .map((c) => compileFilter(c, fields, depth + 1))
       .filter((x): x is SQL => x !== null);
     if (parts.length === 0) return null;
     if (parts.length === 1) return parts[0]!;

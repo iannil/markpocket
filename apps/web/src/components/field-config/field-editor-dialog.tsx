@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,19 +29,17 @@ export interface FieldEditorTarget {
 }
 
 function FieldEditorDialogTablePicker({
+  baseId,
   value,
   onChange,
 }: {
+  baseId: string;
   value: string;
   onChange: (id: string) => void;
 }) {
-  const basesQ = trpc.base.list.useQuery();
-  const firstBaseId = basesQ.data?.[0]?.id ?? '';
-  const { data: tables } = trpc.table.list.useQuery(
-    { baseId: firstBaseId },
-    { enabled: !!firstBaseId },
-  );
-  // v1: link targets come from the first base the user is a member of.
+  // Link targets must come from the CURRENT base — listing another base's
+  // tables creates cross-base links the server rejects (or worse, accepts).
+  const { data: tables } = trpc.table.list.useQuery({ baseId }, { enabled: !!baseId });
   const allTables = tables ?? [];
   return (
     <Select value={value} onValueChange={(v) => v && onChange(v)}>
@@ -62,13 +61,20 @@ export function FieldEditorDialog({
   open,
   onOpenChange,
   tableId,
+  baseId,
   field,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tableId: string;
+  /** Base owning `tableId` — link targets are picked from its tables. Falls
+   *  back to the route param when omitted (the dialog always renders under
+   *  /bases/[baseId]/...). */
+  baseId?: string;
   field?: FieldEditorTarget;
 }) {
+  const routeBaseId = useParams<{ baseId: string }>().baseId;
+  const effectiveBaseId = baseId ?? routeBaseId;
   const utils = trpc.useUtils();
   const create = trpc.field.create.useMutation({
     onSuccess: () => {
@@ -111,21 +117,32 @@ export function FieldEditorDialog({
     }
   }, [open, field]);
 
-  function onSave() {
-    if (!name.trim()) return;
+  // Serial save: rename first, then options. On failure the dialog STAYS OPEN
+  // (each mutation already toasts its error) so the user's input is not lost.
+  const [saving, setSaving] = useState(false);
+  async function onSave() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
     if (editing && field) {
-      rename.mutate({ id: field.id, name });
-      if (field.type === FieldType.SingleSelect || field.type === FieldType.MultiSelect) {
-        updateOptions.mutate({ id: field.id, options: { choices } });
-      } else if (field.type === FieldType.Expression) {
-        updateOptions.mutate({
-          id: field.id,
-          options: { expression, dependsOn: extractDependsOn(expression) },
-        });
-      } else if (field.type === FieldType.Link) {
-        updateOptions.mutate({ id: field.id, options: { targetTableId } });
+      setSaving(true);
+      try {
+        await rename.mutateAsync({ id: field.id, name: trimmed });
+        if (field.type === FieldType.SingleSelect || field.type === FieldType.MultiSelect) {
+          await updateOptions.mutateAsync({ id: field.id, options: { choices } });
+        } else if (field.type === FieldType.Expression) {
+          await updateOptions.mutateAsync({
+            id: field.id,
+            options: { expression, dependsOn: extractDependsOn(expression) },
+          });
+        } else if (field.type === FieldType.Link) {
+          await updateOptions.mutateAsync({ id: field.id, options: { targetTableId } });
+        }
+        onOpenChange(false);
+      } catch {
+        // Toast already shown by the mutation's onError; keep the dialog open.
+      } finally {
+        setSaving(false);
       }
-      onOpenChange(false);
     } else {
       const options =
         type === FieldType.SingleSelect || type === FieldType.MultiSelect
@@ -135,7 +152,7 @@ export function FieldEditorDialog({
             : type === FieldType.Link
               ? { targetTableId }
               : {};
-      create.mutate({ tableId, name, type, options });
+      create.mutate({ tableId, name: trimmed, type, options });
     }
   }
 
@@ -182,7 +199,11 @@ export function FieldEditorDialog({
           {type === FieldType.Link && (
             <div className="space-y-1">
               <Label>Link to table</Label>
-              <FieldEditorDialogTablePicker value={targetTableId} onChange={setTargetTableId} />
+              <FieldEditorDialogTablePicker
+                baseId={effectiveBaseId}
+                value={targetTableId}
+                onChange={setTargetTableId}
+              />
             </div>
           )}
         </div>
@@ -202,7 +223,16 @@ export function FieldEditorDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={onSave} disabled={!name.trim() || create.isPending}>
+            <Button
+              onClick={() => onSave()}
+              disabled={
+                !name.trim() ||
+                saving ||
+                create.isPending ||
+                rename.isPending ||
+                updateOptions.isPending
+              }
+            >
               {editing ? 'Save' : 'Create'}
             </Button>
           </div>

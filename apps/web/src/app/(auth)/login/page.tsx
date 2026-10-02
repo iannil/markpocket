@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
+import { safeCallbackUrl } from '@/lib/http-guards';
 
 function LoginPageInner() {
   const router = useRouter();
@@ -23,11 +24,11 @@ function LoginPageInner() {
         setError(res.error.message ?? 'Sign in failed');
         return;
       }
-      // Same-origin only: a leading "//" would resolve to a foreign origin.
+      // Same-origin redirect only, resolved against the real origin:
+      // "//host", "/\host" and control-char variants of them all resolve
+      // off-origin and fall back to /bases (see safeCallbackUrl).
       const callbackUrl = searchParams.get('callbackUrl');
-      const safe =
-        callbackUrl?.startsWith('/') && !callbackUrl.startsWith('//') ? callbackUrl : '/bases';
-      router.push(safe);
+      router.push(safeCallbackUrl(callbackUrl, window.location.origin));
     } catch {
       setError('Network error — please try again');
     } finally {
@@ -48,6 +49,7 @@ function LoginPageInner() {
           <input
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
@@ -58,6 +60,7 @@ function LoginPageInner() {
           <input
             type="password"
             required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full h-8 px-2.5 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -72,22 +75,6 @@ function LoginPageInner() {
           className="w-full h-8 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
         >
           {loading ? '···' : 'sign in'}
-        </button>
-
-        <div className="flex items-center gap-2 py-1">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-            or
-          </span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => authClient.signIn.social({ provider: 'oidc' })}
-          className="w-full h-8 rounded-md border border-input text-sm hover:bg-muted"
-        >
-          continue with oidc
         </button>
       </form>
 

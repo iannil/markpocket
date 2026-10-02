@@ -221,6 +221,7 @@ export function FilterPanel({
               size="icon"
               className="h-7 w-7 rounded-md hover:bg-muted"
               onClick={() => remove(i)}
+              aria-label="Remove condition"
             >
               <X className="h-3.5 w-3.5" />
             </Button>

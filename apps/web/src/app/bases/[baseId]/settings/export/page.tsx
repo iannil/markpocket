@@ -3,12 +3,14 @@
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
 
 export default function ExportTab() {
   const { baseId } = useParams<{ baseId: string }>();
   const utils = trpc.useUtils();
   const { data: tables, isLoading: tablesLoading } = trpc.table.list.useQuery({ baseId });
+  useBreadcrumbSetter([{ label: 'Export' }]);
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);

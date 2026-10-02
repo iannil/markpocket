@@ -2,20 +2,13 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { initials } from '@/lib/initials';
 
 export type OnlineUser = {
   id: string;
   name: string;
   avatarUrl?: string | null;
 };
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 function hashHue(id: string): number {
   let h = 0;

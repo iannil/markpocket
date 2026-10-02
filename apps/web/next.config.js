@@ -11,8 +11,16 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          // HSTS, conservative: 180 days, no includeSubDomains/preload yet —
+          // the deployment may share the domain with non-TLS internal tooling.
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=15552000',
+          },
           // 'unsafe-inline' styles are required by Next's runtime style injection;
           // everything else is locked down. ws: allows the realtime gateway.
+          // (A nonce-based CSP would need middleware-managed headers for every
+          // injected script; deferred as too invasive for now.)
           {
             key: 'Content-Security-Policy',
             value: [

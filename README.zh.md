@@ -5,6 +5,10 @@
 </p>
 
 <p>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg"></a>
+</p>
+
+<p>
   <strong>面向小团队的自托管数据库 —— 你真正拥有的 Airtable。</strong>
 </p>
 
@@ -40,6 +44,17 @@ docker compose up -d --build
 ```
 
 打开 **http://localhost:3000**。容器启动时自动跑迁移。
+
+补充说明：
+
+- **附件存储在数据库之外**：上传文件落在 `./data`（bind-mount 到容器的 `/app/data`）。备份时把 `./data` 和 `postgres_data` 卷一起备份。
+- **可选配置**（`DISABLE_SIGNUP=1` 关闭注册、`STORAGE_PROVIDER` 等）从 `.env` 透传，见 `.env.example`。
+- Postgres 只发布在 `127.0.0.1:5433`（仅回环），可用本地客户端直连查看。
+- **反向代理注意事项**：tRPC/上传路由与 WebSocket 网关按请求的 `Host` 头校验 `Origin`，反代必须原样转发原始主机名（nginx：`proxy_set_header Host $host;`）——否则已登录的请求会被当作跨域而拒绝。
+- **反代需设请求体上限**：应用会预检 `Content-Length`（API 8MB、上传 55MB），但对无 `Content-Length` 的分块请求，反代层限制才是真正的兜底（nginx：`client_max_body_size 56m;`）。
+- **HSTS 已启用**：浏览器一旦经 HTTPS 访问过实例，之后会拒绝对该主机走明文 HTTP——请保持 TLS 终止配置稳定。
+- **公网部署**：注册默认开放——暴露到公网前请设置 `DISABLE_SIGNUP=1`（将实例锁定为仅已有账号），或将应用置于带访问控制的反向代理之后。
+- **反代 HTTPS 部署**：必须设置 `BETTER_AUTH_URL=https://你的域名`——auth 层据此为会话 cookie 加 `Secure` 标志；若保持默认的 `http://…`，cookie 将不带该标志传输。
 
 > markpocket 是**单租户自托管**（ADR-0004）：一个容器服务一个团队。无 SaaS、无计费、无多租户膨胀。
 
@@ -167,11 +182,12 @@ pnpm typecheck           # tsc --noEmit（全 workspace）
 pnpm test                # vitest 单元 + 集成测试
 pnpm build               # 生产构建
 pnpm format:check        # prettier 检查
+pnpm test:e2e-api        # API e2e 场景（需实例已运行，见 tests/e2e/README.md）
 ```
 
-CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 lint → typecheck → test → build；`v*` tag 触发发布 workflow 构建并推送 Docker 镜像。
+CI（`.github/workflows/ci.yml`）在每次 push/PR 跑 format → lint → typecheck → test → build，另有 **e2e** job：对真实 Postgres 服务启动生产构建并执行 `tests/e2e/api/` 的 YAML 场景；`v*` tag 触发发布 workflow：先完整 verify 同一 SHA，再构建推送镜像并对推送产物做启动冒烟。
 
-测试账号与种子数据见 `apps/web/src/server/auth.ts` 中的 auth 配置。本地 Postgres 跑在端口 `7400`（dev.sh 自动配置，避开 5432 冲突）；生产式 docker-compose 将 Postgres 暴露在宿主机 `5433`。
+E2E 测试账号与约定见 [`tests/e2e/README.md`](tests/e2e/README.md)。端口一览：dev 环境 Postgres `7400`、web `7420`、独立 realtime 网关 `7419`；生产式 docker-compose 应用跑在 `3000`，Postgres 仅发布在 `127.0.0.1:5433`。
 
 ---
 
@@ -194,3 +210,9 @@ markpocket 处于 **v1 功能完成 + Paper & Ink 重设计中** 阶段。
 - 📊 完整状态跟踪：[`docs/STATUS.md`](docs/STATUS.md)（项目全景）和 [`docs/redesign/status.md`](docs/redesign/status.md)（设计实施进度）。
 
 尚未发布到任何 registry，也没有打 tag release。在首个 release 之前，请把 `master` 分支视作 unstable。
+
+---
+
+## 许可证
+
+采用 [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0）。可自由自托管；若将修改后的实例以网络服务形式对外提供，须同时公开修改部分的源代码。

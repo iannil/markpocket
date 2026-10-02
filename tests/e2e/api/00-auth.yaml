@@ -38,5 +38,7 @@
   steps:
     - action: 'POST /api/trpc/base.list'
       body: {}
+      # no_auth: 不携带先前用例捕获的会话 cookie（否则注册后的会话会泄漏进本用例）
+      no_auth: true
       asserts:
         - '$status == 401'

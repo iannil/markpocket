@@ -5,13 +5,14 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 
 import { EmptyState } from '@/components/empty-state';
+import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc/client';
 
 export default function BasePage() {
   const { baseId } = useParams<{ baseId: string }>();
   const router = useRouter();
   const utils = trpc.useUtils();
-  const { data: tables, isLoading } = trpc.table.list.useQuery({ baseId });
+  const { data: tables, isLoading, isError } = trpc.table.list.useQuery({ baseId });
 
   const firstTableId = tables?.[0]?.id;
   useEffect(() => {
@@ -42,6 +43,25 @@ export default function BasePage() {
         <div className="mx-auto max-w-md">
           <div className="h-8 animate-pulse rounded bg-muted" />
         </div>
+      </div>
+    );
+  }
+
+  // A failed table.list must not fall through to the "No tables yet" empty
+  // state — that would invite creating a duplicate first table.
+  if (isError) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-sm text-destructive">
+        <div>Failed to load tables. Please try again.</div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            void utils.table.list.invalidate({ baseId });
+          }}
+        >
+          Retry
+        </Button>
       </div>
     );
   }

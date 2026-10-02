@@ -77,6 +77,7 @@ export function SortMenu({
                 size="icon"
                 variant="ghost"
                 className="h-7 w-7 rounded-md hover:bg-muted"
+                aria-label="Remove sort"
                 onClick={() => remove(i)}
               >
                 <X className="h-3.5 w-3.5" />

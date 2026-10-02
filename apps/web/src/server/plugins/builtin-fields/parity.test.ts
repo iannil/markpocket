@@ -73,6 +73,154 @@ describe('builtin field types — defaultOptions parity', () => {
   });
 });
 
+describe('builtin field types — id-array normalization', () => {
+  it('link/attachment dedupe repeated ids and lift scalars', () => {
+    for (const type of ['link', 'attachment']) {
+      expect(byType[type].normalizeCellValue({}, 'r1')).toEqual({ value: ['r1'] });
+      expect(byType[type].normalizeCellValue({}, ['r1', 'r1', 'r2'])).toEqual({
+        value: ['r1', 'r2'],
+      });
+    }
+  });
+  it('multi-select dedupes too', () => {
+    const opts = { choices: [{ id: 'o1', name: 'A', color: 'red' }] };
+    expect(byType['multi-select'].normalizeCellValue(opts, ['o1', 'o1'])).toEqual({
+      value: ['o1'],
+    });
+  });
+});
+
+describe('builtin field types — expression option bounds', () => {
+  it('accepts expressions up to 10,000 chars', () => {
+    expect(() =>
+      byType['expression'].optionsSchema.parse({ expression: 'x'.repeat(10_000), dependsOn: [] }),
+    ).not.toThrow();
+  });
+  it('rejects longer expressions', () => {
+    expect(() =>
+      byType['expression'].optionsSchema.parse({ expression: 'x'.repeat(10_001), dependsOn: [] }),
+    ).toThrow();
+  });
+});
+
+describe('builtin field types — option size bounds', () => {
+  const choice = (id = 'o1', name = 'A', color = 'red') => ({ id, name, color });
+
+  it('single-select accepts up to 200 choices', () => {
+    const choices = Array.from({ length: 200 }, (_, i) => choice(`o${i}`, `N${i}`));
+    expect(() => byType['single-select'].optionsSchema.parse({ choices })).not.toThrow();
+  });
+  it('single-select rejects more than 200 choices', () => {
+    const choices = Array.from({ length: 201 }, (_, i) => choice(`o${i}`, `N${i}`));
+    expect(() => byType['single-select'].optionsSchema.parse({ choices })).toThrow();
+  });
+  it('multi-select enforces the same choice bounds', () => {
+    const choices = Array.from({ length: 201 }, (_, i) => choice(`o${i}`, `N${i}`));
+    expect(() => byType['multi-select'].optionsSchema.parse({ choices })).toThrow();
+  });
+  it('rejects choice names over 100 chars', () => {
+    expect(() =>
+      byType['single-select'].optionsSchema.parse({ choices: [choice('o1', 'n'.repeat(101))] }),
+    ).toThrow();
+  });
+  it('rejects choice ids over 64 chars', () => {
+    expect(() =>
+      byType['single-select'].optionsSchema.parse({ choices: [choice('i'.repeat(65))] }),
+    ).toThrow();
+  });
+  it('rejects choice colors over 32 chars', () => {
+    expect(() =>
+      byType['multi-select'].optionsSchema.parse({ choices: [choice('o1', 'A', 'c'.repeat(33))] }),
+    ).toThrow();
+  });
+  it('rejects link targetTableId over 64 chars', () => {
+    expect(() => byType['link'].optionsSchema.parse({ targetTableId: 't'.repeat(65) })).toThrow();
+  });
+  it('rejects oversized expression dependsOn arrays', () => {
+    expect(() =>
+      byType['expression'].optionsSchema.parse({
+        expression: '1',
+        dependsOn: Array.from({ length: 501 }, (_, i) => `f${i}`),
+      }),
+    ).toThrow();
+  });
+});
+
+describe('builtin field types — link validateCellValue', () => {
+  it('passes when every id exists in the target table', async () => {
+    const ctx = {
+      existingRecordIds: async (ids: string[]) => new Set(ids),
+      existingAttachmentIds: async () => new Set<string>(),
+    };
+    const err = await byType['link'].validateCellValue!({ targetTableId: 't2' }, ['r1', 'r2'], ctx);
+    expect(err).toBeNull();
+  });
+  it('names the missing record ids', async () => {
+    const ctx = {
+      existingRecordIds: async (ids: string[]) => new Set(ids.filter((id) => id !== 'r-gone')),
+      existingAttachmentIds: async () => new Set<string>(),
+    };
+    const err = await byType['link'].validateCellValue!(
+      { targetTableId: 't2' },
+      ['r1', 'r-gone'],
+      ctx,
+    );
+    expect(err).toMatch(/r-gone/);
+  });
+  it('fails fast without a target table', async () => {
+    const ctx = {
+      existingRecordIds: async () => new Set<string>(),
+      existingAttachmentIds: async () => new Set<string>(),
+    };
+    const err = await byType['link'].validateCellValue!({}, ['r1'], ctx);
+    expect(err).toMatch(/no target table/);
+  });
+});
+
+describe('builtin field types — attachment validateCellValue (L-2)', () => {
+  // The host resolver scopes to the field's own base: it only ever returns ids
+  // that exist as attachments OF THAT BASE, so "cross-base" and "nonexistent"
+  // are indistinguishable from the contribution's point of view — both come
+  // back missing.
+  const baseCtx = (sameBaseIds: string[]) => ({
+    existingRecordIds: async () => new Set<string>(),
+    existingAttachmentIds: async (ids: string[]) =>
+      new Set(ids.filter((id) => sameBaseIds.includes(id))),
+  });
+
+  it('passes when every id exists in the same base', async () => {
+    const ctx = baseCtx(['att-1', 'att-2']);
+    const err = await byType['attachment'].validateCellValue!({}, ['att-1', 'att-2'], ctx);
+    expect(err).toBeNull();
+  });
+  it('rejects cross-base or nonexistent ids and names them', async () => {
+    const ctx = baseCtx(['att-1']);
+    const err = await byType['attachment'].validateCellValue!(
+      {},
+      ['att-1', 'att-other-base', 'att-missing'],
+      ctx,
+    );
+    expect(err).toMatch(/Unknown attachment id/);
+    expect(err).toMatch(/att-other-base/);
+    expect(err).toMatch(/att-missing/);
+  });
+  it('skips the batched query for an empty value', async () => {
+    let queried = false;
+    const ctx = {
+      existingRecordIds: async () => new Set<string>(),
+      existingAttachmentIds: async () => {
+        queried = true;
+        return new Set<string>();
+      },
+    };
+    // Empty cells never reach validateCellValue on the write path (cell.ts),
+    // but the contribution must stay safe if called directly anyway.
+    const err = await byType['attachment'].validateCellValue!({}, [], ctx);
+    expect(err).toBeNull();
+    expect(queried).toBe(false);
+  });
+});
+
 describe('builtin field types — optionsSchema parity', () => {
   it('number rejects out-of-range precision', () => {
     expect(() => byType['number'].optionsSchema.parse({ precision: 99 })).toThrow();

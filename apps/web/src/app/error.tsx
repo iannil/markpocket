@@ -11,11 +11,13 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Never render error.message — it can leak internals (stack shapes, SQL,
+  // file paths). The digest is the shareable correlation id for logs.
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
       <EmptyState
         title="Something went wrong"
-        description={error.message || 'An unexpected error occurred.'}
+        description={error.digest ? `Reference: ${error.digest}` : 'An unexpected error occurred.'}
         action={
           <div className="flex items-center gap-2">
             <button

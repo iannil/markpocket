@@ -1,6 +1,6 @@
 # ADR-0002：软实时广播 + Last-Write-Wins
 
-- **状态**：Accepted
+- **状态**：Accepted（2026-10-02 注记：「后果·负面」中要求的冲突提示已落地——`cell.upsert` 在覆盖他人 60s 内的编辑时返回 `overwroteRecentBy` 信号，前端据此弹 LWW 冲突 toast）
 - **日期**：2026-06-30
 - **相关**：取代 teable 的 share-db / op-log / op-builder 实时栈
 

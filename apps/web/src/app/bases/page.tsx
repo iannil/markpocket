@@ -3,6 +3,7 @@
 import Link from 'next/link';
 
 import { EmptyState } from '@/components/empty-state';
+import { useBasesList } from '@/lib/bases-context';
 import { trpc } from '@/lib/trpc/client';
 
 function timeAgo(ts: string | number | Date): string {
@@ -14,7 +15,16 @@ function timeAgo(ts: string | number | Date): string {
 }
 
 export default function BasesPage() {
-  const { data: bases, isLoading, isError } = trpc.base.list.useQuery();
+  // The RSC layout already fetched base.list; seed the query with those rows
+  // instead of issuing a second identical fetch on mount.
+  const initial = useBasesList();
+  const {
+    data: bases,
+    isLoading,
+    isError,
+  } = trpc.base.list.useQuery(undefined, {
+    initialData: initial.length > 0 ? initial : undefined,
+  });
 
   if (isLoading) {
     return (

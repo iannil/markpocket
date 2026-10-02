@@ -17,7 +17,7 @@
 - **Link Field** —— 跨 Table 的关联字段，引用另一张 Table 的 Record。v1 支持。
 - **Lookup Field** —— 在本表里"看穿"Link、引用对端 Table 的某个 Field 的值。**v2 推迟**。
 - **Rollup Field** —— 对 Link 关联的对端 Record 集合做聚合（SUM / COUNT / AVG 等）。**v2 推迟**。
-- **Expression Field** —— 由表达式定义的计算字段（如 `单价 * 数量`），由成熟库评估，**无依赖图、无跨 record 级联重算**。刻意不使用 "Formula" 一词，以区别于 teable 的全 DSL Formula。
+- **Expression Field** —— 由表达式定义的计算字段（如 `单价 * 数量`），由**手写求值器**评估（token 替换注入 cell 值 + 字符集白名单 + 服务端受控 `Function` 求值，无第三方公式库；见 ADR-0003 实现现状注记），**无依赖图、无跨 record 级联重算**。刻意不使用 "Formula" 一词，以区别于 teable 的全 DSL Formula。
   - **写时求值（同 record 内重算）**：写入同一 record 的任一 Cell 时，在同一事务内重算该 record 的所有 Expression Field，结果物化到 `cells.value`。
   - **只能引用本 record 内的基础字段**：不可引用另一个 Expression Field，不可跨表。因此依赖闭包永远是"本行的其它 cell"，无依赖图、无跨 record 级联。
   - **字段引用以 token 形式编写**：编辑器内呈现为 chip、锚定稳定字段 id，而非自由文本字段名。引用解析因此无歧义，依赖列表由 token 扫描精确派生。

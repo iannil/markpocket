@@ -4,10 +4,19 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { toast } from '@/lib/toast';
+import { initials } from '@/lib/initials';
+import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { trpc } from '@/lib/trpc/client';
 
 type InviteRole = 'editor' | 'viewer';
+
+function copyToClipboard(text: string, successMessage: string) {
+  navigator.clipboard.writeText(text).then(
+    () => toast.success(successMessage),
+    () => toast.error('Copy failed'),
+  );
+}
 
 function InviteSection({ baseId }: { baseId: string }) {
   const utils = trpc.useUtils();
@@ -21,8 +30,10 @@ function InviteSection({ baseId }: { baseId: string }) {
     onSuccess: (row) => {
       void utils.invite.list.invalidate({ baseId });
       toast.success('Invite created');
-      navigator.clipboard.writeText(`${window.location.origin}/invite/${row.token}`);
-      toast.info('Invite link copied to clipboard');
+      copyToClipboard(
+        `${window.location.origin}/invite/${row.token}`,
+        'Invite link copied to clipboard',
+      );
       setEmail('');
     },
     onError: (err) => {
@@ -109,20 +120,12 @@ function InviteSection({ baseId }: { baseId: string }) {
   );
 }
 
-function initials(s: string): string {
-  return s
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
 export default function MembersTab() {
   const { baseId } = useParams<{ baseId: string }>();
   const utils = trpc.useUtils();
   const members = trpc.member.list.useQuery({ baseId });
   const shares = trpc.share.list.useQuery({ baseId });
+  useBreadcrumbSetter([{ label: 'Members' }]);
 
   const updateRole = trpc.member.updateRole.useMutation({
     onSuccess: () => utils.member.list.invalidate({ baseId }),
@@ -136,8 +139,7 @@ export default function MembersTab() {
     onSuccess: (row) => {
       void utils.share.list.invalidate({ baseId });
       toast.success('Share link created');
-      navigator.clipboard.writeText(`${window.location.origin}/share/${row.token}`);
-      toast.info('Link copied to clipboard');
+      copyToClipboard(`${window.location.origin}/share/${row.token}`, 'Link copied');
     },
     onError: (err) => toast.error(err.message),
   });
@@ -166,7 +168,7 @@ export default function MembersTab() {
             return (
               <li key={m.userId} className="flex items-center gap-3 border-b border-border py-2.5">
                 <span className="flex size-7 items-center justify-center rounded-full bg-muted font-mono text-xs">
-                  {initials(label)}
+                  {initials(label) || '?'}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{m.name ?? m.email ?? m.userId}</div>
@@ -224,13 +226,23 @@ export default function MembersTab() {
           <ul className="border-t border-border">
             {shares.data.map((s) => (
               <li key={s.id} className="flex items-center gap-2 border-b border-border py-2.5">
-                <code className="flex-1 truncate text-xs text-muted-foreground">
-                  /share/{s.token}
-                </code>
+                <div className="min-w-0 flex-1">
+                  <code className="block truncate text-xs text-muted-foreground">
+                    /share/{s.token}
+                  </code>
+                  {/* New links carry a bounded lifetime (default 90 days); */}
+                  {/* legacy rows with a null expiresAt never expire. */}
+                  <span className="text-[10px] text-muted-foreground">
+                    {s.expiresAt
+                      ? new Date(s.expiresAt) < new Date()
+                        ? 'expired'
+                        : `expires ${new Date(s.expiresAt).toLocaleDateString()}`
+                      : 'no expiry'}
+                  </span>
+                </div>
                 <button
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`);
-                    toast.success('Link copied');
+                    copyToClipboard(`${window.location.origin}/share/${s.token}`, 'Link copied');
                   }}
                   className="text-xs hover:text-foreground"
                 >

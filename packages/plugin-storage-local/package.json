@@ -1,6 +1,7 @@
 {
   "name": "@markpocket/plugin-storage-local",
   "version": "0.0.0",
+  "license": "AGPL-3.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

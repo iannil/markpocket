@@ -3,9 +3,10 @@
 ## 快速开始
 
 ```bash
-pnpm test                       # 全部测试（~110 个，<1s）
+pnpm test                       # 全部测试（248 个用例 / 30 个文件，~10s）
 pnpm test -- --run src/foo.test.ts   # 单文件
 pnpm --filter @markpocket/web typecheck  # 类型检查
+pnpm test:e2e-api               # API E2E（需实例运行，见 tests/e2e/README.md）
 ```
 
 ## 测试目录
@@ -15,25 +16,32 @@ pnpm --filter @markpocket/web typecheck  # 类型检查
 | 文件 | 覆盖 |
 |------|------|
 | `apps/web/src/lib/expression-eval.test.ts` | evaluateExpression / extractDependsOn |
-| `apps/web/src/lib/view-query.test.ts` | compileFilter / compileSort / applyGroup |
-| `apps/web/src/lib/roles.test.ts` | baseIdFromTable |
+| `apps/web/src/lib/view-query.test.ts` | compileFilter / compileSort / applyGroup（含 SQL 文本真实断言、深度守卫） |
+| `apps/web/src/lib/roles.test.ts` | 角色真值表：owner/editor/viewer × 读写门槛 × 非成员 × baseIdFromTable 命中/未命中（22 用例） |
+| `apps/web/src/lib/view-ast.test.ts` | view options zod 结构校验（深度/节点数/字节数） |
+| `apps/web/src/lib/format.test.ts` / `initials.test.ts` | 共享格式化/首字母模块 |
+| `apps/web/src/server/expression.test.ts` | 服务端表达式物化 |
+| `apps/web/src/server/realtime/gateway.test.ts` | realtime 网关：鉴权、订阅限频、频道上限、心跳等（8 用例） |
+| `apps/web/src/server/plugins/*` | 字段值语义 parity、loader、registry、validate |
+| `packages/plugin-csv` / `plugin-sdk` / `plugin-storage-local` | 各包自带单测（含 CSV 注入、BOM、路径穿越） |
 
 ### tRPC 集成测试（createCaller + mock DB）
 
 | 文件 | 覆盖 |
-|------|-------|
+|------|------|
 | `auth.test.ts` | getSession |
 | `base.test.ts` | list/get/create/rename/delete + 权限 |
 | `table.test.ts` | CRUD + 默认视图 + 权限 |
 | `view.test.ts` | CRUD + filter/sort/group + 权限 |
-| `field-record-cell.test.ts` | field/record/cell + 权限 |
+| `field-record-cell.test.ts` | field/record/cell + 权限 + link 值存在性 + LWW 冲突信号 |
+| `field-validation.test.ts` | 字段 options 校验 |
 | `share-member-invite.test.ts` | share/member/invite + 权限 |
-| `public-share.test.ts` | 公开端点 |
+| `public-share.test.ts` | 公开端点（视图级隔离） |
 
 ### E2E 场景（YAML）
 
-- `tests/e2e/api/` — API 场景，`run-api-tests.cjs` 可执行
-- `tests/e2e/browser/` — agent-browser 浏览器场景
+- `tests/e2e/api/` — API 场景，`node tests/run-api-tests.cjs` 执行（已进 CI 的 e2e job；语法未知的 assert 会直接报错，不会静默通过；`$env:`/`requires_env` 等约定见 `tests/e2e/README.md`）
+- `tests/e2e/browser/` — agent-browser 浏览器场景（未进 CI）
 
 ## tRPC 集成测试的 mock 模式
 

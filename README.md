@@ -5,6 +5,10 @@
 </p>
 
 <p>
+  <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg"></a>
+</p>
+
+<p>
   <strong>Self-hosted database for small teams — the Airtable you actually own.</strong>
 </p>
 
@@ -42,6 +46,17 @@ docker compose up -d --build
 ```
 
 Then open **http://localhost:3000**. The container runs migrations automatically on boot.
+
+Notes:
+
+- **Attachments are persisted outside the database**: uploaded files land in `./data` (bind-mounted to the container's `/app/data`). Include `./data` in backups alongside the `postgres_data` volume.
+- **Optional settings** (`DISABLE_SIGNUP=1` to close registration, `STORAGE_PROVIDER`, …) pass through from `.env` — see `.env.example`.
+- Postgres is published on `127.0.0.1:5433` (loopback only) if you want to inspect it with a local client.
+- **Behind a reverse proxy**: tRPC/upload routes and the WebSocket gateway validate the request's `Origin` against its `Host` header, so the proxy must forward the original host unchanged (nginx: `proxy_set_header Host $host;`) — otherwise authenticated calls are rejected as cross-origin.
+- **Set a proxy body cap**: the app pre-checks `Content-Length` (8MB for API calls, 55MB for uploads), but a proxy-level limit is the real backstop for chunked requests that carry no `Content-Length` (nginx: `client_max_body_size 56m;`).
+- **HSTS is enabled**: once a browser has reached your instance over HTTPS, it will refuse plain HTTP to that host afterwards — keep TLS termination stable.
+- **Exposing the instance to the public internet**: registration is open by default — set `DISABLE_SIGNUP=1` (locks the instance to existing accounts) or put the app behind a reverse proxy with its own access control.
+- **HTTPS behind a reverse proxy**: set `BETTER_AUTH_URL=https://your.domain` — the auth layer needs it to flag session cookies `Secure`; with the default `http://…` value, cookies are sent without the flag.
 
 > markpocket is **single-tenant self-hosted** (ADR-0004): one container serves one team. No SaaS, no billing, no tenant sprawl — just your data on your machine.
 
@@ -171,11 +186,12 @@ pnpm typecheck           # tsc --noEmit across the workspace
 pnpm test                # vitest unit + integration suite
 pnpm build               # production build
 pnpm format:check        # prettier check (run `pnpm format` to write)
+pnpm test:e2e-api        # API e2e scenarios (needs a running instance; see tests/e2e/README.md)
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint → typecheck → test → build on every push and PR; the release workflow publishes a Docker image on `v*` tags.
+CI (`.github/workflows/ci.yml`) runs format → lint → typecheck → test → build on every push and PR, plus a full-stack **e2e** job that boots the production build against a real Postgres service and runs the YAML scenarios in `tests/e2e/api/`. The release workflow verifies the tag and smoke-tests the pushed Docker image on `v*` tags.
 
-Test credentials and seed data live with the auth setup in `apps/web/src/server/auth.ts`. Local Postgres runs on port `7400` (dev) to avoid clashing with other projects on `5432`; the production-style docker-compose exposes Postgres on host port `5433`.
+E2E test accounts and conventions are documented in [`tests/e2e/README.md`](tests/e2e/README.md). Local Postgres runs on port `7400` (dev) to avoid clashing with other projects on `5432`; the web dev server on `7420` and the standalone realtime gateway on `7419`; the production-style docker-compose serves the app on `3000` and exposes Postgres on `127.0.0.1:5433` only.
 
 ---
 
@@ -198,3 +214,9 @@ markpocket is at **v1 complete + Paper & Ink redesign in progress**.
 - 📊 Full status tracking: [`docs/STATUS.md`](docs/STATUS.md) (project-wide) and [`docs/redesign/status.md`](docs/redesign/status.md) (design implementation).
 
 It is not yet published to a registry and has no tagged release. Treat the `master` branch as unstable until the first release.
+
+---
+
+## License
+
+Released under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). Self-host freely; if you expose a modified instance as a network service, you must share the source of your modifications.

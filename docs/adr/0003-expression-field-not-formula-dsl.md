@@ -1,6 +1,6 @@
 # ADR-0003：Expression Field（不引入 teable 全 DSL 公式引擎）
 
-- **状态**：Accepted（2026-06-30 修订：求值时机由"读时求值、不物化"改为"写时求值、同 record 内重算并物化"）
+- **状态**：Accepted（2026-06-30 修订：求值时机由"读时求值、不物化"改为"写时求值、同 record 内重算并物化"；2026-10-02 注记见文末「实现现状」）
 - **日期**：2026-06-30
 - **相关**：取代 teable 的 `packages/formula`、`features/calculation`、`features/graph`
 
@@ -22,7 +22,7 @@ markpocket 需要决定：表内计算字段做到什么粒度。
 采用 **Expression Field**，刻意**不**使用 "Formula" 一词（见 `CONTEXT.md`）：
 
 - 用户可定义表达式字段，如 `单价 * 数量`
-- 表达式由**第三方成熟库**评估（候选：`hot-formula-parser` / `formula-parser` / 受控 JS 子集 + `isolated-vm`）。**禁止自建求值器 / 类型推导系统**；字段引用以 token 形式编写（编辑器内为 chip、锚定字段 id），依赖列表由 token 扫描派生——这不算"自研 parser"，分词与求值仍由库承担
+- 表达式由**第三方成熟库**评估（候选：`hot-formula-parser` / `formula-parser` / 受控 JS 子集 + `isolated-vm`）。**禁止自建求值器 / 类型推导系统**；字段引用以 token 形式编写（编辑器内为 chip、锚定字段 id），依赖列表由 token 扫描派生——这不算"自研 parser"，分词与求值仍由库承担（**2026-10-02 注记：实际实现未采用第三方库，见文末「实现现状」**）
 - **写时求值（同 record 内重算）**：写入同一 record 的任一 Cell 时，在同一事务内重算该 record 的所有 Expression Field，结果物化到 `cells.value`
 - **只能引用本 record 内的基础字段**：表达式不可引用另一个 Expression Field，不可跨表。因此依赖闭包永远是"本行的其它 cell"，**无依赖图、无跨 record 级联重算**
 - 这一约束使 Expression 字段在 `cells` 表里有行，View 的 SQL filter/sort/group 对其与普通字段统一生效（见迁移方案 §5、§7）
@@ -55,3 +55,15 @@ markpocket 需要决定：表内计算字段做到什么粒度。
 ## 反悔代价
 
 中。从"写时同 record 重算"升级到全 DSL 需重写 field schema、引入依赖图、设计级联重算管道——是 markpocket 内部最大的潜在子系统。该决策应在 v2 真有跨表/套娃需求时才重新评估，且届时优先考虑 Lookup/Rollup 而非全 DSL。
+
+## 实现现状（2026-10-02 注记）
+
+落地时**没有引入第三方公式库**，求值器为手写实现（`apps/web/src/lib/expression-eval.ts`）：
+
+- token 以 field id 为锚（chip 编辑器），求值前做 **token 替换**注入同 record 的 cell 值；
+- 表达式字符集走**白名单**（数字、运算符、括号、空白等），拒绝白名单外的任何输入；
+- 最终在服务端用受控拼接后的 `Function` 求值（无 `eval`、无客户端求值、无跨 record 上下文）。
+
+即：本 ADR 决策中"由成熟库评估、禁止自建"一条**未按原文执行**——保留了"无依赖图、无跨表、写时物化"等核心约束（这些仍然成立），求值内核则因表达式面收窄（纯算术 + 字段引用）而以约百行的白名单实现替代了第三方依赖。若未来扩大函数集（字符串/日期函数等），应重新评估是否切换到维护良好的解析/求值库，而非继续手写。
+
+另：CSV 导入路径同样走核心表达式物化（导入行与手工编辑共用同一条 `materializeExpressions` 路径），保证了两种写入方式下 expression 值的一致性。

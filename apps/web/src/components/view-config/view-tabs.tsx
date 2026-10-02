@@ -41,42 +41,70 @@ export function ViewTabs({
   });
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
+  // Inline rename (spec §7.2: inline over prompt/popover): the tab itself
+  // swaps to an input; Enter commits, Esc or blur cancels.
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+
+  function commitRename() {
+    const trimmed = renaming?.name.trim();
+    if (renaming && trimmed && trimmed !== views.find((v) => v.id === renaming.id)?.name) {
+      rename.mutate({ id: renaming.id, name: trimmed });
+    }
+    setRenaming(null);
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-border">
-      {views.map((v) => (
-        <div
-          key={v.id}
-          className={`group flex items-center border-b-2 px-2 py-1 text-sm ${
-            v.id === activeViewId
-              ? 'border-foreground text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <button
-            onClick={() => onSelect(v.id)}
-            onDoubleClick={() => {
-              if (readOnly) return;
-              const next = window.prompt('Rename view', v.name);
-              if (next && next.trim()) rename.mutate({ id: v.id, name: next.trim() });
-            }}
-            title="Click to switch, double-click to rename"
+      {views.map((v) => {
+        const isRenaming = renaming?.id === v.id;
+        return (
+          <div
+            key={v.id}
+            className={`group flex items-center border-b-2 px-2 py-1 text-sm ${
+              v.id === activeViewId
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
           >
-            {v.name}
-          </button>
-          {views.length > 1 && !readOnly && (
-            <button
-              className="ml-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-              onClick={() => {
-                if (window.confirm(`Delete view "${v.name}"?`)) remove.mutate({ id: v.id });
-              }}
-              title="Delete view"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
+            {isRenaming ? (
+              <Input
+                autoFocus
+                value={renaming.name}
+                onChange={(e) => setRenaming({ id: v.id, name: e.target.value })}
+                onBlur={commitRename}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename();
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+                className="h-6 w-28 px-1 text-sm"
+                aria-label="View name"
+              />
+            ) : (
+              <button
+                onClick={() => onSelect(v.id)}
+                onDoubleClick={() => {
+                  if (!readOnly) setRenaming({ id: v.id, name: v.name });
+                }}
+                title="Click to switch, double-click to rename"
+              >
+                {v.name}
+              </button>
+            )}
+            {views.length > 1 && !readOnly && (
+              <button
+                className="ml-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                onClick={() => {
+                  if (window.confirm(`Delete view "${v.name}"?`)) remove.mutate({ id: v.id });
+                }}
+                title="Delete view"
+                aria-label={`Delete view ${v.name}`}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        );
+      })}
       {readOnly ? null : adding ? (
         <form
           onSubmit={(e) => {

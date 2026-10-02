@@ -12,12 +12,27 @@ interface UserMeta {
 interface ClientMeta extends UserMeta {
   baseIds: Set<string>;
   isAlive: boolean;
+  // Subscribe-message rate limiting (epoch ms timestamps).
+  subscribeTimes: number[];
 }
 
 // Cap per-connection channel subscriptions — a hostile client must not be able
 // to grow unbounded state server-side.
 const MAX_CHANNELS_PER_CLIENT = 32;
+// A subscribe flood must not turn into unbounded membership lookups.
+const MAX_SUBSCRIBES_PER_SECOND = 5;
 const HEARTBEAT_MS = 30_000;
+// Subscription authorization is TOCTOU: membership can be revoked while a
+// connection stays open. Kicks close the common path fast; this sweep closes
+// the rest (missed kick, gateway restart, cross-process races).
+const MEMBERSHIP_SWEEP_MS = 5 * 60_000;
+// Slow-consumer backpressure cap: a client that stops reading makes ws queue
+// outgoing frames in server memory without bound (bufferedAmount only grows).
+// Past this threshold the connection is hostile or wedged — terminate it
+// instead of letting one slow reader balloon the heap. The heartbeat would
+// eventually catch a fully-dead peer, but only after its own timeout, and it
+// never catches a deliberately slow one that still answers pings.
+const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
 let wss: WebSocketServer | null = null;
 const clients = new Map<WebSocket, ClientMeta>();
@@ -25,8 +40,12 @@ const channels = new Map<string, Set<WebSocket>>(); // baseId -> connections
 
 export function getGateway(): WebSocketServer {
   if (!wss) {
-    wss = new WebSocketServer({ noServer: true });
+    // 1MiB receive cap: every legit message (subscribe/unsubscribe) is tiny;
+    // ws' default 100MiB would let a hostile client buffer huge frames in
+    // server memory before the JSON.parse discard.
+    wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
     startHeartbeat();
+    startMembershipSweep();
     console.log('> realtime ws gateway ready');
   }
   return wss;
@@ -99,7 +118,7 @@ export async function handleUpgrade(
 }
 
 function onConnect(ws: WebSocket, user: UserMeta) {
-  const meta: ClientMeta = { ...user, baseIds: new Set(), isAlive: true };
+  const meta: ClientMeta = { ...user, baseIds: new Set(), isAlive: true, subscribeTimes: [] };
   clients.set(ws, meta);
   ws.on('pong', () => {
     meta.isAlive = true;
@@ -107,6 +126,15 @@ function onConnect(ws: WebSocket, user: UserMeta) {
   ws.on('message', (data) => void onMessage(ws, meta, data));
   ws.on('close', () => onClose(ws, meta));
   ws.on('error', () => onClose(ws, meta));
+}
+
+// Sliding 1s window; over-limit subscribes are dropped silently.
+function allowSubscribe(meta: ClientMeta): boolean {
+  const now = Date.now();
+  meta.subscribeTimes = meta.subscribeTimes.filter((t) => now - t < 1000);
+  if (meta.subscribeTimes.length >= MAX_SUBSCRIBES_PER_SECOND) return false;
+  meta.subscribeTimes.push(now);
+  return true;
 }
 
 async function onMessage(ws: WebSocket, meta: ClientMeta, data: unknown) {
@@ -118,6 +146,7 @@ async function onMessage(ws: WebSocket, meta: ClientMeta, data: unknown) {
   }
   if (msg.type === 'subscribe' && msg.baseId) {
     if (meta.baseIds.has(msg.baseId)) return;
+    if (!allowSubscribe(meta)) return;
     // Channel authorization: only members of the base may join its channel.
     const role = await getMembership(msg.baseId, meta.userId).catch(() => null);
     if (!role) return;
@@ -154,6 +183,51 @@ function onClose(ws: WebSocket, meta: ClientMeta) {
   }
 }
 
+// Drop every subscription `userId` holds on `baseId` (kick control event from
+// member.remove / member.updateRole). Channel bookkeeping is cleaned up here;
+// the ws 'close' handler runs afterwards and its cleanup is idempotent.
+export function closeBaseForUser(baseId: string, userId: string): void {
+  const chan = channels.get(baseId);
+  if (!chan) return;
+  for (const ws of [...chan]) {
+    const meta = clients.get(ws);
+    if (!meta || meta.userId !== userId) continue;
+    chan.delete(ws);
+    meta.baseIds.delete(baseId);
+    ws.close();
+  }
+  if (chan.size === 0) channels.delete(baseId);
+  if (channels.has(baseId)) broadcastPresence(baseId);
+}
+
+// Periodic membership re-verification for open subscriptions.
+export async function sweepMemberships(): Promise<void> {
+  for (const [ws, meta] of clients) {
+    for (const baseId of meta.baseIds) {
+      let role: string | null;
+      try {
+        role = await getMembership(baseId, meta.userId);
+      } catch (err) {
+        // Transient DB errors must not mass-disconnect clients.
+        console.error('membership sweep lookup failed', err);
+        continue;
+      }
+      if (!role) {
+        // Membership revoked: close the whole connection; the client may
+        // reconnect and re-subscribe only to bases it still belongs to.
+        ws.terminate();
+        onClose(ws, meta);
+        break;
+      }
+    }
+  }
+}
+
+function startMembershipSweep(): void {
+  const timer = setInterval(() => void sweepMemberships(), MEMBERSHIP_SWEEP_MS);
+  timer.unref?.();
+}
+
 export function broadcast<T extends object>(baseId: string, event: T, exceptUserId?: string): void {
   const chan = channels.get(baseId);
   if (!chan) return;
@@ -161,7 +235,43 @@ export function broadcast<T extends object>(baseId: string, event: T, exceptUser
   for (const ws of chan) {
     const m = clients.get(ws);
     if (!m || m.userId === exceptUserId) continue;
-    if (ws.readyState === ws.OPEN) ws.send(json);
+    if (ws.readyState !== ws.OPEN) continue;
+    if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      console.warn(
+        `realtime: terminating slow consumer on base ${baseId} ` +
+          `(userId=${m.userId}, buffered=${ws.bufferedAmount}B > ${MAX_BUFFERED_BYTES}B)`,
+      );
+      ws.terminate();
+      continue;
+    }
+    ws.send(json);
+  }
+}
+
+// LISTEN reconnection gap-filler (called by subscribe.ts): while the Postgres
+// subscription was down, notifications were silently dropped — postgres.js
+// re-runs LISTEN on reconnect but pg does not replay anything sent in the
+// gap, so every connected client may be holding stale data with no signal
+// ever coming. Re-broadcast one synthetic base-scoped change per active
+// channel so clients refetch. Base-scoped (no tableId) on purpose: the missed
+// notices could touch any table in the base, and clients treat a base-wide
+// change as "pull everything in this base". Snapshot the keys first —
+// terminate() inside broadcast schedules channel cleanup via 'close', and
+// future-proofing against mutation during iteration costs nothing.
+export function rebroadcastAllChannels(): void {
+  for (const baseId of [...channels.keys()]) {
+    broadcast(baseId, { type: 'change', baseId });
+  }
+}
+
+// Graceful shutdown (SIGTERM/SIGINT in server.ts / realtime-server.ts):
+// close every client with 1001 "going away" so browsers and reconnecting
+// clients fail over immediately instead of hanging on a dying process.
+// Channel/client bookkeeping is cleaned up by each socket's 'close' handler
+// (onClose); nothing here needs to touch the maps directly.
+export function closeAll(): void {
+  for (const ws of clients.keys()) {
+    ws.close(1001, 'server shutting down');
   }
 }
 

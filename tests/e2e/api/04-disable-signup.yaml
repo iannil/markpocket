@@ -1,0 +1,38 @@
+# DISABLE_SIGNUP 场景(可选,不进 CI)—— 仅当服务端以 DISABLE_SIGNUP=1 启动时才有意义。
+# 运行方式:
+#   1. 以 DISABLE_SIGNUP=1 启动 markpocket(见 .env.example / README)
+#   2. DISABLE_SIGNUP_TESTS=1 node tests/run-api-tests.cjs 04-disable-signup.yaml
+# 前两例需 DISABLE_SIGNUP_TESTS;第三例(既有账号登录)需同时设置
+# E2E_EXISTING_EMAIL 和 E2E_EXISTING_PASSWORD(body 两个字段都读)。
+# 未满足对应变量时,runner 会跳过相关用例。
+- name: '[DISABLE_SIGNUP] 新用户注册被拒绝'
+  requires_env: DISABLE_SIGNUP_TESTS
+  steps:
+    - action: 'POST /api/auth/sign-up/email'
+      body:
+        email: 'blocked-signup-$random_uuid@test.local'
+        password: 'password123'
+        name: 'Blocked'
+      asserts:
+        - '$status != 200'
+
+- name: '[DISABLE_SIGNUP] 重复注册已有账号同样被拒绝'
+  requires_env: DISABLE_SIGNUP_TESTS
+  steps:
+    - action: 'POST /api/auth/sign-up/email'
+      body:
+        email: 'blocked-again-$random_uuid@test.local'
+        password: 'password123'
+        name: 'Blocked2'
+      asserts:
+        - '$status != 200'
+
+- name: '[DISABLE_SIGNUP] 既有账号仍可登录'
+  requires_env: [E2E_EXISTING_EMAIL, E2E_EXISTING_PASSWORD]
+  steps:
+    - action: 'POST /api/auth/sign-in/email'
+      body:
+        email: '$env:E2E_EXISTING_EMAIL'
+        password: '$env:E2E_EXISTING_PASSWORD'
+      asserts:
+        - '$status == 200'

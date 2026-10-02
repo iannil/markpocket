@@ -4,7 +4,7 @@
 
 ### Database Migrations
 
-This release includes two new database migrations. If you are running the Docker container, migrations run automatically on boot (the container's `CMD` executes `drizzle-kit migrate` before starting the server). No manual steps needed.
+This release includes six new database migrations (0007–0012). If you are running the Docker container, migrations run automatically on boot — `src/server.ts` applies pending migrations under a pg advisory lock before serving (so concurrent replicas serialize), then starts the server. No manual steps needed.
 
 If you are running outside Docker (e.g., the dev server), run:
 
@@ -41,6 +41,58 @@ CREATE TABLE "base_invite" (
 ```
 
 Creates the `base_invite` table for the invite-by-email flow. Existing databases will have the table created on first boot after upgrade.
+
+#### Migration 0009: integrity constraints & hot-path indexes
+
+File: `apps/web/src/server/db/migrations/0009_groovy_thing.sql`
+
+Summary of what it does:
+
+- Deduplicates `base_member` rows (keeps the most privileged role per `(base_id, user_id)`) and adds a composite primary key on `(base_id, user_id)`.
+- Adds `attachment.base_id` (with an `ON DELETE CASCADE` FK to `base`) to support per-object download ACLs.
+- Unique indexes on `base_invite.token` and `base_share.token` (token collision becomes impossible at the DB level).
+- Hot-path indexes: `cell_value_gin` (GIN on `cell.value`, back-links), `cell_history(cell_id, changed_at)`, and FK indexes on `field/record/table/view/base_member`.
+
+Non-destructive except for the `base_member` dedupe DELETE, which only removes exact duplicate memberships (same user, same base) while keeping the highest role. The 0009 dedupe runs on every database that still has duplicates — if you maintain roles out-of-band, review duplicated memberships before upgrading.
+
+#### Migration 0010: sort & history time indexes
+
+File: `apps/web/src/server/db/migrations/0010_record_sort_and_history_time_indexes.sql`
+
+```sql
+CREATE INDEX IF NOT EXISTS "record_table_created_at_idx" ON "record" USING btree ("table_id","created_at" DESC);
+CREATE INDEX IF NOT EXISTS "cell_history_changed_at_idx" ON "cell_history" USING btree ("changed_at" DESC);
+```
+
+Pure index additions — no schema or data changes, no breaking behavior. `record(table_id, created_at DESC)` backs the default record listing sort; `cell_history(changed_at DESC)` backs the base-wide history timeline.
+
+#### Migration 0011: history pagination composite index
+
+File: `apps/web/src/server/db/migrations/0011_redundant_sentry.sql`
+
+```sql
+DROP INDEX "cell_history_changed_at_idx";
+CREATE INDEX "cell_history_changed_at_id_idx" ON "cell_history" USING btree ("changed_at" DESC NULLS LAST,"id" DESC NULLS LAST);
+```
+
+Replaces 0010's single-column `cell_history(changed_at DESC)` index with the composite `(changed_at DESC, id DESC)`. History listing (`listByBase`/`listByTable`) pages with `ORDER BY changed_at DESC, id DESC` — the unique `id` tiebreaker keeps offset paging deterministic when a bulk write (dead-reference cleanup, backfill, import) stamps many rows with identical timestamps; the composite backs the full ORDER BY instead of just its prefix. Index-only replacement, no data changes.
+
+#### Migration 0012: drop redundant indexes, add `base_id` indexes
+
+File: `apps/web/src/server/db/migrations/0012_worthless_ozymandias.sql`
+
+```sql
+DROP INDEX "cell_record_id_idx";
+DROP INDEX "record_table_id_idx";
+CREATE INDEX "attachment_base_id_idx" ON "attachment" USING btree ("base_id");
+CREATE INDEX "base_invite_base_id_idx" ON "base_invite" USING btree ("base_id");
+CREATE INDEX "base_share_base_id_idx" ON "base_share" USING btree ("base_id");
+```
+
+Two sides of index hygiene, no data changes:
+
+- **Drops** `cell_record_id_idx` and `record_table_id_idx` — both are fully covered by the leading column of an existing index (`cell_record_field_uq (record_id, field_id)` and `record_table_created_at_idx (table_id, created_at DESC)` respectively), so they only added write amplification.
+- **Adds** missing single-column indexes on `base_share.base_id`, `base_invite.base_id`, and `attachment.base_id` — `share.list` / `invite.list` filter by base and base deletion cascades over these tables; without the index those scans degrade to sequential scans as tables grow.
 
 ### Docker Compose
 

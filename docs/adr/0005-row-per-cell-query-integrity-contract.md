@@ -22,7 +22,7 @@ ADR-0001 选定了 row-per-cell + JSONB value，但只论证了**存储选型**�
 2. **空 Cell = 无行**：未赋值不占行（稀疏友好，直接服务 ADR-0001 的 <10 万行赌注）；清空 = `DELETE` cell 行 + 同事务追加 `cell_history(old_value, new_value=null)`。
 3. **字段值形态（value schema）**：见 `plan.md` §5 `cells.value` 注释。关键：number = float64 + `options.precision/scale` 控显示精度；date = ISO 8601（TZ-aware instant 或 naive `YYYY-MM-DD`，由 `options.includeTime` 区分）；single/multi-select 按 option id；multi-select/attachment/link 为有序 id 数组。
 4. **Link 单一事实源**：link 值**只**存 `cells.value` 的 `recordId[]`，**不设独立 `links` 表**；反向查询走 `cells.value` 的 GIN 包含索引（`value @> '["rec_x"]'`）。无双写同步、单一 SoT。
-5. **引用完整性 = 级联清空**：link 目标 record、select option、被引用 user 被删时，同事务反查引用方 cell 并清死 id（数组空则按决策 2 删行），各写一行 `cell_history`。不阻止删除、不留墓碑；历史兜底信息不丢。
+5. **引用完整性 = 级联清空**：link 目标 record、select option、被引用 user 被删时，同事务反查引用方 cell 并清死 id（数组空则按决策 2 删行），各写一行 `cell_history`。不阻止删除、不留墓碑；历史兜底信息不丢。（**2026-10-02 现状注记**：record 删除与 table/base 删除的 link 死引用级联清理已落地——清理限定同 base、每处清理写 `cell_history`；**select-option 删除与 user 删除的级联仍 deferred**，当前这两类删除后引用方 cell 可能残留死 id，待后续按本决策补齐。）
 6. **View 查询语义**：filter 支持嵌套 AND/OR；v1 不支持 sort/group by link（语义模糊，实为 Lookup/Rollup，v2）；filter by link（contains/empty）走决策 4 的 GIN。
 
 ## 后果

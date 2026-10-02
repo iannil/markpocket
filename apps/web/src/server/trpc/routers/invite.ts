@@ -122,20 +122,20 @@ export const inviteRouter = router({
           code: 'FORBIDDEN',
           message: `This invite is for ${inv.email}. Sign in with that account.`,
         });
-      // Upsert membership with the invited role.
-      const [existing] = await db
-        .select()
-        .from(baseMember)
-        .where(and(eq(baseMember.baseId, inv.baseId), eq(baseMember.userId, ctx.session.user.id)))
-        .limit(1);
-      if (!existing) {
-        await db.insert(baseMember).values({
+      // Idempotent membership grant: two concurrent accepts of the same (or a
+      // re-sent) invite both insert, and the loser used to die on the
+      // (base_id, user_id) PK with a 500. ON CONFLICT DO NOTHING makes the
+      // loser a success instead — an already-member accepting again is the
+      // same outcome as accepting once. The surviving membership keeps its
+      // original role (never demote on re-invite).
+      await db
+        .insert(baseMember)
+        .values({
           baseId: inv.baseId,
           userId: ctx.session.user.id,
           role: inv.role,
-        });
-      }
-      // Existing members keep their role (never demote on re-invite).
+        })
+        .onConflictDoNothing({ target: [baseMember.baseId, baseMember.userId] });
       await db.update(baseInvite).set({ acceptedAt: new Date() }).where(eq(baseInvite.id, inv.id));
       return { baseId: inv.baseId };
     }),

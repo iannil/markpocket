@@ -6,8 +6,10 @@ services:
       POSTGRES_USER: markpocket
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
       POSTGRES_DB: markpocket
+    # Bound to loopback only: exposing Postgres publicly is rarely what you
+    # want for a single-tenant self-hosted deployment.
     ports:
-      - '5433:5432'
+      - '127.0.0.1:5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,21 +18,46 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
 
   web:
     build: .
     container_name: markpocket-web
+    # .env passes optional settings through (STORAGE_PROVIDER, DISABLE_SIGNUP,
+    # …); explicit `environment` entries below take precedence. UPLOAD_DIR is
+    # pinned here on purpose: env_file beats the image ENV, so a leftover
+    # UPLOAD_DIR in .env would otherwise redirect uploads off the ./data
+    # bind-mount and lose them on container replacement.
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://markpocket:${POSTGRES_PASSWORD}@postgres:5432/markpocket
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       NODE_ENV: production
+      UPLOAD_DIR: /app/data/uploads
+      # The container always listens on 3000 — pin PORT so a stray PORT in
+      # .env (e.g. dev's 7420) cannot pass through env_file and break both
+      # the published port mapping and the image healthcheck. To serve on a
+      # different host port, remap the left side below ('8080:3000').
+      PORT: 3000
     ports:
+      # Host port is remappable; the container always listens on 3000 (PORT is
+      # pinned in `environment` above) — map '8080:3000', not a PORT override.
       - '3000:3000'
+    # Uploaded attachments land here (UPLOAD_DIR=/app/data/uploads, set by the
+    # image and re-pinned in `environment` above) — bind-mount ./data so
+    # uploads survive container replacement and are trivially backup-able
+    # (back up ./data plus the postgres_data volume).
+    volumes:
+      - './data:/app/data'
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.5
 
 volumes:
   postgres_data:

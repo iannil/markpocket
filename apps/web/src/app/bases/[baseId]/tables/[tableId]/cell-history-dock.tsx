@@ -1,28 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc/client';
-
-function fmtVal(v: unknown): string {
-  if (v == null) return '(empty)';
-  if (typeof v === 'string') return v === '' ? '(empty)' : v;
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (Array.isArray(v)) return `[${v.length} items]`;
-  if (typeof v === 'object' && v !== null && '__error' in v) {
-    return `error: ${(v as { __error: string }).__error}`;
-  }
-  return JSON.stringify(v).slice(0, 40);
-}
-
-function fmtTime(iso: Date | string): string {
-  const d = new Date(iso);
-  const diff = Date.now() - d.getTime();
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return d.toLocaleDateString();
-}
+import { fmtTime, fmtVal } from '@/lib/format';
 
 export function CellHistoryDock({
   cell,
@@ -40,13 +21,20 @@ export function CellHistoryDock({
   onClose: () => void;
 }) {
   const [showDiff, setShowDiff] = useState<string | null>(null);
-  const { data: history } = trpc.history.list.useQuery({
+  const {
+    data: history,
+    isLoading,
+    isError,
+    refetch,
+  } = trpc.history.list.useQuery({
     recordId: cell.recordId,
     fieldId: cell.fieldId,
   });
 
   return (
-    <div className="absolute right-0 top-0 z-10 flex h-full w-[280px] flex-col border-l border-border bg-background">
+    // Sibling panel (w-72 spacing token) — never overlays the grid, so it can't
+    // cover the cell being edited.
+    <aside className="flex h-full w-72 flex-none flex-col overflow-hidden rounded-md border border-border bg-background">
       <div className="flex items-start justify-between border-b border-border px-3 py-2">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">
@@ -60,12 +48,24 @@ export function CellHistoryDock({
           onClick={onClose}
           className="rounded px-1 text-muted-foreground hover:text-foreground"
           title="Close (Esc)"
+          aria-label="Close cell history"
         >
           ×
         </button>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
-        {!history || history.length === 0 ? (
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Loading…</p>
+        ) : isError ? (
+          // A failed load must not masquerade as "no history" — that would
+          // read as "this cell was never edited".
+          <div className="space-y-2 text-xs text-destructive">
+            <p>Failed to load history.</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : !history || history.length === 0 ? (
           <p className="text-xs text-muted-foreground">No changes recorded.</p>
         ) : (
           history.map((h) => (
@@ -102,6 +102,6 @@ export function CellHistoryDock({
           ))
         )}
       </div>
-    </div>
+    </aside>
   );
 }

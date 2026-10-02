@@ -5,8 +5,32 @@ archived/
 **/.next/
 **/dist/
 **/.turbo/
+**/*.tsbuildinfo
 .git/
 .gitignore
+.github/
+.claude/
+.superpowers/
+.husky/
+.playwright-mcp/
+.dev-compose.yml
+
+# docs & metadata — not needed to build or run
+docs/
+tests/
+CHANGELOG.md
+CLAUDE.md
+CONTEXT.md
+CONTRIBUTING.md
+README.md
+README.zh.md
+.env.example
+.editorconfig
+.prettierignore
+prettier.config.js
+lint-staged.config.js
+eslint.config.js
+vitest.config.ts
 
 # local env (compose injects real values)
 **/.env
@@ -14,4 +38,3 @@ archived/
 
 *.log
 .DS_Store
-.playwright-mcp/

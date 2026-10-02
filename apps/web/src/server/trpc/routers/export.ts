@@ -1,52 +1,25 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { cellToCsv, csvEscape } from '@markpocket/plugin-csv/csv';
 import { FieldType } from '@/lib/field-types';
-import { formatNumberToString } from '@/lib/format-number';
+import { formatNumberToString, parseStringToNumber } from '@/lib/format-number';
+import { normalizeCellValue } from '@/server/plugins/field-value';
 import { assertRole } from '@/lib/roles';
 import { listRecordsPivoted, countRecords } from '@/lib/db-queries';
 import { field, table } from '../../db/schema';
 import { db } from '../../db';
 import { protectedProcedure, router } from '../init';
 
-// Re-exported from @markpocket/plugin-csv/csv — inline to avoid circular deps.
-// Leading = + - @ and tab/CR are neutralized with a leading apostrophe so Excel
-// / Sheets don't execute the cell as a formula (OWASP CSV injection). Import
-// strips the apostrophe again, keeping the round-trip.
-function csvEscape(s: string): string {
-  const guarded = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  if (/[",\n\r]/.test(guarded)) return `"${guarded.replace(/"/g, '""')}"`;
-  return guarded;
-}
-
-function cellToCsv(value: unknown, type: string, options: Record<string, unknown>): string {
-  if (value == null) return '';
-  switch (type) {
-    case FieldType.Number:
-      return formatNumberToString(value as number, options as { precision?: number });
-    case FieldType.Boolean:
-      return value ? 'true' : 'false';
-    case FieldType.SingleSelect: {
-      const choices = (options.choices as Array<{ id: string; name: string }>) ?? [];
-      return choices.find((c) => c.id === value)?.name ?? '';
-    }
-    case FieldType.MultiSelect: {
-      const choices = (options.choices as Array<{ id: string; name: string }>) ?? [];
-      const ids = (value as string[]) ?? [];
-      return ids
-        .map((id) => choices.find((c) => c.id === id)?.name ?? '')
-        .filter(Boolean)
-        .join('|');
-    }
-    case FieldType.Link:
-    case FieldType.Attachment:
-    case FieldType.User:
-    case FieldType.Expression:
-      return '';
-    default:
-      return String(value);
-  }
-}
+// Shared with the CSV plugin package — the "avoid circular deps" note that
+// justified the old inline copies is stale: apps → packages is the one-way
+// dependency and plugin-csv imports nothing from the app.
+const FIELD_TYPES_API = {
+  FieldType,
+  formatNumberToString,
+  parseStringToNumber,
+  normalizeCellValue,
+};
 
 export const exportRouter = router({
   exportBase: protectedProcedure
@@ -91,7 +64,14 @@ export const exportRouter = router({
         const lines = records.map((r) =>
           fields
             .map((f) =>
-              csvEscape(cellToCsv(r.cells[f.id], f.type, f.options as Record<string, unknown>)),
+              csvEscape(
+                cellToCsv(
+                  r.cells[f.id],
+                  f.type,
+                  f.options as Record<string, unknown>,
+                  FIELD_TYPES_API,
+                ),
+              ),
             )
             .join(','),
         );

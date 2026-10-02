@@ -6,6 +6,7 @@ import { Breadcrumb } from './breadcrumb';
 import { OnlineAvatars, type OnlineUser } from './online-avatars';
 import { useSidebarCollapsed } from '@/lib/use-sidebar-collapsed';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
+import { initials } from '@/lib/initials';
 import { cn } from '@/lib/utils';
 
 export type CurrentUser = {
@@ -34,9 +35,9 @@ export function Topbar({
       <button
         type="button"
         onClick={toggle}
-        className="size-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground"
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         title={collapsed ? 'Expand sidebar (⌘\\)' : 'Collapse sidebar (⌘\\)'}
+        className="size-7 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground hover:text-foreground"
       >
         {collapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
       </button>
@@ -49,6 +50,7 @@ export function Topbar({
         {onlineUsers.length > 0 && <OnlineAvatars users={onlineUsers} />}
         <button
           type="button"
+          aria-label="Open command palette"
           onClick={() =>
             window.dispatchEvent(
               new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
@@ -63,12 +65,9 @@ export function Topbar({
           <div
             className="size-7 rounded-full bg-muted flex items-center justify-center text-xs font-mono"
             title={currentUser.name}
+            aria-label={`Signed in as ${currentUser.name}`}
           >
-            {currentUser.name
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((s) => s[0]?.toUpperCase())
-              .join('')}
+            {initials(currentUser.name) || '?'}
           </div>
         )}
       </div>

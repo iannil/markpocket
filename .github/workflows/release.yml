@@ -3,28 +3,112 @@ on:
   push:
     tags: ['v*']
 
-# Publish-only: ci.yml gates lint/typecheck/test/build on every push/PR.
+# Actions are pinned to full commit SHAs — this workflow holds ghcr.io push
+# credentials, so a hijacked tag must never silently change what it runs.
+# Dependabot (github-actions ecosystem, weekly) rebumps the SHAs via PRs.
+#
+# Publishing is gated on a full verify pass at the exact tag SHA, and the
+# pushed image is smoke-tested (boot + /api/health) before the job goes green.
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Format
+        run: pnpm format:check
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@placeholder:5432/placeholder
+          BETTER_AUTH_SECRET: release-verify-secret-32-chars-minimum
+          BETTER_AUTH_URL: http://localhost:3000
+
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # ghcr.io requires all-lowercase image names; GITHUB_REPOSITORY can
+      # contain uppercase (e.g. "MyOrg/MyRepo"), which would fail the push.
+      - name: Compute image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Build and push multi-arch image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ${{ !contains(github.ref_name, '-') && format('ghcr.io/{0}:latest', github.repository) || '' }}
+            ${{ steps.image.outputs.name }}:${{ github.ref_name }}
+            ${{ !contains(github.ref_name, '-') && format('{0}:latest', steps.image.outputs.name) || '' }}
+
+      # Smoke test: boot the just-pushed image (amd64) against a disposable
+      # Postgres and curl the health endpoint. The container applies
+      # migrations on boot (advisory-locked in src/server.ts), so a healthy
+      # response proves: image starts, DB connects, migrations apply, server
+      # binds. Catches a broken runtime image before users pull it.
+      # Postgres flavor matches docker-compose.yml (postgres:16-alpine).
+      - name: Smoke test pushed image
+        run: |
+          set -euxo pipefail
+          IMAGE="${{ steps.image.outputs.name }}:${{ github.ref_name }}"
+          NETWORK="release-smoke-$GITHUB_RUN_ID"
+          docker network create "$NETWORK"
+          trap 'docker rm -f smoke-web smoke-pg >/dev/null 2>&1 || true; docker network rm "$NETWORK" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name smoke-pg --network "$NETWORK" \
+            -e POSTGRES_USER=markpocket -e POSTGRES_PASSWORD=smoke -e POSTGRES_DB=markpocket \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec smoke-pg pg_isready -U markpocket -d markpocket >/dev/null 2>&1; then
+              pg_ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "${pg_ready:-0}" != "1" ]; then
+            echo "✗ postgres not ready after 60s — last logs:"
+            docker logs smoke-pg | tail -20
+            exit 1
+          fi
+          docker run -d --name smoke-web --network "$NETWORK" -p 3000:3000 \
+            -e DATABASE_URL=postgresql://markpocket:smoke@smoke-pg:5432/markpocket \
+            -e BETTER_AUTH_SECRET=smoke-test-secret-0123456789abcdef012345 \
+            -e BETTER_AUTH_URL=http://localhost:3000 \
+            "$IMAGE"
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "✓ smoke test passed: /api/health responded"
+              docker logs smoke-web | tail -20
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "✗ smoke test failed — container logs:"
+          docker logs smoke-web | tail -50
+          exit 1

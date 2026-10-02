@@ -11,7 +11,12 @@ export const REALTIME_CHANNEL = 'markpocket_realtime';
 export interface RealtimeNotice {
   baseId: string;
   tableId?: string;
+  // Echo suppression: the user whose mutation caused the change (their own
+  // client refetches via the tRPC response instead).
   exceptUserId?: string;
+  // Control signal — force-close a user's subscriptions on baseId (membership
+  // revoked or role changed). Not forwarded to clients.
+  kick?: { userId: string };
 }
 
 function emit(notice: RealtimeNotice): void {
@@ -35,4 +40,11 @@ export async function publishTableChange(tableId: string, exceptUserId?: string)
 // Broadcast a base-scoped change (table/base structural changes).
 export async function publishBaseChange(baseId: string, exceptUserId?: string) {
   await emit({ baseId, exceptUserId });
+}
+
+// Kick a user off a base's channel (member.remove / member.updateRole).
+// Existing subscriptions were authorized when opened; this closes the
+// TOCTOU window until the client reconnects and re-authorizes.
+export function publishKick(baseId: string, userId: string): void {
+  emit({ baseId, kick: { userId } });
 }
