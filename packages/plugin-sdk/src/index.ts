@@ -81,14 +81,17 @@ export interface CoreQueries {
   /**
    * Materialize expression cells for one record (ADR-0003). Must run inside the
    * caller's transaction — `tx` is the tx handle the host's drizzle db hands to
-   * `db.transaction` callbacks, passed through opaquely.
+   * `db.transaction` callbacks, passed through opaquely. Resolves with the
+   * materialized outcomes so callers can surface refreshed values to their
+   * clients.
    */
   materializeExpressionsForRecord: (
     tx: unknown,
     tableId: string,
     recordId: string,
     userId: string,
-  ) => Promise<void>;
+    changedFieldId?: string,
+  ) => Promise<Array<{ fieldId: string; value: unknown }>>;
 }
 
 export interface CoreFieldTypes {

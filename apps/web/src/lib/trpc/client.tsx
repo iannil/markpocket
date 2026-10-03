@@ -9,9 +9,12 @@ import type { AppRouter } from '@/server/trpc/router';
 
 export const trpc = createTRPCReact<AppRouter>();
 
+// The provider runs in the browser only (every data hook here is
+// client-side); the empty prefix makes requests same-origin. Deliberately no
+// server branch: an SSR prefetch would need the real request origin (from
+// headers()), and a hardcoded fallback silently pointed at the wrong host.
 function getBaseUrl() {
-  if (typeof window !== 'undefined') return '';
-  return 'http://localhost:3000';
+  return '';
 }
 
 export function TRPCProvider({ children }: { children: ReactNode }) {

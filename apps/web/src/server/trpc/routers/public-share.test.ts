@@ -189,7 +189,8 @@ describe('publicShareRouter — view-bound share', () => {
     const result = await publicShareRouter
       .createCaller({ session: null })
       .getBase({ token: 'tok' });
-    expect(result).toEqual({ id: 'b1', name: 'Base', icon: '📁', viewId: 'v1', shareId: 's1' });
+    // Display-only projection: no internal row ids on the public surface.
+    expect(result).toEqual({ name: 'Base', icon: '📁', viewId: 'v1' });
   });
 
   it('getBase returns null when the bound view was deleted', async () => {

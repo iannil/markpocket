@@ -9,16 +9,32 @@ const rolesMock = vi.hoisted(() => ({
 }));
 vi.mock('@/server/db', () => {
   const chain = mockQuery([]);
-  return {
-    db: {
-      select: vi.fn(() => chain),
-      insert: vi.fn(() => chain),
-      update: vi.fn(() => chain),
-      delete: vi.fn(() => chain),
-      transaction: vi.fn((cb: (tx: any) => Promise<unknown>) => cb(chain)),
-    },
-    sql: { notify: vi.fn().mockResolvedValue(undefined) },
+  const select = vi.fn(() => chain);
+  const insert = vi.fn(() => chain);
+  const update = vi.fn(() => chain);
+  const del = vi.fn(() => chain);
+  // Variadic wrappers so the transaction handle can forward spread args into
+  // the per-test-overridable mocks above (tests pin insert/update chains via
+  // db.insert/db.update even when the router writes through tx).
+  const variadic =
+    (fn: (...a: any[]) => any) =>
+    (...a: any[]) =>
+      fn(...a);
+  const db = {
+    select,
+    insert,
+    update,
+    delete: del,
+    transaction: vi.fn((cb: (tx: any) => Promise<unknown>) =>
+      cb({
+        select: variadic(select),
+        insert: variadic(insert),
+        update: variadic(update),
+        delete: variadic(del),
+      }),
+    ),
   };
+  return { db, sql: { notify: vi.fn().mockResolvedValue(undefined) } };
 });
 vi.mock('@/lib/roles', () => rolesMock);
 vi.mock('@/server/realtime/publish', () => ({

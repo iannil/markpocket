@@ -93,6 +93,14 @@ export function FilterPanel({
   const conditions = (filter?.conditions ?? []) as FilterCondition[];
   const fieldById = new Map(fields.map((f) => [f.id, f]));
 
+  // A condition whose operator needs a value but has none matches NOTHING —
+  // this is how users accidentally blank out the whole grid.
+  const hasEmptyOperand = conditions.some((c) => {
+    const f = fieldById.get(c.fieldId);
+    const opDef = opsFor(f?.type).find((o) => o.value === c.operator);
+    return Boolean(opDef?.operand) && String(c.operand ?? '') === '';
+  });
+
   function update(i: number, patch: Partial<FilterCondition>) {
     const next = conditions.map((c, idx) => (idx === i ? { ...c, ...patch } : c));
     onChange({ op: 'and', conditions: next });
@@ -101,8 +109,14 @@ export function FilterPanel({
     const next = conditions.filter((_, idx) => idx !== i);
     onChange(next.length ? { op: 'and', conditions: next } : undefined);
   }
+  function clearAll() {
+    onChange(undefined);
+  }
   function add() {
-    const f = fields[0];
+    // Default to the first TEXT field — the field users most often filter
+    // by. The first DISPLAYED column can be an expression/computed column,
+    // which makes for a baffling default.
+    const f = fields.find((x) => x.type === FieldType.Text) ?? fields[0];
     if (!f) return;
     onChange({
       op: 'and',
@@ -155,10 +169,12 @@ export function FilterPanel({
     }
     const inputType =
       field.type === FieldType.Number ? 'number' : field.type === FieldType.Date ? 'date' : 'text';
+    const empty = String(cond.operand ?? '') === '';
     return (
       <Input
         type={inputType}
-        className="h-7 w-40 rounded-md border-border text-sm"
+        className={`h-7 w-40 rounded-md border-border text-sm${empty ? ' border-amber-500/70 bg-amber-500/5' : ''}`}
+        aria-invalid={empty}
         value={String(cond.operand ?? '')}
         onChange={(e) => update(i, { operand: e.target.value })}
       />
@@ -167,14 +183,32 @@ export function FilterPanel({
 
   return (
     <div className="space-y-1 rounded-md border border-border bg-background p-2">
-      {conditions.length === 0 && (
+      {conditions.length === 0 ? (
         <p className="px-1 text-xs text-muted-foreground">No filters — all records shown.</p>
+      ) : (
+        <div className="flex items-center justify-between px-1 pb-1">
+          <span className="text-xs font-medium text-foreground">
+            {conditions.length} {conditions.length === 1 ? 'condition' : 'conditions'}
+          </span>
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+      {hasEmptyOperand && (
+        <p className="px-1 text-xs text-amber-600 dark:text-amber-400" role="alert">
+          A condition with an empty value matches no records.
+        </p>
       )}
       {conditions.map((cond, i) => {
         const field = fieldById.get(cond.fieldId);
         const ops = opsFor(field?.type);
         return (
-          <div key={i} className="flex items-center gap-1">
+          <div key={`${cond.fieldId}-${i}`} className="flex items-center gap-1">
             <Select
               value={cond.fieldId}
               onValueChange={(fid) => {

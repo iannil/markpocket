@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/lib/toast';
@@ -44,6 +45,7 @@ export function ViewTabs({
   // Inline rename (spec §7.2: inline over prompt/popover): the tab itself
   // swaps to an input; Enter commits, Esc or blur cancels.
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   function commitRename() {
     const trimmed = renaming?.name.trim();
@@ -92,10 +94,8 @@ export function ViewTabs({
             )}
             {views.length > 1 && !readOnly && (
               <button
-                className="ml-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                onClick={() => {
-                  if (window.confirm(`Delete view "${v.name}"?`)) remove.mutate({ id: v.id });
-                }}
+                className="ml-1 text-muted-foreground opacity-0 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                onClick={() => setDeleteTarget({ id: v.id, name: v.name })}
                 title="Delete view"
                 aria-label={`Delete view ${v.name}`}
               >
@@ -137,6 +137,16 @@ export function ViewTabs({
           + view
         </Button>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title={`Delete view “${deleteTarget?.name ?? ''}”?`}
+        description="The view's saved filter, sort and grouping settings are deleted with it. Records are not affected."
+        confirmLabel="Delete view"
+        pending={remove.isPending}
+        onConfirm={() => deleteTarget && remove.mutate({ id: deleteTarget.id })}
+      />
     </div>
   );
 }

@@ -20,6 +20,23 @@ export function firstSegment(text: string): string {
   return text.trim().split(/\r?\n/)[0]?.split('\t')[0]?.trim() ?? '';
 }
 
+// Copy counterpart to firstSegment: format a stored cell value as clipboard
+// text. Arrays (multi-select ids, link ids, attachments) join with '|' — the
+// same separator parseClipboardValue accepts back; objects (expression error
+// sentinels) serialize as JSON instead of "[object Object]". Round-trip
+// fidelity only holds for multi-select (ids map back via choices); link and
+// attachment copies are informational.
+export function formatClipboardValue(value: unknown): string {
+  if (value == null) return '';
+  if (Array.isArray(value))
+    return value
+      .map((v) => formatClipboardValue(v))
+      .filter(Boolean)
+      .join('|');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 export function parseClipboardValue(
   field: ClipboardFieldShape,
   users: ClipboardUserShape[],

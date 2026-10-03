@@ -1,6 +1,6 @@
 'use client';
 
-import { BaseHistoryList } from '@/components/base-history-list';
+import { BASE_HISTORY_DESCRIPTION, BaseHistoryList } from '@/components/base-history-list';
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 
 // Rendered inside the settings tabs — no redirect out of the tab layout.
@@ -9,9 +9,7 @@ export default function HistoryTab() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        All changes across this base, newest first.
-      </p>
+      <p className="mb-4 text-sm text-muted-foreground">{BASE_HISTORY_DESCRIPTION}</p>
       <BaseHistoryList />
     </div>
   );

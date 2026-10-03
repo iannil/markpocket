@@ -14,6 +14,9 @@ export default function ExportTab() {
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Truncation notices are informational, not failures — rendering them in
+  // the error channel showed successful exports in destructive red.
+  const [note, setNote] = useState<string | null>(null);
 
   // Init selected to all tables once data loads
   const selectedSet = selected ?? new Set(tables?.map((t) => t.id) ?? []);
@@ -28,28 +31,36 @@ export default function ExportTab() {
   async function handleExport() {
     setExporting(true);
     setError(null);
+    setNote(null);
     try {
-      const files = await utils.client.export.exportBase.query({ baseId });
-      // Match by tableId, not filename — two tables whose names sanitize to the
-      // same safe name ("A B" / "A_B") must not collide.
-      const filtered = files.filter((f) => selectedSet.has(f.tableId));
-      const truncated = filtered.filter((f) => f.truncated);
+      const files = await utils.client.export.exportBase.query({
+        baseId,
+        tableIds: [...selectedSet],
+      });
+      const truncated = files.filter((f) => f.truncated);
 
-      for (const file of filtered) {
+      let downloaded = 0;
+      for (const file of files) {
         const url = URL.createObjectURL(new Blob([file.csv], { type: 'text/csv' }));
         const a = document.createElement('a');
         a.href = url;
         a.download = file.name;
         a.click();
         URL.revokeObjectURL(url);
+        downloaded += 1;
         // Small delay between downloads to avoid browser blocking
         await new Promise((r) => setTimeout(r, 200));
       }
       if (truncated.length > 0) {
-        setError(
-          `Note: ${truncated
-            .map((f) => `${f.name} truncated at 10,000 of ${f.total} records`)
-            .join('; ')}`,
+        setNote(
+          truncated.map((f) => `${f.name} truncated at 10,000 of ${f.total} records`).join('; '),
+        );
+      } else if (downloaded > 1) {
+        // Browsers gate automatic multi-file downloads behind a permission
+        // prompt; a.click() cannot detect the block, so surface the hint
+        // instead of failing silently.
+        setNote(
+          `${downloaded} downloads started. If your browser asked to allow multiple downloads, choose “Allow” or retry.`,
         );
       }
     } catch (e: unknown) {
@@ -97,10 +108,15 @@ export default function ExportTab() {
         disabled={exporting || selectedSet.size === 0}
         className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
       >
-        {exporting ? 'Exporting...' : `Export ${selectedSet.size} table(s)`}
+        {exporting ? 'Exporting…' : `Export ${selectedSet.size} table(s)`}
       </button>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { FieldType } from '@/lib/field-types';
-import { firstSegment, parseClipboardValue } from './clipboard';
+import { firstSegment, formatClipboardValue, parseClipboardValue } from './clipboard';
 
 const field = (type: FieldType, options: Record<string, unknown> = {}) => ({
   id: 'f1',
@@ -130,5 +130,25 @@ describe('parseClipboardValue', () => {
 
   it('rejects empty clipboard content', () => {
     expect(parseClipboardValue(field(FieldType.Text), users, '  ').ok).toBe(false);
+  });
+});
+
+describe('formatClipboardValue', () => {
+  it('serializes primitives, null and empty', () => {
+    expect(formatClipboardValue('hi')).toBe('hi');
+    expect(formatClipboardValue(3.5)).toBe('3.5');
+    expect(formatClipboardValue(true)).toBe('true');
+    expect(formatClipboardValue(null)).toBe('');
+    expect(formatClipboardValue(undefined)).toBe('');
+    expect(formatClipboardValue('')).toBe('');
+  });
+
+  it('joins array values with the paste-accepted separator', () => {
+    // '|' is what parseClipboardValue accepts back for MultiSelect.
+    expect(formatClipboardValue(['a', 'b'])).toBe('a|b');
+  });
+
+  it('serializes objects as JSON, never "[object Object]"', () => {
+    expect(formatClipboardValue({ __error: 'div by 0' })).toBe('{"__error":"div by 0"}');
   });
 });

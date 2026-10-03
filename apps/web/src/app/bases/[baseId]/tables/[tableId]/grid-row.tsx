@@ -50,7 +50,7 @@ export function cellDomId(recordId: string, fieldId: string): string {
 
 export interface CellHandlers {
   selectCell: (recordId: string, fieldId: string) => void;
-  startEdit: (recordId: string, fieldId: string, current: unknown, seed?: string) => void;
+  startEdit: (recordId: string, fieldId: string, seed?: string) => void;
   commitCell: (
     recordId: string,
     fieldId: string,
@@ -58,7 +58,8 @@ export interface CellHandlers {
     move: 'down' | 'right' | null,
   ) => void;
   cancelEdit: () => void;
-  upsertCell: (recordId: string, fieldId: string, value: unknown) => void;
+  /** Returns the per-cell write-queue promise when available (see grid-editor). */
+  upsertCell: (recordId: string, fieldId: string, value: unknown) => unknown;
   toggleRowSelect: (
     recordId: string,
     ev: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
@@ -108,6 +109,7 @@ export const GridRow = memo(function GridRow({
   readOnly,
   rowSelected,
   selectedFieldId,
+  rowTabbable,
   editing,
   start,
   handlers,
@@ -125,6 +127,8 @@ export const GridRow = memo(function GridRow({
   readOnly: boolean;
   rowSelected: boolean;
   selectedFieldId: string | null;
+  /** Roving tabindex: only the selected row's controls are tab stops. */
+  rowTabbable: boolean;
   editing: { fieldId: string; seed?: string } | null;
   start: number;
   handlers: CellHandlers;
@@ -148,6 +152,7 @@ export const GridRow = memo(function GridRow({
       >
         <button
           aria-label={`Select row ${rowNumber}`}
+          tabIndex={rowTabbable ? 0 : -1}
           className={cn(
             'h-full w-full text-xs',
             rowSelected && 'bg-primary/10 font-semibold text-primary',
@@ -158,11 +163,17 @@ export const GridRow = memo(function GridRow({
           {rowNumber}
         </button>
         {!readOnly && (
+          // Visible (and tabbable) when the row is selected, not only on
+          // hover: keyboard and touch users have no hover, and tabIndex=-1
+          // made record deletion unreachable without a mouse.
           <button
             aria-label={`Delete record ${rowNumber}`}
             title="Delete record"
-            tabIndex={-1}
-            className="absolute right-1 top-1/2 hidden -translate-y-1/2 leading-none text-muted-foreground hover:text-destructive group-hover:block"
+            tabIndex={rowTabbable ? 0 : -1}
+            className={cn(
+              'absolute right-1 top-1/2 -translate-y-1/2 leading-none text-muted-foreground hover:text-destructive',
+              rowTabbable ? 'block' : 'hidden group-hover:block',
+            )}
             onClick={(e) => {
               e.stopPropagation();
               handlers.deleteRecordById(record.id);
@@ -186,9 +197,7 @@ export const GridRow = memo(function GridRow({
             aria-selected={selectedThis || undefined}
             onClick={() => handlers.selectCell(record.id, f.id)}
             onDoubleClick={() =>
-              !readOnly &&
-              EDITABLE_TYPES.has(f.type) &&
-              handlers.startEdit(record.id, f.id, record.cells[f.id])
+              !readOnly && EDITABLE_TYPES.has(f.type) && handlers.startEdit(record.id, f.id)
             }
             className={cn(
               'relative flex-none overflow-hidden border-l border-border',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
 import {
@@ -12,32 +12,44 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { setCommandPaletteOpen, useCommandPaletteOpen } from '@/lib/command-palette';
 
-export function CommandPalette({ bases }: { bases: Array<{ id: string; name: string }> }) {
+export function CommandPalette({
+  bases,
+  tables = [],
+}: {
+  bases: Array<{ id: string; name: string }>;
+  /** Tables of the CURRENT base (when one is open) for quick jumps. */
+  tables?: Array<{ id: string; name: string }>;
+}) {
   const router = useRouter();
+  const open = useCommandPaletteOpen();
+  // useParams is untyped for arbitrary segments — validate the shape instead
+  // of asserting it.
   const params = useParams();
-  const [open, setOpen] = useState(false);
-
-  const currentBaseId = params?.baseId as string | undefined;
+  const currentBaseId =
+    typeof params?.baseId === 'string' && params.baseId.length > 0 ? params.baseId : undefined;
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setOpen((o) => !o);
+        setCommandPaletteOpen(!open);
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+    // `open` read via closure on purpose: re-binding per open change keeps
+    // the toggle semantics without stale state.
+  }, [open]);
 
   function go(href: string) {
-    setOpen(false);
+    setCommandPaletteOpen(false);
     router.push(href);
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    <CommandDialog open={open} onOpenChange={setCommandPaletteOpen}>
       <Command>
         <CommandInput placeholder="Type a command…" />
         <CommandList>
@@ -54,6 +66,16 @@ export function CommandPalette({ bases }: { bases: Array<{ id: string; name: str
           </CommandGroup>
           {currentBaseId && (
             <CommandGroup heading="Base">
+              {tables.length > 0 &&
+                tables.map((t) => (
+                  <CommandItem
+                    key={t.id}
+                    value={`Go to ${t.name}`}
+                    onSelect={() => go(`/bases/${currentBaseId}/tables/${t.id}`)}
+                  >
+                    Go to {t.name}
+                  </CommandItem>
+                ))}
               <CommandItem
                 value="Go to Settings"
                 onSelect={() => go(`/bases/${currentBaseId}/settings`)}

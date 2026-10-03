@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import { listRecordsPivoted } from '@/lib/db-queries';
 import { compileFilter } from '@/lib/view-query';
@@ -11,13 +11,40 @@ import {
   describeValue,
   type RssItem,
 } from '@/server/agent-access/rss';
+import { createFixedWindowRateLimiter, readEnvNonNegativeInt } from '@/lib/http-guards';
 
-export const FEED_DEFAULT_LIMIT = 50;
-export const FEED_MAX_LIMIT = 100;
+// Not exported: Next route files may only export route handlers and route
+// config — a plain `export const` fails the production build's type check.
+const FEED_DEFAULT_LIMIT = 50;
+const FEED_MAX_LIMIT = 100;
+
+// Unauthenticated pull surface — cap per client IP (default 60/min, 0
+// disables). Tokens carry 122 bits of entropy so enumeration is hopeless,
+// but each request costs a filtered table scan.
+const feedLimiter = createFixedWindowRateLimiter(
+  () => readEnvNonNegativeInt('FEED_RATE_LIMIT', 60),
+  60_000,
+);
+
+function clientIp(req: Request): string {
+  const fwd = req.headers.get('x-forwarded-for');
+  return fwd?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+}
 
 function notFound() {
   return new Response('Not found', {
     status: 404,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-robots-tag': 'noindex',
+    },
+  });
+}
+
+function tooManyRequests() {
+  return new Response('Too many requests', {
+    status: 429,
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   });
 }
@@ -29,6 +56,8 @@ function notFound() {
 // deleted, stale options → fail closed) mirror the public share page because
 // they're the same functions.
 export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+  if (!feedLimiter.allow(clientIp(req))) return tooManyRequests();
+
   const { token } = await params;
 
   const share = await findLiveShare(token);
@@ -61,8 +90,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       options: fieldTable.options,
     })
     .from(fieldTable)
-    .where(eq(fieldTable.tableId, view.tableId));
-  fields.sort((a, b) => a.name.localeCompare(b.name)); // orderIndex is uniform today
+    .where(eq(fieldTable.tableId, view.tableId))
+    // Same column order rule as the grid and the share page (orderIndex
+    // with the id as the deterministic tiebreaker).
+    .orderBy(asc(fieldTable.orderIndex), asc(fieldTable.id));
 
   // Hidden fields are dropped from the item summary, but the filter compiles
   // against the FULL field map — a condition on a hidden field keeps
@@ -105,8 +136,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     status: 200,
     headers: {
       'content-type': 'application/rss+xml; charset=utf-8',
-      'cache-control': 'public, max-age=60',
+      // private: the URL itself is the credential — a revoked share must not
+      // linger in a shared cache. noindex keeps the tokenized URL out of
+      // crawlers (mirrors the page-level robots on /share and /invite).
+      'cache-control': 'private, max-age=60',
       'x-content-type-options': 'nosniff',
+      'x-robots-tag': 'noindex',
     },
   });
 }

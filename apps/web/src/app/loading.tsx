@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col" role="status" aria-label="Loading page">
       {/* Top ink loading bar (spec §7.4) — indeterminate sweep while a route
           segment resolves. */}
       <div className="fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden">

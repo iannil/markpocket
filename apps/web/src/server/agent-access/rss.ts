@@ -103,6 +103,12 @@ export function describeValue(value: unknown, maxLineLength: number): string {
   } else {
     text = String(value);
   }
-  if (text.length > maxLineLength) text = `${text.slice(0, maxLineLength)}…`;
+  if (text.length > maxLineLength) {
+    text = `${text.slice(0, maxLineLength)}…`;
+    // UTF-16 slicing can cut an astral character (emoji) in half, leaving a
+    // lone surrogate that serializes into invalid XML bytes — strip any
+    // trailing orphans.
+    text = text.replace(/[\uD800-\uDBFF]$/, '').replace(/^[\uDC00-\uDFFF]/, '');
+  }
   return text;
 }

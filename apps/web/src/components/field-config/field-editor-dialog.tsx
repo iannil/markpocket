@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
+import { displayToExpression, expressionToDisplay } from '@/lib/expression-display';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +78,13 @@ export function FieldEditorDialog({
   const routeBaseId = useParams<{ baseId: string }>().baseId;
   const effectiveBaseId = baseId ?? routeBaseId;
   const utils = trpc.useUtils();
+  // Field roster for the expression editor: `{uuid}` tokens are stored
+  // server-side, but the user reads and types `{Field Name}` — the roster
+  // drives both directions of the conversion plus the insert chips.
+  const { data: tableFields } = trpc.field.list.useQuery({ tableId }, { enabled: open });
+  const fieldRefs = (tableFields ?? []).filter((f) => f.id !== field?.id);
+  const numberFields = fieldRefs.filter((f) => f.type === FieldType.Number);
+  const expressionInputRef = useRef<HTMLInputElement>(null);
   const create = trpc.field.create.useMutation({
     onSuccess: () => {
       utils.field.list.invalidate({ tableId });
@@ -106,15 +115,24 @@ export function FieldEditorDialog({
   const [expression, setExpression] = useState('');
   // Link-field target — kept separate from `expression` (which is the expression DSL).
   const [targetTableId, setTargetTableId] = useState('');
+  // Deleting a field destroys its entire column of data — the click used to
+  // fire the mutation immediately, with no confirmation at all.
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(field?.name ?? '');
       setType(field?.type ?? FieldType.Text);
       setChoices((field?.options?.choices as SelectOption[] | undefined) ?? []);
-      setExpression((field?.options?.expression as string | undefined) ?? '');
+      // Seed in DISPLAY form ({Name}); the save path converts back to the
+      // stored {uuid} form via the current field roster.
+      const stored = (field?.options?.expression as string | undefined) ?? '';
+      setExpression(stored ? expressionToDisplay(stored, tableFields ?? []) : '');
       setTargetTableId((field?.options?.targetTableId as string | undefined) ?? '');
     }
+    // tableFields omitted on purpose: seeding once per open is the intended
+    // behavior — a mid-edit roster refresh must not clobber the draft.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, field]);
 
   // Serial save: rename first, then options. On failure the dialog STAYS OPEN
@@ -123,6 +141,9 @@ export function FieldEditorDialog({
   async function onSave() {
     const trimmed = name.trim();
     if (!trimmed) return;
+    // The editor works in {Name} form; the stored expression must carry the
+    // {uuid} tokens the evaluator understands.
+    const storedExpression = displayToExpression(expression, fieldRefs);
     if (editing && field) {
       setSaving(true);
       try {
@@ -132,7 +153,10 @@ export function FieldEditorDialog({
         } else if (field.type === FieldType.Expression) {
           await updateOptions.mutateAsync({
             id: field.id,
-            options: { expression, dependsOn: extractDependsOn(expression) },
+            options: {
+              expression: storedExpression,
+              dependsOn: extractDependsOn(storedExpression),
+            },
           });
         } else if (field.type === FieldType.Link) {
           await updateOptions.mutateAsync({ id: field.id, options: { targetTableId } });
@@ -148,7 +172,10 @@ export function FieldEditorDialog({
         type === FieldType.SingleSelect || type === FieldType.MultiSelect
           ? { choices }
           : type === FieldType.Expression
-            ? { expression, dependsOn: extractDependsOn(expression) }
+            ? {
+                expression: storedExpression,
+                dependsOn: extractDependsOn(storedExpression),
+              }
             : type === FieldType.Link
               ? { targetTableId }
               : {};
@@ -157,87 +184,127 @@ export function FieldEditorDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{editing ? 'Edit field' : 'New field'}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <Label htmlFor="field-name">Name</Label>
-            <Input
-              id="field-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Type</Label>
-            <FieldTypePicker value={type} onChange={setType} disabled={editing} />
-          </div>
-          {(type === FieldType.SingleSelect || type === FieldType.MultiSelect) && (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? 'Edit field' : 'New field'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
             <div className="space-y-1">
-              <Label>Options</Label>
-              <SelectOptionsEditor choices={choices} onChange={setChoices} />
-            </div>
-          )}
-          {type === FieldType.Expression && (
-            <div className="space-y-1">
-              <Label>Expression</Label>
+              <Label htmlFor="field-name">Name</Label>
               <Input
-                value={expression}
-                onChange={(e) => setExpression(e.target.value)}
-                placeholder={'{fieldId} * {fieldId}'}
-                className="font-mono text-sm"
+                id="field-name"
+                value={name}
+                maxLength={64}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
               />
-              <p className="text-xs text-muted-foreground">
-                Use {'{fieldId}'} tokens. Arithmetic on number fields only.
-              </p>
             </div>
-          )}
-          {type === FieldType.Link && (
             <div className="space-y-1">
-              <Label>Link to table</Label>
-              <FieldEditorDialogTablePicker
-                baseId={effectiveBaseId}
-                value={targetTableId}
-                onChange={setTargetTableId}
-              />
+              <Label>Type</Label>
+              <FieldTypePicker value={type} onChange={setType} disabled={editing} />
             </div>
-          )}
-        </div>
-        <DialogFooter className="flex-row justify-between gap-2">
-          {editing ? (
-            <Button
-              variant="destructive"
-              onClick={() => field && remove.mutate({ id: field.id })}
-              disabled={remove.isPending}
-            >
-              Delete
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => onSave()}
-              disabled={
-                !name.trim() ||
-                saving ||
-                create.isPending ||
-                rename.isPending ||
-                updateOptions.isPending
-              }
-            >
-              {editing ? 'Save' : 'Create'}
-            </Button>
+            {(type === FieldType.SingleSelect || type === FieldType.MultiSelect) && (
+              <div className="space-y-1">
+                <Label>Options</Label>
+                <SelectOptionsEditor choices={choices} onChange={setChoices} />
+              </div>
+            )}
+            {type === FieldType.Expression && (
+              <div className="space-y-1">
+                <Label>Expression</Label>
+                <Input
+                  ref={expressionInputRef}
+                  value={expression}
+                  onChange={(e) => setExpression(e.target.value)}
+                  placeholder={'{Price} * {Qty}'}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Click a field to insert it. Arithmetic on number fields only.
+                </p>
+                {numberFields.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {numberFields.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          const el = expressionInputRef.current;
+                          const token = `{${f.name}}`;
+                          const start = el?.selectionStart ?? expression.length;
+                          const end = el?.selectionEnd ?? expression.length;
+                          const next = expression.slice(0, start) + token + expression.slice(end);
+                          setExpression(next);
+                          // Restore caret just after the inserted token.
+                          requestAnimationFrame(() => {
+                            el?.focus();
+                            el?.setSelectionRange(start + token.length, start + token.length);
+                          });
+                        }}
+                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                        title={`Insert {${f.name}}`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {type === FieldType.Link && (
+              <div className="space-y-1">
+                <Label>Link to table</Label>
+                <FieldEditorDialogTablePicker
+                  baseId={effectiveBaseId}
+                  value={targetTableId}
+                  onChange={setTargetTableId}
+                />
+              </div>
+            )}
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="flex-row justify-between gap-2">
+            {editing ? (
+              <Button
+                variant="destructive"
+                onClick={() => setConfirmDelete(true)}
+                disabled={remove.isPending}
+              >
+                Delete
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => onSave()}
+                disabled={
+                  !name.trim() ||
+                  saving ||
+                  create.isPending ||
+                  rename.isPending ||
+                  updateOptions.isPending
+                }
+              >
+                {editing ? 'Save' : 'Create'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete field “${field?.name ?? ''}”?`}
+        description="This permanently deletes the field and every value stored in its column. There is no undo."
+        confirmLabel="Delete field"
+        pending={remove.isPending}
+        onConfirm={() => field && remove.mutate({ id: field.id })}
+      />
+    </>
   );
 }

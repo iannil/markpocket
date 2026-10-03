@@ -256,6 +256,9 @@ describe('reconnect compensation', () => {
     const second = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]!;
     expect(second).not.toBe(first);
     open(second);
+    // Reconnect compensation is debounced like change invalidation — let the
+    // debounce fire before asserting.
+    act(() => vi.advanceTimersByTime(250));
 
     // The gap may have dropped broadcasts: base structure, the SUBSCRIBED
     // base's tables, and the table-scoped lists (active ones refetch).

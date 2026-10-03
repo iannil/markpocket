@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc/client';
 import { fmtTime, fmtVal } from '@/lib/format';
@@ -12,6 +13,7 @@ export function CellHistoryDock({
   currentValue,
   onRestore,
   onClose,
+  onCollapse,
 }: {
   cell: { recordId: string; fieldId: string };
   fieldName: string;
@@ -19,8 +21,11 @@ export function CellHistoryDock({
   currentValue: unknown;
   onRestore: (value: unknown) => void;
   onClose: () => void;
+  /** Collapse to the narrow rail (grid keeps its width). */
+  onCollapse?: () => void;
 }) {
   const [showDiff, setShowDiff] = useState<string | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<{ value: unknown } | null>(null);
   const {
     data: history,
     isLoading,
@@ -44,14 +49,26 @@ export function CellHistoryDock({
             {fmtVal(currentValue)}
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="rounded px-1 text-muted-foreground hover:text-foreground"
-          title="Close (Esc)"
-          aria-label="Close cell history"
-        >
-          ×
-        </button>
+        <div className="flex shrink-0 items-center">
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              className="rounded px-1 text-muted-foreground hover:text-foreground"
+              title="Collapse (keep selection)"
+              aria-label="Collapse cell history"
+            >
+              »
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="rounded px-1 text-muted-foreground hover:text-foreground"
+            title="Close (Esc)"
+            aria-label="Close cell history"
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {isLoading ? (
@@ -79,9 +96,7 @@ export function CellHistoryDock({
                 <span>{fmtTime(h.changedAt)}</span>
               </div>
               <button
-                onClick={() => {
-                  if (confirm('Restore this version?')) onRestore(h.newValue);
-                }}
+                onClick={() => setRestoreTarget({ value: h.newValue })}
                 className="mt-0.5 text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 restore
@@ -102,6 +117,17 @@ export function CellHistoryDock({
           ))
         )}
       </div>
+      <ConfirmDialog
+        open={restoreTarget !== null}
+        onOpenChange={(o) => !o && setRestoreTarget(null)}
+        title="Restore this version?"
+        description="The current value is kept in history, so you can always restore back."
+        confirmLabel="Restore"
+        onConfirm={() => {
+          if (restoreTarget) onRestore(restoreTarget.value);
+          setRestoreTarget(null);
+        }}
+      />
     </aside>
   );
 }

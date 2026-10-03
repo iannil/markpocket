@@ -23,6 +23,17 @@ export function Toaster() {
           )}
         >
           <span className="min-w-0 flex-1">{t.message}</span>
+          {t.action && (
+            <button
+              onClick={() => {
+                t.action!.onClick();
+                dismissToast(t.id);
+              }}
+              className="shrink-0 font-medium text-foreground underline underline-offset-2 hover:opacity-80"
+            >
+              {t.action.label}
+            </button>
+          )}
           <button
             onClick={() => dismissToast(t.id)}
             className="text-muted-foreground hover:text-foreground"

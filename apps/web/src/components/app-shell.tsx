@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+import { skipToken } from '@tanstack/react-query';
 
 import { Topbar, type CurrentUser } from './topbar';
 import { Sidebar, type SidebarBase } from './sidebar';
@@ -56,9 +57,10 @@ export function AppShell({
   );
 
   // Sidebar shows the current base's tables as a second level (spec §5.3).
+  // skipToken (v5 idiom) instead of a non-null assertion: the query key is
+  // honest about being disabled outside a base.
   const { data: currentTables } = trpc.table.list.useQuery(
-    { baseId: currentBaseId! },
-    { enabled: !!currentBaseId },
+    currentBaseId ? { baseId: currentBaseId } : skipToken,
   );
   const sidebarBases = useMemo<SidebarBase[]>(() => {
     if (!currentBaseId || !currentTables) return bases;
@@ -84,7 +86,10 @@ export function AppShell({
               onlineCount={currentBaseId ? onlineUsers.length : null}
             />
           )}
-          <CommandPalette bases={sidebarBases} />
+          <CommandPalette
+            bases={sidebarBases}
+            tables={currentBaseId ? (currentTables ?? []) : []}
+          />
         </div>
       </BasesListProvider>
     </BreadcrumbProvider>

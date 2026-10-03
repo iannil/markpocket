@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { baseShare, base, table, field, view } from '../../db/schema';
@@ -50,7 +50,9 @@ export const publicShareRouter = router({
       .limit(1);
     if (!baseRow) return null;
     if (share.viewId && !(await findSharedView(share))) return null;
-    return { ...baseRow, viewId: share.viewId, shareId: share.id };
+    // Display-only projection: internal row ids serve no client purpose and
+    // are needlessly disclosed on an unauthenticated surface.
+    return { name: baseRow.name, icon: baseRow.icon, viewId: share.viewId };
   }),
 
   getTables: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
@@ -104,7 +106,10 @@ export const publicShareRouter = router({
       const fields = await db
         .select({ id: field.id, name: field.name, type: field.type, options: field.options })
         .from(field)
-        .where(eq(field.tableId, input.tableId));
+        .where(eq(field.tableId, input.tableId))
+        // Same column order as the grid and the RSS feed (orderIndex, then
+        // the id as the deterministic tiebreaker).
+        .orderBy(asc(field.orderIndex), asc(field.id));
 
       const { listRecordsPivoted, countRecords } = await import('@/lib/db-queries');
 

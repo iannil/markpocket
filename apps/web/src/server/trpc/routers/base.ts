@@ -38,7 +38,7 @@ export const baseRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().min(1) }))
+    .input(z.object({ name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const ws = await ensureDefaultWorkspace();
       // base + owner membership atomically — no ownerless base can survive a failure.
@@ -63,7 +63,7 @@ export const baseRouter = router({
     }),
 
   rename: protectedProcedure
-    .input(z.object({ id: z.string(), name: z.string().min(1) }))
+    .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       await assertRole(input.id, ctx.session.user.id, 'editor');
       const [row] = await db

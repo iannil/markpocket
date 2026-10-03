@@ -273,20 +273,33 @@ export const cellRouter = router({
             }
           }
 
-          // Recompute dependent expression fields (same record, same transaction, Q2).
-          await materializeExpressionsForRecord(
+          // Recompute dependent expression fields (same record, same
+          // transaction, Q2). Signature: (tx, tableId, recordId, userId,
+          // changedFieldId) — the previous call passed fieldId and userId in
+          // each other's positions, so the dependsOn filter compared a user
+          // id against field ids and NEVER matched: dependent expressions
+          // were silently not recomputed on any cell edit.
+          const recomputed = await materializeExpressionsForRecord(
             tx,
             fld.tableId,
             input.recordId,
-            input.fieldId,
             ctx.session.user.id,
+            input.fieldId,
           );
 
-          return { normalized, overwroteRecentBy };
+          return { normalized, overwroteRecentBy, recomputed };
         }),
       );
 
       void publishTableChange(fld.tableId, ctx.session.user.id);
-      return { ...result.normalized, overwroteRecentBy: result.overwroteRecentBy };
+      return {
+        ...result.normalized,
+        overwroteRecentBy: result.overwroteRecentBy,
+        // Dependent expression cells recalculated in the same transaction.
+        // The editing session's ws broadcast excludes itself, so without
+        // these the client would keep showing stale expression values until
+        // some unrelated refetch.
+        recomputed: result.recomputed,
+      };
     }),
 });

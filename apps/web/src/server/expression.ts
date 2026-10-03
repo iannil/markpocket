@@ -9,6 +9,16 @@ import { db } from './db';
 
 export type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+// The materialized outcome of one expression field: the value the cell ended
+// up with, or null when the cell row was deleted (empty result). Returned to
+// callers so they can forward it to the client, which patches its local cache
+// — the ws broadcast of the same write excludes the editing session, so
+// without this the client's expression columns show stale values.
+export interface RecomputedCell {
+  fieldId: string;
+  value: unknown;
+}
+
 // Write one expression cell for `recordId` following ADR-0005: value → store
 // JSONB, error → { __error } sentinel, empty → no row. Appends cell_history.
 async function writeExpressionCell(
@@ -17,7 +27,7 @@ async function writeExpressionCell(
   expressionFieldId: string,
   result: ReturnType<typeof evaluateExpression>,
   userId: string,
-) {
+): Promise<RecomputedCell> {
   const [existing] = await tx
     .select()
     .from(cell)
@@ -35,7 +45,7 @@ async function writeExpressionCell(
       });
       await tx.delete(cell).where(eq(cell.id, existing.id));
     }
-    return;
+    return { fieldId: expressionFieldId, value: null };
   }
 
   const value = 'error' in result ? { __error: result.error } : result.value;
@@ -83,18 +93,20 @@ async function writeExpressionCell(
       changedBy: userId,
     });
   }
+  return { fieldId: expressionFieldId, value };
 }
 
 // Recompute expression cells for one record (ADR-0003 Q2). When `changedFieldId`
 // is given, only expression fields depending on it are recomputed; otherwise all
-// expression fields of the table are (used by record.create).
+// expression fields of the table are (used by record.create). Returns the
+// materialized outcomes so callers can surface them to the client.
 export async function materializeExpressionsForRecord(
   tx: DbTx,
   tableId: string,
   recordId: string,
   userId: string,
   changedFieldId?: string,
-): Promise<void> {
+): Promise<RecomputedCell[]> {
   const exprFields = await tx
     .select()
     .from(field)
@@ -110,12 +122,14 @@ export async function materializeExpressionsForRecord(
   const currentCells = await tx.select().from(cell).where(eq(cell.recordId, recordId));
   const values = new Map(currentCells.map((c) => [c.fieldId, c.value]));
 
+  const recomputed: RecomputedCell[] = [];
   for (const ef of exprFields) {
     const opts = (ef.options ?? {}) as { expression?: string; dependsOn?: string[] } & FieldOptions;
     if (changedFieldId && !opts.dependsOn?.includes(changedFieldId)) continue;
     const result = evaluateExpression(opts.expression ?? '', values);
-    await writeExpressionCell(tx, recordId, ef.id, result, userId);
+    recomputed.push(await writeExpressionCell(tx, recordId, ef.id, result, userId));
   }
+  return recomputed;
 }
 
 // Backfill an expression field for every record of a table (field created or

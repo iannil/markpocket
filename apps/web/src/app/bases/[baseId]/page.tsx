@@ -6,13 +6,15 @@ import { useEffect, useState, type FormEvent } from 'react';
 
 import { EmptyState } from '@/components/empty-state';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/lib/toast';
+import { isPermissionError } from '@/lib/trpc-error';
 import { trpc } from '@/lib/trpc/client';
 
 export default function BasePage() {
   const { baseId } = useParams<{ baseId: string }>();
   const router = useRouter();
   const utils = trpc.useUtils();
-  const { data: tables, isLoading, isError } = trpc.table.list.useQuery({ baseId });
+  const { data: tables, isLoading, isError, error } = trpc.table.list.useQuery({ baseId });
 
   const firstTableId = tables?.[0]?.id;
   useEffect(() => {
@@ -26,6 +28,7 @@ export default function BasePage() {
       void utils.table.list.invalidate({ baseId });
       router.replace(`/bases/${baseId}/tables/${row.id}`);
     },
+    onError: (err) => toast.error(err.message),
   });
   const [name, setName] = useState('');
 
@@ -48,8 +51,17 @@ export default function BasePage() {
   }
 
   // A failed table.list must not fall through to the "No tables yet" empty
-  // state — that would invite creating a duplicate first table.
+  // state — that would invite creating a duplicate first table. Permission
+  // failures are permanent (the layout guard normally 404s these already;
+  // this catches membership revoked mid-session): retrying can only fail.
   if (isError) {
+    if (isPermissionError(error)) {
+      return (
+        <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
+          You do not have access to this base.
+        </div>
+      );
+    }
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-sm text-destructive">
         <div>Failed to load tables. Please try again.</div>
@@ -77,6 +89,8 @@ export default function BasePage() {
               <input
                 autoFocus
                 required
+                maxLength={64}
+                aria-label="Table name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Table name"

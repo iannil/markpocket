@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -53,7 +53,14 @@ export default function AgentTab() {
     onError: (err) => toast.error(err.message),
   });
 
-  const origin = typeof window === 'undefined' ? '' : window.location.origin;
+  // window.location.origin is browser-only: deriving it during render made
+  // the SSR pass emit empty URLs and hydration swap them in — a mismatch
+  // warning and one frame of wrong, copyable URLs. Set it in an effect so
+  // server and first client render agree.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
   const mcpConfig = useMemo(
     () => JSON.stringify({ mcpServers: { markpocket: { url: `${origin}/api/mcp` } } }, null, 2),
     [origin],
@@ -66,8 +73,9 @@ export default function AgentTab() {
         <h2 className="mb-1 text-sm font-semibold">API tokens</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Bearer tokens for the REST API (<code>/api/v1</code>) and MCP server. A token acts as you
-          — it can reach every base you are a member of, with your role. The full value is shown
-          once at creation and cannot be recovered.
+          — it can reach every base you are a member of, with your role. Tokens never expire; revoke
+          anything you no longer use. The full value is shown once at creation and cannot be
+          recovered.
         </p>
         <form
           onSubmit={(e) => {
@@ -94,6 +102,40 @@ export default function AgentTab() {
             create token
           </button>
         </form>
+
+        {minted && (
+          // Inline panel (same pattern as the invite link) instead of a
+          // modal: an in-context reveal interrupts less than a dialog, and
+          // the copy action stays available for as long as the panel is open.
+          <div
+            role="dialog"
+            aria-label="Token created"
+            className="mt-3 space-y-2 rounded-md border border-border p-3"
+          >
+            <p className="text-sm font-semibold">Token “{minted.name}” created — copy it now</p>
+            <p className="text-xs text-muted-foreground">
+              This is the only time the full value is shown. Store it somewhere safe; revoking is
+              the only remedy for a lost token.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-muted/50 px-2 py-1 font-mono text-xs">
+                {minted.token}
+              </code>
+              <button
+                onClick={() => copyToClipboard(minted.token, 'Token copied')}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                copy
+              </button>
+              <button
+                onClick={() => setMinted(null)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                done
+              </button>
+            </div>
+          </div>
+        )}
 
         {tokens.isLoading && tokens.data === undefined ? (
           <p className="text-xs text-muted-foreground">Loading…</p>
@@ -230,29 +272,6 @@ export default function AgentTab() {
         </a>
       </section>
 
-      <Dialog open={minted !== null} onOpenChange={(open) => !open && setMinted(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Token created — copy it now</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This is the only time the full value of <strong>{minted?.name}</strong> is shown. Store
-            it somewhere safe; revoking is the only remedy for a lost token.
-          </p>
-          <pre className="overflow-x-auto rounded-md border border-border bg-muted/50 p-2.5 font-mono text-xs leading-relaxed">
-            {minted?.token}
-          </pre>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMinted(null)}>
-              Close
-            </Button>
-            <Button onClick={() => minted && copyToClipboard(minted.token, 'Token copied')}>
-              Copy token
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={revokeTarget !== null} onOpenChange={(open) => !open && setRevokeTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -266,7 +285,11 @@ export default function AgentTab() {
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>
               Cancel
             </Button>
-            <Button onClick={() => revokeTarget && revokeToken.mutate({ id: revokeTarget.id })}>
+            <Button
+              variant="destructive"
+              disabled={revokeToken.isPending}
+              onClick={() => revokeTarget && revokeToken.mutate({ id: revokeTarget.id })}
+            >
               Revoke
             </Button>
           </DialogFooter>

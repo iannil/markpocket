@@ -73,10 +73,18 @@ vi.mock('@/server/plugins/field-value', () => ({
   defaultOptions: vi.fn().mockReturnValue({}),
   parseOptions: vi.fn().mockReturnValue({}),
 }));
+// Spy rather than stub-through: cell.upsert must call materialization with
+// (…, userId, changedFieldId) — the historical arg-order bug passed the two
+// swapped, dependsOn never matched, and dependent expressions were silently
+// never recomputed. Asserting the spy is the regression lock.
+vi.mock('@/server/expression', () => ({
+  materializeExpressionsForRecord: vi.fn().mockResolvedValue([]),
+}));
 
 import { fieldRouter } from './field';
 import { recordRouter } from './record';
 import { cellRouter } from './cell';
+import { materializeExpressionsForRecord } from '@/server/expression';
 import { record as recordTable } from '../../db/schema';
 
 describe('fieldRouter', () => {
@@ -261,6 +269,25 @@ describe('cellRouter', () => {
       .createCaller(session())
       .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
     expect(result).toBeDefined();
+  });
+
+  it('upsert recomputes expressions with userId before changedFieldId', async () => {
+    vi.mocked(materializeExpressionsForRecord).mockClear();
+    const ch = (mockDb.db.select as any)();
+    ch.limit.mockReturnValue(ch);
+    ch.then = (onfulfilled: any) =>
+      Promise.resolve([{ id: 'f1', tableId: 't1', type: 'text', options: {} }]).then(onfulfilled);
+    (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
+    await cellRouter
+      .createCaller(session())
+      .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
+    const args = vi.mocked(materializeExpressionsForRecord).mock.calls.at(-1);
+    expect(args).toBeDefined();
+    // (tx, tableId, recordId, userId, changedFieldId): the swapped order
+    // fed a user id to the dependsOn filter and silently disabled all
+    // expression recomputation.
+    expect(args![3]).toBe('u1');
+    expect(args![4]).toBe('f1');
   });
 
   it('upsert rejects values over the 256KB serialized cap', async () => {

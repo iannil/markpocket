@@ -3,18 +3,13 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Slot } from '@/lib/plugins/ui-slot-client';
 import { toast } from '@/lib/toast';
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
+
+const MAX_BASE_NAME = 64;
 
 export default function GeneralTab() {
   const { baseId } = useParams<{ baseId: string }>();
@@ -22,18 +17,23 @@ export default function GeneralTab() {
   const utils = trpc.useUtils();
   const base = trpc.base.get.useQuery({ id: baseId });
   const tables = trpc.table.list.useQuery({ baseId });
-  useBreadcrumbSetter([{ label: 'Settings' }]);
+  useBreadcrumbSetter([{ label: 'General' }]);
 
   const [name, setName] = useState('');
+  // Only seed from the server while the input is pristine — after the user
+  // types, a refetch (e.g. a teammate's rename arriving over realtime) must
+  // not clobber the in-progress edit.
+  const [nameDirty, setNameDirty] = useState(false);
   useEffect(() => {
-    if (base.data?.name) setName(base.data.name);
-  }, [base.data?.name]);
+    if (!nameDirty && base.data?.name) setName(base.data.name);
+  }, [base.data?.name, nameDirty]);
 
   const rename = trpc.base.rename.useMutation({
     onSuccess: () => {
       void utils.base.get.invalidate({ id: baseId });
       void utils.base.list.invalidate();
       toast.success('Base renamed');
+      setNameDirty(false);
     },
     onError: (err) => toast.error(err.message),
   });
@@ -55,12 +55,17 @@ export default function GeneralTab() {
         <div className="flex items-center gap-2">
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            maxLength={MAX_BASE_NAME}
+            aria-label="Base name"
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameDirty(true);
+            }}
             className="h-8 w-64 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             onClick={() => name.trim() && rename.mutate({ id: baseId, name: name.trim() })}
-            disabled={rename.isPending}
+            disabled={rename.isPending || !name.trim()}
             className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
           >
             Save
@@ -88,7 +93,9 @@ export default function GeneralTab() {
                 a.click();
                 URL.revokeObjectURL(url);
                 if (truncated) {
-                  toast.info(`Export truncated at 10,000 of ${exported > 0 ? 'more' : ''} records`);
+                  toast.info(
+                    `Showing the first 10,000 records${exported > 0 ? ` of ${exported}` : ''}`,
+                  );
                 }
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : 'Export failed');
@@ -136,24 +143,15 @@ export default function GeneralTab() {
         </button>
       </section>
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete base?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This permanently deletes every table, field, and record in this base.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => del.mutate({ id: baseId })} disabled={del.isPending}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Delete base?"
+        description="This permanently deletes every table, field, and record in this base. There is no undo."
+        confirmLabel="Delete base"
+        pending={del.isPending}
+        onConfirm={() => del.mutate({ id: baseId })}
+      />
     </div>
   );
 }

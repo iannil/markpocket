@@ -21,7 +21,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { token } = await params;
   const inv = await resolveInvite(token);
-  return { title: inv ? `Invite · ${inv.baseName}` : 'Invite' };
+  // noindex: the tokenized URL must not end up in search indexes.
+  return { title: inv ? `Invite · ${inv.baseName}` : 'Invite', robots: { index: false } };
 }
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {

@@ -54,7 +54,7 @@ export const viewRouter = router({
     .input(
       z.object({
         tableId: z.string(),
-        name: z.string().min(1),
+        name: z.string().trim().min(1).max(64),
         type: z.enum(VIEW_TYPES).optional(),
       }),
     )
@@ -76,7 +76,7 @@ export const viewRouter = router({
     }),
 
   rename: protectedProcedure
-    .input(z.object({ id: z.string(), name: z.string().min(1) }))
+    .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const [existing] = await db.select().from(view).where(eq(view.id, input.id)).limit(1);
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'View not found' });

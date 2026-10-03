@@ -152,23 +152,30 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     // (table.list is keyed by baseId, which only the subscribers know) and
     // every table-scoped query; the no-filter invalidations only hit the
     // network for ACTIVE queries, which on a /bases route is exactly the
-    // visible table.
+    // visible table. Debounced like the change path: a flapping connection
+    // fires many reconnects in quick succession.
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     const offReconnect = client.onReconnect(() => {
-      if (subscribedBasesRef.current.size > 0) {
-        utils.base.list.invalidate();
-        for (const baseId of subscribedBasesRef.current) {
-          utils.table.list.invalidate({ baseId });
+      if (reconnectTimer != null) clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (subscribedBasesRef.current.size > 0) {
+          utils.base.list.invalidate();
+          for (const baseId of subscribedBasesRef.current) {
+            utils.table.list.invalidate({ baseId });
+          }
         }
-      }
-      utils.field.list.invalidate();
-      utils.view.list.invalidate();
-      utils.record.list.invalidate();
+        utils.field.list.invalidate();
+        utils.view.list.invalidate();
+        utils.record.list.invalidate();
+      }, CHANGE_INVALIDATE_DEBOUNCE_MS);
     });
 
     return () => {
       offMessage();
       offReconnect();
       if (flushTimer != null) clearTimeout(flushTimer);
+      if (reconnectTimer != null) clearTimeout(reconnectTimer);
     };
   }, [utils]);
 

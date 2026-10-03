@@ -23,15 +23,25 @@ const FIELD_TYPES_API = {
 
 export const exportRouter = router({
   exportBase: protectedProcedure
-    .input(z.object({ baseId: z.string() }))
+    .input(
+      z.object({
+        baseId: z.string(),
+        // Restrict the export to the caller's selection — the UI used to
+        // export EVERY table server-side and throw the unselected CSVs away
+        // client-side, paying full cost for a one-table export.
+        tableIds: z.array(z.string()).optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       await assertRole(input.baseId, ctx.session.user.id, 'viewer');
 
-      const tables = await db
-        .select({ id: table.id, name: table.name })
-        .from(table)
-        .where(eq(table.baseId, input.baseId))
-        .orderBy(table.orderIndex);
+      const tables = (
+        await db
+          .select({ id: table.id, name: table.name })
+          .from(table)
+          .where(eq(table.baseId, input.baseId))
+          .orderBy(table.orderIndex)
+      ).filter((t) => !input.tableIds || input.tableIds.includes(t.id));
 
       const files: Array<{
         tableId: string;

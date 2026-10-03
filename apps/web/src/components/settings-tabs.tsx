@@ -9,10 +9,12 @@ export function SettingsTabs({ baseId }: { baseId: string }) {
   const pathname = usePathname();
   const root = `/bases/${baseId}/settings`;
   const tabs = [
-    { label: 'Tables', href: root },
+    // General first: renaming a base is the most common settings task and
+    // was previously four tabs deep. Tables lives at its own sub-route.
+    { label: 'General', href: `${root}/general` },
+    { label: 'Tables', href: `${root}/tables` },
     { label: 'Members', href: `${root}/members` },
     { label: 'Agents', href: `${root}/agent` },
-    { label: 'Settings', href: `${root}/general` },
     { label: 'History', href: `${root}/history` },
     { label: 'Export', href: `${root}/export` },
   ];

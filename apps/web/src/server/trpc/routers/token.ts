@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -6,6 +6,10 @@ import { apiToken } from '../../db/schema';
 import { db } from '../../db';
 import { createApiToken } from '@/server/agent-access/tokens';
 import { protectedProcedure, router } from '../init';
+
+// Each token is a full-power credential (it acts as its creator); an
+// open-ended mint lets one user accumulate an unbounded set of valid secrets.
+const MAX_ACTIVE_TOKENS = 20;
 
 // Personal API tokens for the agent access layer (ADR-0010). A token carries
 // its creator's full authority — every downstream call re-runs the same
@@ -31,6 +35,16 @@ export const tokenRouter = router({
   create: protectedProcedure
     .input(z.object({ name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
+      const [cnt] = await db
+        .select({ value: count() })
+        .from(apiToken)
+        .where(and(eq(apiToken.userId, ctx.session.user.id), isNull(apiToken.revokedAt)));
+      if ((cnt?.value ?? 0) >= MAX_ACTIVE_TOKENS) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Token limit reached (${MAX_ACTIVE_TOKENS} active) — revoke one first`,
+        });
+      }
       // The plaintext token crosses the wire exactly once, in this response.
       return createApiToken(ctx.session.user.id, input.name);
     }),

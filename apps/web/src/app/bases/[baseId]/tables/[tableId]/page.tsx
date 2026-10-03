@@ -7,9 +7,8 @@ import { GridEditor } from './grid-editor';
 
 // The tables layout only knows the baseId (its params stop there), so it
 // titles the page "Base · table". This page has both ids and overrides with
-// the actual table name. tableRouter has no get-by-id, so the name comes from
-// table.list filtered client-side of the caller — one indexed query per page
-// view, RSC-cached per request.
+// the actual table name via table.get — one row lookup, not the whole
+// table.list.
 export async function generateMetadata({
   params,
 }: {
@@ -17,15 +16,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { baseId, tableId } = await params;
   const [base, caller] = await Promise.all([baseName(baseId), api()]);
-  let table: string | null = null;
+  let tableName: string | null = null;
   try {
-    const tables = await caller.table.list({ baseId });
-    table = tables.find((t) => t.id === tableId)?.name ?? null;
+    tableName = (await caller.table.get({ id: tableId })).name;
   } catch {
     // Unauthenticated or no membership — the page itself handles rejection.
   }
-  if (base == null && table == null) return {};
-  return { title: `${base ?? 'Base'} · ${table ?? 'table'}` };
+  if (base == null && tableName == null) return {};
+  return { title: `${base ?? 'Base'} · ${tableName ?? 'table'}` };
 }
 
 export default async function TableGridPage({
@@ -34,5 +32,7 @@ export default async function TableGridPage({
   params: Promise<{ baseId: string; tableId: string }>;
 }) {
   const { baseId, tableId } = await params;
-  return <GridEditor baseId={baseId} tableId={tableId} />;
+  // key={tableId}: navigating between tables reuses this page component, and
+  // GridEditor's selection/editing/widths state must not survive the switch.
+  return <GridEditor key={tableId} baseId={baseId} tableId={tableId} />;
 }

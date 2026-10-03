@@ -28,17 +28,39 @@ export interface UserLike {
 }
 
 function relativeDate(s: string): string | null {
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return null;
-  const t = new Date();
-  const y = new Date();
-  y.setDate(t.getDate() - 1);
-  if (d.toDateString() === t.toDateString()) return 'today';
-  if (d.toDateString() === y.toDateString()) return 'yesterday';
+  // Compare the date part the cell actually DISPLAYS (the ISO yyyy-mm-dd
+  // prefix) — a local-timezone toDateString() comparison disagrees with the
+  // rendered date for users whose day has already rolled over in UTC.
+  const iso = s.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const day = (offsetDays: number) =>
+    new Date(Date.now() + offsetDays * 86_400_000).toISOString().slice(0, 10);
+  if (iso === day(0)) return 'today';
+  if (iso === day(-1)) return 'yesterday';
   return null;
 }
 
 const EMPTY = <span className="text-muted-foreground">—</span>;
+
+// Chips for a multi-select value — shared by the display renderer and the
+// editor trigger so the two cannot drift apart.
+function MultiSelectChips({ ids, choices }: { ids: string[]; choices: SelectOption[] }) {
+  // Chips come from choices (ids are unique) — never key by display name.
+  const selectedChips = choices.filter((c) => ids.includes(c.id));
+  if (selectedChips.length === 0) return EMPTY;
+  return (
+    <span className="flex min-w-0 items-center">
+      {selectedChips.slice(0, 2).map((c) => (
+        <span key={c.id} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
+          {c.name}
+        </span>
+      ))}
+      {selectedChips.length > 2 ? (
+        <span className="text-xs text-muted-foreground">+{selectedChips.length - 2}</span>
+      ) : null}
+    </span>
+  );
+}
 
 const CELL_BASE = 'flex h-full w-full items-center gap-1 px-2.5 text-sm';
 
@@ -50,9 +72,9 @@ function Avatar({ label }: { label: string }) {
   );
 }
 
-function AttachmentThumb({ id }: { id: string }) {
+function AttachmentThumb({ id, fileHref }: { id: string; fileHref: (id: string) => string }) {
   const [broken, setBroken] = useState(false);
-  const href = `/api/files/${id}`;
+  const href = fileHref(id);
   if (broken) {
     return (
       <a
@@ -84,8 +106,19 @@ export interface CellRendererProps {
   readOnly?: boolean;
   /** Owning base — sent with attachment uploads so the server can scope the ACL. */
   baseId?: string;
-  /** Direct-write paths (boolean toggle, attachment upload). */
-  onUpsertCell: (recordId: string, fieldId: string, value: unknown) => void;
+  /**
+   * URL builder for attachment downloads. Defaults to the member route
+   * (/api/files); the public share page passes its token-scoped proxy so
+   * thumbnails work for anonymous visitors.
+   */
+  fileHref?: (attachmentId: string) => string;
+  /**
+   * Direct-write paths (boolean toggle, attachment upload). May return a
+   * promise that settles once the write has been reconciled into the local
+   * cache (the grid's per-cell write queue) — callers that must not overlap
+   * writes on the same cell await it.
+   */
+  onUpsertCell: (recordId: string, fieldId: string, value: unknown) => unknown;
 }
 
 // Display-only. Real editors (Select/Popover/input) mount exclusively through
@@ -98,10 +131,16 @@ export const CellRenderer = memo(function CellRenderer({
   users,
   readOnly = false,
   baseId,
+  fileHref,
   onUpsertCell,
 }: CellRendererProps) {
   const value = record.cells[field.id];
   const [uploading, setUploading] = useState(false);
+  // Latest rendered value for async continuations: uploadAttachment reads the
+  // value AFTER an await, where the render-time closure would be stale.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const attachmentHref = fileHref ?? ((id: string) => `/api/files/${id}`);
 
   async function uploadAttachment(file: File) {
     setUploading(true);
@@ -115,7 +154,16 @@ export const CellRenderer = memo(function CellRenderer({
         throw new Error(body?.error ?? `Upload failed (${res.status})`);
       }
       const json = (await res.json()) as { id: string };
-      onUpsertCell(record.id, field.id, [...((value as string[] | undefined) ?? []), json.id]);
+      const current = (valueRef.current as string[] | undefined) ?? [];
+      const write = onUpsertCell(record.id, field.id, [...current, json.id]);
+      // Hold the "uploading" state until the write reconciles into the cache
+      // (or rolls back): re-enabling the input earlier let a second upload
+      // read a pre-patch value and silently drop the first attachment — the
+      // same class of race the Link/MultiSelect editors fixed with local
+      // state, closed here via the grid's per-cell write queue.
+      if (write && typeof (write as Promise<unknown>).then === 'function') {
+        await (write as Promise<unknown>).catch(() => {});
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -126,12 +174,21 @@ export const CellRenderer = memo(function CellRenderer({
   switch (field.type) {
     case FieldType.Boolean:
       // Checkbox is direct-manipulation: a single click both selects (via the
-      // cell wrapper) and toggles.
+      // cell wrapper) and toggles. Read-only cells (viewers, share pages)
+      // render a static value instead of a disabled button — "unavailable
+      // action" is the wrong semantics for a displayed state, and a thousand
+      // disabled buttons is a thousand needless focusable-looking nodes.
+      if (readOnly) {
+        return (
+          <div className={`${CELL_BASE} justify-start`} aria-label={field.name}>
+            {value ? <span className="text-foreground">✓</span> : null}
+          </div>
+        );
+      }
       return (
         <button
           className={`${CELL_BASE} justify-start`}
-          onClick={() => (readOnly ? undefined : onUpsertCell(record.id, field.id, !value))}
-          disabled={readOnly}
+          onClick={() => onUpsertCell(record.id, field.id, !value)}
           aria-label={field.name}
           aria-pressed={value === true}
         >
@@ -177,25 +234,9 @@ export const CellRenderer = memo(function CellRenderer({
 
     case FieldType.MultiSelect: {
       const choices = (field.options.choices as SelectOption[] | undefined) ?? [];
-      const selectedIds = (value as string[] | undefined) ?? [];
-      // Chips come from choices (ids are unique) — never key by display name.
-      const selectedChips = choices.filter((c) => selectedIds.includes(c.id));
       return (
         <div className={CELL_BASE}>
-          {selectedChips.length === 0 ? (
-            EMPTY
-          ) : (
-            <span className="flex min-w-0 items-center">
-              {selectedChips.slice(0, 2).map((c) => (
-                <span key={c.id} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                  {c.name}
-                </span>
-              ))}
-              {selectedChips.length > 2 ? (
-                <span className="text-xs text-muted-foreground">+{selectedChips.length - 2}</span>
-              ) : null}
-            </span>
-          )}
+          <MultiSelectChips ids={(value as string[] | undefined) ?? []} choices={choices} />
         </div>
       );
     }
@@ -232,7 +273,7 @@ export const CellRenderer = memo(function CellRenderer({
       return (
         <div className="flex h-full w-full items-center gap-1 px-2.5">
           {attIds.map((id) => (
-            <AttachmentThumb key={id} id={id} />
+            <AttachmentThumb key={id} id={id} fileHref={attachmentHref} />
           ))}
           {!readOnly && (
             <label className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
@@ -498,7 +539,6 @@ export function EditingCell({
 
     case FieldType.MultiSelect: {
       const choices = (field.options.choices as SelectOption[] | undefined) ?? [];
-      const selectedChips = choices.filter((c) => multiSelected.includes(c.id));
       return (
         <Popover
           open
@@ -510,20 +550,7 @@ export function EditingCell({
           }}
         >
           <PopoverTrigger className="flex h-full w-full items-center px-2.5 text-left text-sm">
-            {selectedChips.length === 0 ? (
-              EMPTY
-            ) : (
-              <span className="flex min-w-0 items-center">
-                {selectedChips.slice(0, 2).map((c) => (
-                  <span key={c.id} className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs">
-                    {c.name}
-                  </span>
-                ))}
-                {selectedChips.length > 2 ? (
-                  <span className="text-xs text-muted-foreground">+{selectedChips.length - 2}</span>
-                ) : null}
-              </span>
-            )}
+            <MultiSelectChips ids={multiSelected} choices={choices} />
           </PopoverTrigger>
           <PopoverContent className="w-56">
             {choices.map((c) => (

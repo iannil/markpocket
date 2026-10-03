@@ -42,7 +42,7 @@ export function SortMenu({
       <PopoverContent className="w-80 border-border">
         <div className="space-y-1">
           {list.map((s, i) => (
-            <div key={i} className="flex items-center gap-1">
+            <div key={`${s.fieldId}-${i}`} className="flex items-center gap-1">
               <Select
                 value={s.fieldId}
                 onValueChange={(fid) => {

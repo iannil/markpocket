@@ -7,6 +7,11 @@ import { useQueryClient } from '@tanstack/react-query';
 // Tracks the timestamp of the last SUCCESSFUL tRPC mutation (all tRPC mutations
 // go through the shared react-query MutationCache). Powers the statusbar
 // "saved Ns ago" indicator without touching every call site.
+//
+// Scope note: the cache is per-tab and mutations only ever fire against the
+// base the visible page acts on, so "any successful mutation" and "any
+// successful mutation for this base" coincide in practice; scoping by an
+// explicit baseId would mean threading meta through every call site.
 
 export function useLastSavedAt(): number | null {
   const queryClient = useQueryClient();

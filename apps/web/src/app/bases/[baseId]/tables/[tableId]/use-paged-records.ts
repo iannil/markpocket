@@ -19,13 +19,17 @@ export interface RecordListData {
 // Offset-based append pagination. The server caps a single request at
 // limit<=1000, so the old "limit += 500" growth died on the third "Show more"
 // (BAD_REQUEST); offset windows have no such ceiling.
+//
+// Window drift under concurrent writes: deletes make windows overlap (handled
+// by the dedupe below) and inserts between page fetches can skip a record
+// with no duplicate to notice. Every write publishes a ws broadcast and the
+// RealtimeProvider invalidates record.list on arrival, which refetches all
+// loaded pages and closes the hole — an auto-refetch heuristic here would
+// false-positive on every legitimate overlap and storm the server. Keyset
+// pagination is the structural fix if the design target grows.
 function mergeGroups(datasets: Array<RecordListData | undefined>): GroupLike[] {
   const out: GroupLike[] = [];
   const byKey = new Map<string | null, GroupLike>();
-  // Concurrent deletes by other sessions shift the data left, so two offset
-  // windows can overlap and return the same record twice. Keep the first
-  // occurrence only: a duplicate would produce duplicate React keys and
-  // inflate loadedCount (making "Show more" believe more is loaded than is).
   const seenRecordIds = new Set<string>();
   for (const data of datasets) {
     if (!data) continue;

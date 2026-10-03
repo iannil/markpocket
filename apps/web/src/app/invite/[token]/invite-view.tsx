@@ -42,7 +42,11 @@ export function InviteView({ token, inv }: { token: string; inv: InviteData }) {
               Role: <span className="font-medium text-foreground">{inv.role}</span> · Sign in as{' '}
               <span className="font-medium text-foreground">{inv.email}</span> to join.
             </p>
-            {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+            {error && (
+              <p className="mt-2 text-xs text-destructive" role="alert">
+                {error}
+              </p>
+            )}
             <button
               type="button"
               className="mt-4 h-8 w-full rounded-md bg-primary text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50"

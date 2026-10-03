@@ -106,7 +106,7 @@ export const fieldRouter = router({
     .input(
       z.object({
         tableId: z.string(),
-        name: z.string().min(1),
+        name: z.string().trim().min(1).max(64),
         type: z.enum(FIELD_TYPES),
         options: z.unknown().optional(),
       }),
@@ -167,7 +167,7 @@ export const fieldRouter = router({
     }),
 
   rename: protectedProcedure
-    .input(z.object({ id: z.string(), name: z.string().min(1) }))
+    .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const [existing] = await db.select().from(field).where(eq(field.id, input.id)).limit(1);
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });

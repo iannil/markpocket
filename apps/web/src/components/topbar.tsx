@@ -6,6 +6,7 @@ import { Breadcrumb } from './breadcrumb';
 import { OnlineAvatars, type OnlineUser } from './online-avatars';
 import { useSidebarCollapsed } from '@/lib/use-sidebar-collapsed';
 import { useBreadcrumb } from '@/lib/breadcrumb-context';
+import { toggleCommandPalette } from '@/lib/command-palette';
 import { initials } from '@/lib/initials';
 import { cn } from '@/lib/utils';
 
@@ -51,11 +52,7 @@ export function Topbar({
         <button
           type="button"
           aria-label="Open command palette"
-          onClick={() =>
-            window.dispatchEvent(
-              new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }),
-            )
-          }
+          onClick={toggleCommandPalette}
           className="hidden h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground hover:text-foreground md:inline-flex"
           title="Command palette (⌘K)"
         >
@@ -63,11 +60,21 @@ export function Topbar({
         </button>
         {currentUser && (
           <div
-            className="size-7 rounded-full bg-muted flex items-center justify-center text-xs font-mono"
+            className="size-7 rounded-full bg-muted flex items-center justify-center overflow-hidden text-xs font-mono"
             title={currentUser.name}
             aria-label={`Signed in as ${currentUser.name}`}
           >
-            {initials(currentUser.name) || '?'}
+            {currentUser.avatarUrl ? (
+              // Prefer the account avatar; initials remain the fallback for
+              // accounts without one.
+              <img
+                src={currentUser.avatarUrl}
+                alt=""
+                className="size-7 rounded-full object-cover"
+              />
+            ) : (
+              initials(currentUser.name) || '?'
+            )}
           </div>
         )}
       </div>

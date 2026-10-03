@@ -16,6 +16,7 @@ export default function ErrorPage({
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
       <EmptyState
+        as="h1"
         title="Something went wrong"
         description={error.digest ? `Reference: ${error.digest}` : 'An unexpected error occurred.'}
         action={
@@ -27,10 +28,10 @@ export default function ErrorPage({
               Try again
             </button>
             <Link
-              href="/bases"
+              href="/"
               className="inline-flex h-8 items-center rounded-md border border-input px-3 text-sm hover:bg-muted"
             >
-              ← Back to bases
+              ← Back home
             </Link>
           </div>
         }

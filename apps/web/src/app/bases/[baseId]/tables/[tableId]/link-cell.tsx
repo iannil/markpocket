@@ -45,6 +45,15 @@ export function LinkTablesProvider({
     tableIds.map((id) => qc.record.list({ tableId: id, limit: 1000 })),
   );
 
+  // useQueries hands back fresh result arrays every render, so keying the
+  // build memo on them would rebuild every target table's 1k-entry label map
+  // on every keystroke/selection/drag-frame — and the new context value
+  // bypasses MemoCell, re-rendering every mounted Link cell. The
+  // dataUpdatedAt signature (bumped on every fetch SET, even when structural
+  // sharing keeps the data reference) is the primitive-typed stand-in — same
+  // technique as use-paged-records.
+  const fieldsSignature = fieldsResults.map((r) => r.dataUpdatedAt).join(',');
+  const recordsSignature = recordsResults.map((r) => r.dataUpdatedAt).join(',');
   const value = useMemo(() => {
     const map = new Map<string, LinkTableData>();
     tableIds.forEach((id, i) => {
@@ -60,9 +69,10 @@ export function LinkTablesProvider({
       map.set(id, { records, labelById: new Map(records.map((r) => [r.id, r.label])) });
     });
     return map;
-    // The result arrays are rebuilt per render by useQueries; mapping 1k rows
-    // is cheap enough that stabilizing further isn't worth the complexity.
-  }, [fieldsResults, recordsResults, tableIds]);
+    // `fieldsResults`/`recordsResults` are captured on purpose; recompute is
+    // gated on the signatures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldsSignature, recordsSignature, tableIds]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

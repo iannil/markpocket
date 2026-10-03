@@ -1,29 +1,37 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 import { EmptyState } from '@/components/empty-state';
 import { useBasesList } from '@/lib/bases-context';
+import { fmtTimeAgo } from '@/lib/format';
 import { trpc } from '@/lib/trpc/client';
 
-function timeAgo(ts: string | number | Date): string {
-  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+// Stable absolute form for the SSR pass: the relative form is computed from
+// Date.now() and can differ between server render and hydration across a
+// minute/hour/day boundary (a text mismatch React logs as a hydration error).
+function createdLabel(b: { createdAt: string }, mounted: boolean): string {
+  if (!mounted) return new Date(b.createdAt).toISOString().slice(0, 10);
+  return fmtTimeAgo(b.createdAt);
 }
 
 export default function BasesPage() {
   // The RSC layout already fetched base.list; seed the query with those rows
-  // instead of issuing a second identical fetch on mount.
+  // (empty list included) so mounting issues no second identical request —
+  // initialDataUpdatedAt marks the seed fresh, otherwise TanStack Query
+  // treats it as stale-from-1970 and refetches anyway.
   const initial = useBasesList();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const utils = trpc.useUtils();
   const {
     data: bases,
     isLoading,
     isError,
   } = trpc.base.list.useQuery(undefined, {
-    initialData: initial.length > 0 ? initial : undefined,
+    initialData: initial,
+    initialDataUpdatedAt: Date.now(),
   });
 
   if (isLoading) {
@@ -41,9 +49,13 @@ export default function BasesPage() {
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="text-center">
           <h1 className="text-sm font-semibold text-destructive">Failed to load bases</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Check your connection and reload the page.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Check your connection and try again.</p>
+          <button
+            onClick={() => void utils.base.list.invalidate()}
+            className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -95,7 +107,7 @@ export default function BasesPage() {
               >
                 <div className="truncate text-sm font-medium">{b.name}</div>
                 <div className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                  created {timeAgo(b.createdAt)}
+                  created {createdLabel(b, mounted)}
                 </div>
               </Link>
             </li>

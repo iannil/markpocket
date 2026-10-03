@@ -40,36 +40,34 @@ export const inviteRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await assertRole(input.baseId, ctx.session.user.id, 'owner');
-      // Deactivate any prior pending invite for this email+base.
-      const existing = await db
-        .select()
-        .from(baseInvite)
-        .where(
-          and(
-            eq(baseInvite.baseId, input.baseId),
-            eq(baseInvite.email, input.email),
-            isNull(baseInvite.acceptedAt),
-          ),
-        );
-      for (const inv of existing) {
-        await db
+      // Deactivate any prior pending invite for this email+base, then insert
+      // the replacement — one transaction (and one statement) so two
+      // concurrent creates cannot both survive with "pending" status.
+      return db.transaction(async (tx) => {
+        await tx
           .update(baseInvite)
           .set({ acceptedAt: new Date() })
-          .where(eq(baseInvite.id, inv.id));
-      }
-      const [row] = await db
-        .insert(baseInvite)
-        .values({
-          id: randomUUID(),
-          baseId: input.baseId,
-          email: input.email,
-          role: input.role,
-          token: randomUUID().replace(/-/g, ''),
-          invitedBy: ctx.session.user.id,
-          expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-        })
-        .returning();
-      return row;
+          .where(
+            and(
+              eq(baseInvite.baseId, input.baseId),
+              eq(baseInvite.email, input.email),
+              isNull(baseInvite.acceptedAt),
+            ),
+          );
+        const [created] = await tx
+          .insert(baseInvite)
+          .values({
+            id: randomUUID(),
+            baseId: input.baseId,
+            email: input.email,
+            role: input.role,
+            token: randomUUID().replace(/-/g, ''),
+            invitedBy: ctx.session.user.id,
+            expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          })
+          .returning();
+        return created!;
+      });
     }),
 
   delete: protectedProcedure
@@ -113,7 +111,18 @@ export const inviteRouter = router({
         .where(eq(baseInvite.token, input.token))
         .limit(1);
       if (!inv) throw new TRPCError({ code: 'NOT_FOUND', message: 'Invite not found' });
-      if (inv.acceptedAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Already accepted' });
+      if (inv.acceptedAt) {
+        // A member re-opening their consumed invite link is already the
+        // invite's intended end state — route them into the base instead of
+        // surfacing an error that reads like a failure.
+        const [membership] = await db
+          .select({ userId: baseMember.userId })
+          .from(baseMember)
+          .where(and(eq(baseMember.baseId, inv.baseId), eq(baseMember.userId, ctx.session.user.id)))
+          .limit(1);
+        if (membership) return { baseId: inv.baseId };
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Already accepted' });
+      }
       if (new Date(inv.expiresAt) < new Date())
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Invite expired' });
       // The invite's target email must match the signed-in user's email.
@@ -127,16 +136,23 @@ export const inviteRouter = router({
       // (base_id, user_id) PK with a 500. ON CONFLICT DO NOTHING makes the
       // loser a success instead — an already-member accepting again is the
       // same outcome as accepting once. The surviving membership keeps its
-      // original role (never demote on re-invite).
-      await db
-        .insert(baseMember)
-        .values({
-          baseId: inv.baseId,
-          userId: ctx.session.user.id,
-          role: inv.role,
-        })
-        .onConflictDoNothing({ target: [baseMember.baseId, baseMember.userId] });
-      await db.update(baseInvite).set({ acceptedAt: new Date() }).where(eq(baseInvite.id, inv.id));
+      // original role (never demote on re-invite). Membership insert and the
+      // invite's acceptedAt mark share one transaction: a crash between them
+      // used to leave a member whose invite still resolved.
+      await db.transaction(async (tx) => {
+        await tx
+          .insert(baseMember)
+          .values({
+            baseId: inv.baseId,
+            userId: ctx.session.user.id,
+            role: inv.role,
+          })
+          .onConflictDoNothing({ target: [baseMember.baseId, baseMember.userId] });
+        await tx
+          .update(baseInvite)
+          .set({ acceptedAt: new Date() })
+          .where(eq(baseInvite.id, inv.id));
+      });
       return { baseId: inv.baseId };
     }),
 });

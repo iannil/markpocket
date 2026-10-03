@@ -202,8 +202,19 @@ export const tableRouter = router({
     return db.select().from(table).where(eq(table.baseId, input.baseId)).orderBy(table.orderIndex);
   }),
 
+  // Single-table fetch for metadata/permission checks — cheaper than list()
+  // when only one name is needed (page titles).
+  get: protectedProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const baseId = await baseIdFromTable(input.id);
+    if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });
+    await assertRole(baseId, ctx.session.user.id, 'viewer');
+    const [row] = await db.select().from(table).where(eq(table.id, input.id)).limit(1);
+    if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });
+    return row;
+  }),
+
   create: protectedProcedure
-    .input(z.object({ baseId: z.string(), name: z.string().min(1) }))
+    .input(z.object({ baseId: z.string(), name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       await assertRole(input.baseId, ctx.session.user.id, 'editor');
       const row = await db.transaction(async (tx) => {
@@ -211,12 +222,22 @@ export const tableRouter = router({
           .insert(table)
           .values({ id: randomUUID(), baseId: input.baseId, name: input.name })
           .returning();
-        // Each new table ships with one default Grid view.
+        // Each new table ships with one default Grid view...
         await tx.insert(view).values({
           id: randomUUID(),
           tableId: created!.id,
           type: 'grid',
           name: 'Grid',
+        });
+        // ...and one default "Name" text column. Without it a fresh table is
+        // a chicken-and-egg puzzle (records need fields, fields are an
+        // editor-only toolbar button) — the column gives users something to
+        // type into immediately (Airtable convention).
+        await tx.insert(field).values({
+          id: randomUUID(),
+          tableId: created!.id,
+          name: 'Name',
+          type: 'text',
         });
         return created!;
       });
@@ -226,7 +247,7 @@ export const tableRouter = router({
     }),
 
   rename: protectedProcedure
-    .input(z.object({ id: z.string(), name: z.string().min(1) }))
+    .input(z.object({ id: z.string(), name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
       const baseId = await baseIdFromTable(input.id);
       if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });

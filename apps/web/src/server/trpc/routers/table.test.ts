@@ -29,6 +29,7 @@ vi.mock('@/server/realtime/publish', () => ({
 vi.mock('@/server/plugins', () => ({ getStorage: vi.fn() }));
 
 import { tableRouter } from './table';
+import { field as fieldTable, view as viewTable } from '../../db/schema';
 
 // Sequential tx.select results, one fresh chain per call (repeats the last
 // entry beyond the end). The final delete transaction selects in order: the
@@ -73,6 +74,11 @@ describe('tableRouter', () => {
     const result = await tableRouter.createCaller(session()).create({ baseId: 'b1', name: 'T1' });
     expect(result.id).toBe('t1');
     expect(result.name).toBe('T1');
+    // The same transaction also seeds the default Grid view AND the default
+    // "Name" text column (empty-table guidance, Airtable convention).
+    const insertedTargets = (tx.insert as any).mock.calls.map((c: any[]) => c[0]);
+    expect(insertedTargets).toContain(viewTable);
+    expect(insertedTargets).toContain(fieldTable);
   });
 
   it('rename returns updated table', async () => {

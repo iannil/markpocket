@@ -16,7 +16,7 @@ export function Breadcrumb({ segments }: { segments: BreadcrumbSegment[] }) {
       {segments.map((seg, i) => {
         const isLast = i === segments.length - 1;
         return (
-          <div key={i} className="flex items-center gap-0.5 min-w-0">
+          <div key={`${seg.label}-${i}`} className="flex items-center gap-0.5 min-w-0">
             {seg.href && !isLast ? (
               <Link
                 href={seg.href}

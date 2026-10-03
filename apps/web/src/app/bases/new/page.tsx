@@ -41,14 +41,13 @@ export default function NewBasePage() {
           <input
             autoFocus
             required
+            maxLength={64}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Customer DB"
             className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
-
-        {create.error && <p className="text-xs text-destructive">{create.error.message}</p>}
 
         <button
           type="submit"

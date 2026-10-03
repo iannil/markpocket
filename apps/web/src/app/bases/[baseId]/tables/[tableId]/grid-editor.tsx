@@ -12,6 +12,7 @@ import {
 
 import { useQueryClient } from '@tanstack/react-query';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
+import { ChevronDown, History } from 'lucide-react';
 
 import { usePresence } from '@/components/realtime/realtime-provider';
 import {
@@ -23,15 +24,17 @@ import { SortMenu } from '@/components/view-config/sort-menu';
 import { ViewFieldsMenu } from '@/components/view-config/view-fields-menu';
 import { ViewTabs } from '@/components/view-config/view-tabs';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
+import { expressionToDisplay } from '@/lib/expression-display';
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
-import type { ViewOptions } from '@/lib/view-ast';
+import type { SortSpec, ViewOptions } from '@/lib/view-ast';
 import type { FieldLike, RecordLike } from './cell-renderers';
 import { CellHistoryDock } from './cell-history-dock';
-import { parseClipboardValue } from './clipboard';
+import { formatClipboardValue, parseClipboardValue } from './clipboard';
 import {
   DEFAULT_COL_WIDTH,
   EDITABLE_TYPES,
@@ -106,6 +109,9 @@ interface EditingState {
   seed?: string;
 }
 
+// PageUp/PageDown jump, in rows — ~1.5 screens at the default viewport.
+const PAGE_JUMP_ROWS = 30;
+
 // Optimistic patch: rewrite exactly one cell of one record inside a record.list
 // cache entry, leaving every other object reference untouched so memoized rows
 // outside the edited record skip re-rendering.
@@ -147,11 +153,24 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const { data: myMembership } = trpc.member.me.useQuery({ baseId });
   const { data: tablesData } = trpc.table.list.useQuery({ baseId });
   const presence = usePresence(baseId);
-  const isViewer = myMembership?.role === 'viewer';
+  // While membership is unresolved, render read-only: flashing the editable
+  // UI at a viewer invites type-to-edit mutations that the server must then
+  // reject. Editors see one extra frame of read-only — harmless.
+  const isViewer = myMembership?.role !== 'owner' && myMembership?.role !== 'editor';
 
   const fields = useMemo(() => (fieldsData ?? []) as FieldLike[], [fieldsData]);
   const views = useMemo(() => (viewsData ?? []) as ViewLike[], [viewsData]);
   const users = useMemo(() => usersData ?? [], [usersData]);
+  // Expression columns display `{Field Name}` tokens, never the stored UUIDs.
+  const expressionLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of fields) {
+      if (f.type !== FieldType.Expression) continue;
+      const expr = (f.options as { expression?: string })?.expression;
+      if (expr) m.set(f.id, expressionToDisplay(expr, fields));
+    }
+    return m;
+  }, [fields]);
 
   // Breadcrumb: the base layout owns the "Workspace ▸ Base" prefix; this page
   // only sets its leaf segment.
@@ -220,6 +239,40 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const [showFilter, setShowFilter] = useState(false);
   const [widths, setWidths] = useState<Record<string, number>>({});
   const widthsRef = useRef<Record<string, number>>({});
+  // History-dock collapse preference. Loaded in an effect (not the state
+  // initializer) so SSR and first client render agree — localStorage is a
+  // browser-only source of truth.
+  const [dockCollapsed, setDockCollapsed] = useState(false);
+  useEffect(() => {
+    setDockCollapsed(window.localStorage.getItem('mp-dock-collapsed') === '1');
+  }, []);
+  function toggleDockCollapsed(next: boolean) {
+    setDockCollapsed(next);
+    try {
+      window.localStorage.setItem('mp-dock-collapsed', next ? '1' : '0');
+    } catch {
+      // Private mode / storage disabled — the in-memory state still applies.
+    }
+  }
+
+  // A selected/edited record can vanish under the selection — remote delete,
+  // or a refetch that filters it out of the view. A dangling selection breaks
+  // keyboard nav (Escape included: its handler never runs past the row
+  // lookup) and points aria-activedescendant at a node that no longer
+  // exists. Clear it as soon as the record disappears from the loaded set.
+  useEffect(() => {
+    setSelectedCell((cur) => (cur && !recordById.has(cur.recordId) ? null : cur));
+    setEditing((cur) => (cur && !recordById.has(cur.recordId) ? null : cur));
+    setSelectedRows((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (recordById.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [recordById]);
 
   // Latest-value refs for stable callbacks (keyboard handlers, row selection).
   const selectedCellRef = useRef(selectedCell);
@@ -263,17 +316,31 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       // RealtimeProvider, so an invalidate would only cause a redundant
       // full-table round trip.
       const serverValue = res && typeof res === 'object' && 'value' in res ? res.value : '';
-      queryClient.setQueriesData<RecordListData>(recordListFilter, (prev) =>
-        prev ? patchRecordCell(prev, vars.recordId, vars.fieldId, serverValue) : prev,
-      );
+      // Dependent expression cells recalculated by the server in the same
+      // transaction (B = A*2 changes when A does). The same echo-suppression
+      // that skips the refetch would otherwise keep them stale locally
+      // forever — patch each one from the server's authoritative outcome.
+      const recomputed = (res as { recomputed?: { fieldId: string; value: unknown }[] })
+        ?.recomputed;
+      queryClient.setQueriesData<RecordListData>(recordListFilter, (prev) => {
+        if (!prev) return prev;
+        let next = patchRecordCell(prev, vars.recordId, vars.fieldId, serverValue);
+        for (const rc of recomputed ?? []) {
+          next = patchRecordCell(next, vars.recordId, rc.fieldId, rc.value ?? '');
+        }
+        return next;
+      });
       // ...EXCEPT when the edited field drives the view itself (group-by, a
       // filter condition, or a sort key): regrouping/re-filtering/reordering
       // and totals are computed
       // server-side and no local patch can express them. Checked in onSuccess
       // rather than onMutate on purpose: a failed edit must not pay the
       // refetch, and by success time the write is committed, so the refetch
-      // returns the re-evaluated view instead of racing the mutation.
-      if (viewAffectingFieldIdsRef.current.has(vars.fieldId)) {
+      // returns the re-evaluated view instead of racing the mutation. A
+      // recomputed expression field counts too — it can be a sort key just
+      // as well as the edited source field.
+      const affected = viewAffectingFieldIdsRef.current;
+      if (affected.has(vars.fieldId) || (recomputed ?? []).some((rc) => affected.has(rc.fieldId))) {
         void utils.record.list.invalidate({ tableId });
       }
       // The history dock (when open on this cell) shows a stale list otherwise.
@@ -294,7 +361,31 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       }
     },
   });
-  const upsertMutate = upsertCell.mutate;
+  // Serializes writes per (record, field). The server's advisory lock orders
+  // the TRANSACTIONS, not the HTTP responses: two rapid writes to the same
+  // cell (multi-select/link write-through toggles) can have their onSuccess
+  // patches land out of order, leaving the cache showing a value the server
+  // already replaced. Chaining per-cell promises keeps the reconciles
+  // ordered; failures still surface through the shared onError above and
+  // unblock the queue.
+  const upsertMutateAsyncRef = useRef(upsertCell.mutateAsync);
+  upsertMutateAsyncRef.current = upsertCell.mutateAsync;
+  const cellWriteQueues = useRef(new Map<string, Promise<unknown>>());
+  const upsertMutate = useCallback(
+    (vars: { recordId: string; fieldId: string; value: unknown }) => {
+      const key = `${vars.recordId}:${vars.fieldId}`;
+      const prev = cellWriteQueues.current.get(key) ?? Promise.resolve();
+      const next = prev
+        .catch(() => {})
+        .then(() => upsertMutateAsyncRef.current(vars).catch(() => {}));
+      cellWriteQueues.current.set(key, next);
+      void next.finally(() => {
+        if (cellWriteQueues.current.get(key) === next) cellWriteQueues.current.delete(key);
+      });
+      return next;
+    },
+    [],
+  );
   const createRecord = trpc.record.create.useMutation({
     // No success toast: the record appearing in the grid IS the feedback.
     onSuccess: () => {
@@ -310,14 +401,29 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     onError: (err) => toast.error(err.message),
   });
   const deleteMutate = deleteRecord.mutate;
+  // Which option keys were requested since the last settled commit. View
+  // options are replaced wholesale by updateOptions, so onSuccess cannot
+  // tell a columnWidth-only commit from a filter change without this.
+  const pendingOptionKeysRef = useRef(new Set<string>());
   const updateOptionsMut = trpc.view.updateOptions.useMutation({
     onSuccess: () => {
       utils.view.list.invalidate({ tableId });
-      // record.list reads view options (filter/sort/group) server-side, so it must
-      // refetch whenever options change — scoped to this table.
-      utils.record.list.invalidate({ tableId });
+      // record.list reads filter/sort/group server-side, so those must
+      // refetch. Pure UI options (columnWidth, hiddenFields) must NOT: a
+      // 400ms-debounced column resize would otherwise refetch every loaded
+      // page of the table on each commit.
+      const rowAffecting = ['filter', 'sort', 'group'].some((k) =>
+        pendingOptionKeysRef.current.has(k),
+      );
+      pendingOptionKeysRef.current.clear();
+      if (rowAffecting) {
+        utils.record.list.invalidate({ tableId });
+      }
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      pendingOptionKeysRef.current.clear();
+      toast.error(err.message);
+    },
   });
 
   // Server-side columnWidth is authoritative ONLY at view switches (and the
@@ -391,7 +497,10 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       if (hasGroup) {
         out.push({
           kind: 'group',
-          key: g.key ?? '__null__',
+          // '\u0000' cannot occur in a group key produced from cell values
+          // (they never contain NUL), so the sentinel can't collide with a
+          // real "(empty)"-adjacent key and duplicate a React key.
+          key: g.key ?? '\u0000null',
           label: groupLabel(g.key),
           count: g.records.length,
         });
@@ -418,6 +527,12 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     getScrollElement: () => gridRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 10,
+    // The sticky header occupies the first HEADER_HEIGHT px of the scroll
+    // element. Declaring it makes scrollToIndex offsets pixel-correct instead
+    // of relying on the coincidence that item positions in the flow happen to
+    // offset by exactly the header height; item rendering subtracts it back
+    // (vi.start includes the margin, the rows container sits below the header).
+    scrollMargin: HEADER_HEIGHT,
     getItemKey: (i) => {
       const d = rowDescs[i];
       return d ? (d.kind === 'record' ? `r:${d.record.id}` : `g:${d.key}`) : i;
@@ -429,6 +544,13 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       return indexes;
     },
   });
+
+  // A different view orders/filters rows differently, and a different table
+  // is different data entirely — either way the old scroll position is
+  // meaningless and can land mid-table on the new one.
+  useEffect(() => {
+    gridRef.current?.scrollTo({ top: 0 });
+  }, [tableId, activeViewId]);
 
   const linkTargetTableIds = useMemo(
     () => [
@@ -458,13 +580,10 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     setSelectedCell({ recordId, fieldId });
     gridRef.current?.focus({ preventScroll: true });
   }, []);
-  const startEdit = useCallback(
-    (recordId: string, fieldId: string, _current: unknown, seed?: string) => {
-      setSelectedCell({ recordId, fieldId });
-      setEditing({ recordId, fieldId, seed });
-    },
-    [],
-  );
+  const startEdit = useCallback((recordId: string, fieldId: string, seed?: string) => {
+    setSelectedCell({ recordId, fieldId });
+    setEditing({ recordId, fieldId, seed });
+  }, []);
   const moveTo = useCallback(
     (r: number, c: number) => {
       const rec = flatRowsRef.current[r];
@@ -510,7 +629,9 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   }, []);
   const upsertCellHandler = useCallback(
     (recordId: string, fieldId: string, value: unknown) => {
-      upsertMutate({ recordId, fieldId, value });
+      // Returns the per-cell queue promise so direct-write callers (attachment
+      // upload) can await cache reconciliation before their next write.
+      return upsertMutate({ recordId, fieldId, value });
     },
     [upsertMutate],
   );
@@ -545,9 +666,32 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   );
   const deleteRecordById = useCallback(
     (recordId: string) => {
+      // Snapshot for the Undo toast. Restoration is best-effort: the record
+      // comes back with a NEW id (lands at the end) and its cell history
+      // rows are gone with the original — but the data itself returns.
+      const snapshot = recordByIdRef.current.get(recordId);
       deleteMutate({ id: recordId, tableId });
+      if (snapshot) {
+        toast.success('Record deleted', {
+          label: 'Undo',
+          onClick: () => {
+            createMutate(
+              { tableId },
+              {
+                onSuccess: (row) => {
+                  for (const [fieldId, value] of Object.entries(snapshot.cells)) {
+                    if (value != null && value !== '') {
+                      upsertMutate({ recordId: row.id, fieldId, value });
+                    }
+                  }
+                },
+              },
+            );
+          },
+        });
+      }
     },
-    [deleteMutate, tableId],
+    [deleteMutate, tableId, createMutate, upsertMutate],
   );
   const handlers = useMemo<CellHandlers>(
     () => ({
@@ -644,6 +788,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
 
   function patchOptions(patch: Partial<ViewOptions>) {
     if (!activeView) return;
+    for (const k of Object.keys(patch)) pendingOptionKeysRef.current.add(k);
     const next = { ...(activeView.options as ViewOptions), ...patch } as Record<string, unknown>;
     updateOptionsMut.mutate({ id: activeView.id, options: next });
   }
@@ -756,7 +901,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       // Date is intentionally not seedable (see TYPE_TO_EDIT_SEED_TYPES) — it
       // still opens the picker editor via type-to-edit, just unseeded.
       const seed = TYPE_TO_EDIT_SEED_TYPES.has(field.type) ? e.key : undefined;
-      startEdit(selectedCell.recordId, selectedCell.fieldId, currentValue, seed);
+      startEdit(selectedCell.recordId, selectedCell.fieldId, seed);
       return true;
     };
 
@@ -764,7 +909,12 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     // type-to-edit below.
     if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
       e.preventDefault();
-      navigator.clipboard.writeText(currentValue == null ? '' : String(currentValue));
+      // Type-aware serialization (arrays as a|b, objects as JSON) and a caught
+      // promise — a denied clipboard permission must not become an unhandled
+      // rejection.
+      navigator.clipboard.writeText(formatClipboardValue(currentValue)).catch(() => {
+        // Clipboard permission denied / unavailable — nothing to copy.
+      });
       return;
     }
     if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) {
@@ -793,19 +943,35 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     switch (e.key) {
       case 'ArrowUp':
         e.preventDefault();
-        moveTo(Math.max(r - 1, 0), c);
+        moveTo(e.ctrlKey ? 0 : Math.max(r - 1, 0), c);
         break;
       case 'ArrowDown':
         e.preventDefault();
-        moveTo(Math.min(r + 1, lastR), c);
+        moveTo(e.ctrlKey ? lastR : Math.min(r + 1, lastR), c);
         break;
       case 'ArrowLeft':
         e.preventDefault();
-        moveTo(r, Math.max(c - 1, 0));
+        moveTo(r, e.ctrlKey ? 0 : Math.max(c - 1, 0));
         break;
       case 'ArrowRight':
         e.preventDefault();
-        moveTo(r, Math.min(c + 1, lastC));
+        moveTo(r, e.ctrlKey ? lastC : Math.min(c + 1, lastC));
+        break;
+      case 'Home':
+        e.preventDefault();
+        moveTo(e.ctrlKey ? 0 : r, 0);
+        break;
+      case 'End':
+        e.preventDefault();
+        moveTo(e.ctrlKey ? lastR : r, lastC);
+        break;
+      case 'PageUp':
+        e.preventDefault();
+        moveTo(Math.max(r - PAGE_JUMP_ROWS, 0), c);
+        break;
+      case 'PageDown':
+        e.preventDefault();
+        moveTo(Math.min(r + PAGE_JUMP_ROWS, lastR), c);
         break;
       case 'Enter':
         e.preventDefault();
@@ -817,7 +983,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
             value: !currentValue,
           });
         } else if (EDITABLE_TYPES.has(field.type)) {
-          startEdit(selectedCell.recordId, selectedCell.fieldId, currentValue);
+          startEdit(selectedCell.recordId, selectedCell.fieldId);
         }
         break;
       case ' ':
@@ -830,7 +996,9 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
           });
           break;
         }
-        tryTypeToEdit();
+        // On non-editable columns Space must not scroll the grid container —
+        // the grid owns the key even when it has no action for it.
+        if (!tryTypeToEdit()) e.preventDefault();
         break;
       case 'Tab': {
         e.preventDefault();
@@ -846,16 +1014,29 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         setSelectedRows(new Set());
         break;
       case 'Delete':
-      case 'Backspace':
+      case 'Backspace': {
         if (!isViewer) {
           e.preventDefault();
+          const cleared = currentValue;
           upsertMutate({
             recordId: selectedCell.recordId,
             fieldId: selectedCell.fieldId,
             value: '',
           });
+          if (cleared != null && cleared !== '') {
+            toast.info('Cell cleared', {
+              label: 'Undo',
+              onClick: () =>
+                upsertMutate({
+                  recordId: selectedCell.recordId,
+                  fieldId: selectedCell.fieldId,
+                  value: cleared,
+                }),
+            });
+          }
         }
         break;
+      }
       default:
         tryTypeToEdit();
         break;
@@ -869,6 +1050,32 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   function openEditField(f: FieldLike) {
     setEditTarget({ id: f.id, name: f.name, type: f.type, options: f.options });
     setDialogOpen(true);
+  }
+  // Header click cycles the column's sort: none → asc → desc → none, keeping
+  // any other sort keys in place (grid convention; field editing moved to
+  // double-click).
+  function toggleSort(fieldId: string) {
+    const cur = (viewOptions.sort ?? []) as SortSpec[];
+    const existing = cur.find((s) => s.fieldId === fieldId);
+    let next: SortSpec[];
+    if (!existing) next = [...cur, { fieldId, direction: 'asc' }];
+    else if (existing.direction === 'asc')
+      next = cur.map((s) => (s.fieldId === fieldId ? { ...s, direction: 'desc' as const } : s));
+    else next = cur.filter((s) => s.fieldId !== fieldId);
+    patchOptions({ sort: next });
+  }
+  // Explicit-direction variants + clear, for the column header menu.
+  function setSortDir(fieldId: string, dir: 'asc' | 'desc') {
+    const cur = (viewOptions.sort ?? []) as SortSpec[];
+    const existing = cur.find((s) => s.fieldId === fieldId);
+    const next = existing
+      ? cur.map((s) => (s.fieldId === fieldId ? { ...s, direction: dir } : s))
+      : [...cur, { fieldId, direction: dir }];
+    patchOptions({ sort: next });
+  }
+  function clearSort(fieldId: string) {
+    const next = ((viewOptions.sort ?? []) as SortSpec[]).filter((s) => s.fieldId !== fieldId);
+    patchOptions({ sort: next.length > 0 ? next : undefined });
   }
 
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -889,7 +1096,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         <h1 className="text-sm font-semibold">{activeView?.name ?? 'Grid'}</h1>
         {!isViewer && (
           <Button onClick={openCreateField} size="sm" className="h-7 rounded-md">
-            + Field
+            + field
           </Button>
         )}
       </div>
@@ -897,10 +1104,15 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       {!isViewer && (
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant={showFilter ? 'default' : 'outline'}
+            variant={
+              showFilter || (viewOptions.filter?.conditions?.length ?? 0) > 0
+                ? 'default'
+                : 'outline'
+            }
             size="sm"
             className="h-7 rounded-md"
             onClick={() => setShowFilter((s) => !s)}
+            aria-pressed={showFilter}
           >
             Filter
             {(viewOptions.filter?.conditions?.length ?? 0) > 0
@@ -970,7 +1182,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
             ref={gridRef}
             role="grid"
             aria-label={`${activeView?.name ?? 'Grid'} table`}
-            aria-rowcount={total + 1}
+            aria-rowcount={total + 1 + (hasGroup ? groups.length : 0)}
             aria-colcount={colCount}
             aria-activedescendant={
               selectedCell ? cellDomId(selectedCell.recordId, selectedCell.fieldId) : undefined
@@ -983,6 +1195,9 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                 setSelectedRows(new Set());
               }
             }}
+            // scroll-padding keeps native scrollIntoView(block:'nearest') from
+            // aligning the selected cell under the sticky header.
+            style={{ scrollPaddingTop: HEADER_HEIGHT }}
             className="min-h-0 flex-1 overflow-auto rounded-md border border-border outline-none"
           >
             <div style={{ width: gridWidth, minWidth: '100%' }}>
@@ -997,6 +1212,15 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                   {displayedFields.map((f, ci) => {
                     const w = widths[f.id] ?? DEFAULT_COL_WIDTH;
                     const sort = viewOptions.sort?.find((s) => s.fieldId === f.id);
+                    const exprLabel = expressionLabels.get(f.id);
+                    // Roving tabindex: exactly ONE resize handle is in the Tab
+                    // order (the selected column's, else the first). Without
+                    // this every column's handle is a tab stop — 50 columns
+                    // means 50 stops before the next control.
+                    const rovingHandle = !selectedCell
+                      ? ci === 0
+                      : selectedCell.fieldId === f.id ||
+                        (displayedFields.every((x) => x.id !== selectedCell.fieldId) && ci === 0);
                     return (
                       <div
                         key={f.id}
@@ -1009,13 +1233,18 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                               : 'ascending'
                             : undefined
                         }
-                        className="relative flex-none border-b border-l border-border p-0"
+                        className="group/header relative flex-none border-b border-l border-border p-0"
                         style={{ width: w }}
                       >
                         <button
                           className="block h-full w-full px-2.5 pt-1 text-left"
-                          onClick={() => !isViewer && openEditField(f)}
-                          title={`${f.name} (${f.type === 'expression' ? ((f.options as { expression?: string })?.expression ?? 'expr') : f.type})`}
+                          onClick={() => !isViewer && toggleSort(f.id)}
+                          onDoubleClick={() => !isViewer && openEditField(f)}
+                          title={
+                            isViewer
+                              ? `${f.name}${exprLabel ? ` (${exprLabel})` : ''}`
+                              : `${f.name}${exprLabel ? ` (${exprLabel})` : ''} — click to sort, double-click to edit field`
+                          }
                         >
                           <div className="flex items-center text-xs font-medium text-foreground">
                             <span className="truncate">{f.name}</span>
@@ -1026,9 +1255,9 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                             )}
                           </div>
                           {f.type === 'expression' ? (
-                            <div className="flex items-center gap-1 pb-1">
-                              <span className="rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
-                                {(f.options as { expression?: string })?.expression ?? 'expr'}
+                            <div className="flex min-w-0 items-center gap-1 pb-1">
+                              <span className="min-w-0 truncate rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
+                                {exprLabel || 'expr'}
                               </span>
                               <span className="font-mono text-[10px] text-muted-foreground">
                                 expression
@@ -1040,12 +1269,59 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                             </div>
                           )}
                         </button>
+                        {/* Column options menu: the discoverable path to sort
+                            and edit (click-to-sort and double-click-to-edit
+                            remain as shortcuts). */}
+                        {!isViewer && (
+                          <Popover>
+                            <PopoverTrigger
+                              className="absolute right-2.5 top-1 hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground group-hover/header:flex focus-visible:flex"
+                              aria-label={`Options for ${f.name}`}
+                              title="Column options"
+                            >
+                              <ChevronDown className="size-3.5" />
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-44 p-1">
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                                onClick={() => setSortDir(f.id, 'asc')}
+                              >
+                                Sort A → Z
+                              </button>
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                                onClick={() => setSortDir(f.id, 'desc')}
+                              >
+                                Sort Z → A
+                              </button>
+                              {sort && (
+                                <button
+                                  type="button"
+                                  className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                                  onClick={() => clearSort(f.id)}
+                                >
+                                  Clear sort
+                                </button>
+                              )}
+                              <div className="my-1 border-t border-border" />
+                              <button
+                                type="button"
+                                className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-muted"
+                                onClick={() => openEditField(f)}
+                              >
+                                Edit field
+                              </button>
+                            </PopoverContent>
+                          </Popover>
+                        )}
                         <div
                           role="separator"
                           aria-orientation="vertical"
                           aria-label={`Resize ${f.name}`}
                           title="Drag to resize · ←/→ keys adjust"
-                          tabIndex={0}
+                          tabIndex={rovingHandle ? 0 : -1}
                           className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20"
                           onMouseDown={(e) => startResize(e, f.id)}
                           onKeyDown={(e) => onResizeKeyDown(e, f.id)}
@@ -1082,7 +1358,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                       count={d.count}
                       rowIndex={vi.index}
                       colCount={colCount}
-                      start={vi.start}
+                      start={vi.start - HEADER_HEIGHT}
                     />
                   ) : (
                     <GridRow
@@ -1100,12 +1376,16 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
                       selectedFieldId={
                         selectedCell?.recordId === d.record.id ? selectedCell.fieldId : null
                       }
+                      rowTabbable={selectedCell?.recordId === d.record.id}
                       editing={
                         editing?.recordId === d.record.id
                           ? { fieldId: editing.fieldId, seed: editing.seed }
                           : null
                       }
-                      start={vi.start}
+                      // vi.start includes scrollMargin (the sticky header) —
+                      // the rows container already sits below the header, so
+                      // subtract it back for positioning.
+                      start={vi.start - HEADER_HEIGHT}
                       handlers={handlers}
                     />
                   );
@@ -1113,8 +1393,23 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
               </div>
 
               {loadedCount === 0 && (
-                <div className="flex h-16 items-center justify-center text-sm text-muted-foreground">
-                  {anyFetching ? 'Loading…' : 'No records.'}
+                <div className="flex h-16 flex-col items-center justify-center gap-1.5 text-sm text-muted-foreground">
+                  {anyFetching ? (
+                    'Loading…'
+                  ) : (viewOptions.filter?.conditions?.length ?? 0) > 0 ? (
+                    <>
+                      <span>No records match your filters.</span>
+                      <button
+                        type="button"
+                        className="text-xs text-foreground underline underline-offset-2 hover:opacity-80"
+                        onClick={() => patchOptions({ filter: undefined })}
+                      >
+                        Clear filters
+                      </button>
+                    </>
+                  ) : (
+                    'No records.'
+                  )}
                 </div>
               )}
 
@@ -1142,31 +1437,45 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
           </div>
 
           {/* History dock is a sibling panel — it can never overlay the cell
-              being edited — and steps aside entirely while editing. */}
-          {selectedCell && !editing
-            ? (() => {
-                const rowNumber = rowNumberById.get(selectedCell.recordId) ?? 0;
-                const field = displayedFields.find((f) => f.id === selectedCell.fieldId);
-                const record = recordById.get(selectedCell.recordId);
-                if (!field || !record) return null;
-                return (
-                  <CellHistoryDock
-                    cell={selectedCell}
-                    fieldName={field.name}
-                    rowNumber={rowNumber}
-                    currentValue={record.cells[selectedCell.fieldId]}
-                    onRestore={(value) =>
-                      upsertMutate({
-                        recordId: selectedCell.recordId,
-                        fieldId: selectedCell.fieldId,
-                        value,
-                      })
-                    }
-                    onClose={() => setSelectedCell(null)}
-                  />
-                );
-              })()
-            : null}
+              being edited — and steps aside entirely while editing. The
+              collapsed rail keeps the grid's width: the dock squeezing it by
+              240px was the #1 density complaint (UX audit 4.4). */}
+          {selectedCell && !editing && dockCollapsed ? (
+            <div className="flex h-full w-9 flex-none flex-col border-l border-border">
+              <button
+                onClick={() => toggleDockCollapsed(false)}
+                aria-label="Show cell history"
+                title="Cell history"
+                className="flex h-9 w-full items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <History className="size-4" />
+              </button>
+            </div>
+          ) : selectedCell && !editing ? (
+            (() => {
+              const rowNumber = rowNumberById.get(selectedCell.recordId) ?? 0;
+              const field = displayedFields.find((f) => f.id === selectedCell.fieldId);
+              const record = recordById.get(selectedCell.recordId);
+              if (!field || !record) return null;
+              return (
+                <CellHistoryDock
+                  cell={selectedCell}
+                  fieldName={field.name}
+                  rowNumber={rowNumber}
+                  currentValue={record.cells[selectedCell.fieldId]}
+                  onRestore={(value) =>
+                    upsertMutate({
+                      recordId: selectedCell.recordId,
+                      fieldId: selectedCell.fieldId,
+                      value,
+                    })
+                  }
+                  onClose={() => setSelectedCell(null)}
+                  onCollapse={() => toggleDockCollapsed(true)}
+                />
+              );
+            })()
+          ) : null}
         </div>
       </LinkTablesProvider>
 
