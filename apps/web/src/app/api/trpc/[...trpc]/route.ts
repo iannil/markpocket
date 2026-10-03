@@ -2,25 +2,19 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
 import { appRouter } from '@/server/trpc/router';
 import { createContext } from '@/server/trpc/init';
-import { contentLengthExceeds, MAX_TRPC_BODY_BYTES, readBodyWithCap } from '@/lib/http-guards';
-
-// Defense-in-depth against cross-site requests: browsers always send Origin on
-// cross-site POSTs, and it must point back at the host serving this route —
-// the session cookie would ride along otherwise. Missing Origin (curl, tests,
-// same-process RSC calls) is allowed.
-function originAllowed(req: Request): boolean {
-  const origin = req.headers.get('origin');
-  if (!origin) return true; // non-browser clients
-  const host = req.headers.get('host');
-  try {
-    const originHost = new URL(origin).host;
-    return originHost.length > 0 && !!host && originHost === host;
-  } catch {
-    return false;
-  }
-}
+import {
+  contentLengthExceeds,
+  MAX_TRPC_BODY_BYTES,
+  originAllowed,
+  readBodyWithCap,
+} from '@/lib/http-guards';
 
 async function handler(req: Request) {
+  // Defense-in-depth against cross-site requests: browsers always send Origin
+  // on cross-site POSTs, and it must point back at the host serving this
+  // route — the session cookie would ride along otherwise. Missing Origin
+  // (curl, tests, same-process RSC calls) is allowed. Canonical copy:
+  // http-guards.originAllowed (ADR-0010).
   if (!originAllowed(req)) {
     return new Response('Forbidden: cross-origin request', { status: 403 });
   }

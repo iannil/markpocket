@@ -2,7 +2,7 @@
 
 - **状态**：Accepted
 - **日期**：2026-07-10
-- **相关**：落地 `docs/superpowers/specs/2026-07-10-field-type-extension-point-design.md`（Plan 3a）；受 ADR-0005 约束；延续 ADR-0007（加载器/注册表 barrel 纪律）、ADR-0008（server/client 拆分）
+- **相关**：落地 `docs/archive/superpowers/specs/2026-07-10-field-type-extension-point-design.md`（Plan 3a）；受 ADR-0005 约束；延续 ADR-0007（加载器/注册表 barrel 纪律）、ADR-0008（server/client 拆分）
 
 ## 背景
 

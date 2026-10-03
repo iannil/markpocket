@@ -163,3 +163,15 @@ Personal API tokens for the agent access layer (ADR-0010). A token carries its c
 | `list` | P | — | `{ id, name, tokenPrefix, createdAt, lastUsedAt, expiresAt }[]` | Lists the caller's live (non-revoked) tokens, newest first. Never returns the secret — only the display prefix. |
 | `create` | P | `{ name: string }` | `{ token: string, row: { id, name, tokenPrefix, createdAt } }` | Mints a new Bearer token. The plaintext `token` crosses the wire exactly once, in this response; only the sha256 digest is stored. |
 | `revoke` | P | `{ id: string }` | `{ ok: true }` | Soft-revokes a token (sets `revokedAt`). Only the creator's own token; unknown ids and other users' tokens both answer NOT_FOUND. |
+
+
+---
+
+## csv
+
+Injected by the `@markpocket/plugin-csv` plugin via `...pluginRouters` (ADR-0008). Authorization goes through `CoreServerApi.auth.assertTableRole`.
+
+| Procedure | Auth | Input | Output | Description |
+|-----------|------|-------|--------|-------------|
+| `import` | P | `{ tableId: string, csvText: string (≤5MB UTF-8 bytes) }` | import report (rowCount, skippedHeaders, emptyCellRows, partial-failure marker) | Parses CSV and writes records through the core write path (expression cells materialize). Editor+ on the table. |
+| `export` | P | `{ tableId: string }` | `{ csv: string, truncated: boolean, total: number }` | Exports the table as CSV (injection-neutralized, 10k-row cap with truncation flag). Viewer+. |

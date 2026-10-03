@@ -2,7 +2,7 @@
 
 - **状态**：Partially superseded — 落地路径与加载器由 ADR-0007/0008 细化，字段类型注册表由 ADR-0009 取代本文的 Plan 3 描述；`server/storage/*` 路径已迁移至 `packages/plugin-storage-local`
 - **日期**：2026-07-09
-- **相关**：落地 `docs/superpowers/specs/2026-07-09-markpocket-commercial-positioning-design.md` §2「插件系统架构概要」的第一步「核心解耦」；不改变 ADR-0001~0005 的数据与一致性契约
+- **相关**：落地 `docs/archive/superpowers/specs/2026-07-09-markpocket-commercial-positioning-design.md` §2「插件系统架构概要」的第一步「核心解耦」；不改变 ADR-0001~0005 的数据与一致性契约
 - **更新（2026-10）**：viewType / uiSlot / event / authProvider 四个占位注册表已删除（无消费者的死代码，违反项目自身的 no-premature-abstraction 规则）；需要时连同注册表一起加回。UI Slot 走客户端注册（`plugins.client.ts`），不经服务端注册表。
 
 ## 背景

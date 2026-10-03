@@ -18,6 +18,13 @@ Four machine-facing channels on one Bearer-token layer (ADR-0010: [docs/api/agen
 - Shared agent edge (`agent-access/http.ts`) for all token-authenticated endpoints: Origin gate → 1MB body cap (before auth) → Bearer resolution → per-token fixed-window rate limit (`AGENT_RATE_LIMIT_PER_MIN`, default 120/min, 0 disables) → uniform `{error:{code,message}}` envelope; 401 carries `WWW-Authenticate: Bearer`. Non-TRPC failures are masked as generic 500s.
 - Token secrets never persisted or logged; lists return only the 12-char display prefix; revoked/expired tokens fail closed.
 
+### Docs & housekeeping (2026-10-03, second pass)
+
+- Docs reorganized: new `docs/README.md` map; `docs/superpowers/` (16 SDD plans/specs), `docs/migration/` (teable rewrite plan) and the Paper & Ink tracker/plan moved to `docs/archive/` (design spec stays live); ADR-0006..0009 cross-links repointed; README/README.zh layout + status sections refreshed (redesign is shipped, not in-progress).
+- `docs/STATUS.md` rewritten as the LLM-facing project state: ADR index, feature matrix with code anchors, agent-access section, precise known-limitations list (11 items), prioritized v1.1/v2 roadmap.
+- `docs/UPGRADE.md` covers migration 0013; `docs/testing.md` counts corrected (248/30 → 550/54) with new test-area rows; `docs/api/routers.md` gains the `csv` plugin namespace; `tests/e2e/README.md` tree updated.
+- Cleanup: dead `shouldUseLightTextOnColor` removed; `getRgbForColor`/`MAX_FILENAME_BYTES` un-exported; `tests/run-browser-e2e.sh` deleted (orphaned — its embedded assertions had drifted from the YAML scenarios); `originAllowed` copies in the tRPC and upload routes consolidated onto `lib/http-guards` (the ws gateway keeps an annotated IncomingMessage twin); `shadcn` moved to devDependencies.
+
 ### Engineering
 
 - e2e runner: generic `METHOD /path` actions with `bearer:` headers, `$ref:` resolution in paths / object keys / assert paths, and candidate-path assertion resolution (tRPC, REST and JSON-RPC envelope bodies all work); new `tests/e2e/api/05-agent-access.yaml` (21 cases, full token → REST → MCP → RSS → skill → revoke round trip).

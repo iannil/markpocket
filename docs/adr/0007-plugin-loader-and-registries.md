@@ -2,7 +2,7 @@
 
 - **状态**：Accepted
 - **日期**：2026-07-09
-- **相关**：落地 `docs/superpowers/specs/2026-07-09-plugin-architecture-design.md` §2/§3；延续 ADR-0006（StorageProvider 接缝）
+- **相关**：落地 `docs/archive/superpowers/specs/2026-07-09-plugin-architecture-design.md` §2/§3；延续 ADR-0006（StorageProvider 接缝）
 
 ## 背景
 

@@ -78,6 +78,8 @@ function headersFromReq(req: IncomingMessage): Headers {
 
 // Cross-site WebSocket hijacking guard: if the client declares an Origin, it
 // must point back at the Host being served (cookie-auth rides along otherwise).
+// Local twin of http-guards.originAllowed (ADR-0010) — kept separate because
+// the ws upgrade hands us a Node IncomingMessage, not a fetch Request.
 function originAllowed(req: IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (!origin) return true; // non-browser clients

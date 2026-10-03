@@ -4,7 +4,7 @@
 
 ### Database Migrations
 
-This release includes six new database migrations (0007–0012). If you are running the Docker container, migrations run automatically on boot — `src/server.ts` applies pending migrations under a pg advisory lock before serving (so concurrent replicas serialize), then starts the server. No manual steps needed.
+This release includes seven new database migrations (0007–0013). If you are running the Docker container, migrations run automatically on boot — `src/server.ts` applies pending migrations under a pg advisory lock before serving (so concurrent replicas serialize), then starts the server. No manual steps needed.
 
 If you are running outside Docker (e.g., the dev server), run:
 
@@ -93,6 +93,28 @@ Two sides of index hygiene, no data changes:
 
 - **Drops** `cell_record_id_idx` and `record_table_id_idx` — both are fully covered by the leading column of an existing index (`cell_record_field_uq (record_id, field_id)` and `record_table_created_at_idx (table_id, created_at DESC)` respectively), so they only added write amplification.
 - **Adds** missing single-column indexes on `base_share.base_id`, `base_invite.base_id`, and `attachment.base_id` — `share.list` / `invite.list` filter by base and base deletion cascades over these tables; without the index those scans degrade to sequential scans as tables grow.
+
+#### Migration 0013: `api_token` table (agent access layer)
+
+File: `apps/web/src/server/db/migrations/0013_dark_kitty_pryde.sql`
+
+```sql
+CREATE TABLE "api_token" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "name" text NOT NULL,
+    "token_hash" text NOT NULL,
+    "token_prefix" text NOT NULL,
+    "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+    "last_used_at" timestamp with time zone,
+    "expires_at" timestamp with time zone,
+    "revoked_at" timestamp with time zone
+);
+CREATE UNIQUE INDEX "api_token_hash_uq" ON "api_token" USING btree ("token_hash");
+CREATE INDEX "api_token_user_id_idx" ON "api_token" USING btree ("user_id");
+```
+
+Backs the agent access layer (ADR-0010): Bearer tokens for REST `/api/v1`, MCP `/api/mcp`, and token management UI. Only the sha256 digest is stored; no data migration needed — tokens are created per-user in the web UI (any base → Settings → Agents).
 
 ### Docker Compose
 

@@ -15,9 +15,10 @@ tests/
 │   │   ├── 01-base.yaml              # Base CRUD + 权限
 │   │   ├── 02-table.yaml             # Table CRUD
 │   │   ├── 03-field-cell-record.yaml # Field/Cell/Record 全链路
-│   │   └── 04-disable-signup.yaml    # DISABLE_SIGNUP=1 场景（可选，默认跳过，见下）
+│   │   ├── 04-disable-signup.yaml    # DISABLE_SIGNUP=1 场景（可选，默认跳过，见下）
+│   │   └── 05-agent-access.yaml      # Agent 接入层：API token → REST/MCP/RSS/Skill
 │   │
-│   └── browser/                      # 浏览器 E2E（tests/run-browser-e2e.sh 驱动 agent-browser）
+│   └── browser/                      # 浏览器 E2E 场景 YAML（agent 技能手动驱动，未进 CI）
 │       ├── 00-auth-flow.yaml         # 登录/注册/退出
 │       ├── 01-base-lifecycle.yaml    # Base 创建 → 编辑 → 删除
 │       ├── 02-grid-interaction.yaml  # Grid 编辑器交互

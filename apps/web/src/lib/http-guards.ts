@@ -46,7 +46,7 @@ export function createUserConcurrencyLimiter(getLimit: () => number): UserConcur
   return {
     tryAcquire(userId) {
       const limit = getLimit();
-      if (limit <= 0) return true; // 0 = 不限流（显式关闭）
+      if (limit <= 0) return true; // 0 = no limiting (explicitly disabled)
       const n = counts.get(userId) ?? 0;
       if (n >= limit) return false;
       counts.set(userId, n + 1);
@@ -54,8 +54,8 @@ export function createUserConcurrencyLimiter(getLimit: () => number): UserConcur
     },
     release(userId) {
       const n = counts.get(userId) ?? 0;
-      // delete（而不是归零）让空闲用户不占 Map 条目 —— 无界的 userId 空间
-      // 不能留下无界的计数器条目。
+      // delete (rather than zero) so idle users release their Map slot —
+      // an unbounded userId space must not leave unbounded counters.
       if (n <= 1) counts.delete(userId);
       else counts.set(userId, n - 1);
     },
@@ -121,7 +121,7 @@ export function createFixedWindowRateLimiter(
   return {
     allow(key, now = Date.now()) {
       const limit = getLimit();
-      if (limit <= 0) return true; // 0 = 不限流（显式关闭）
+      if (limit <= 0) return true; // 0 = no limiting (explicitly disabled)
       const entry = hits.get(key);
       if (!entry || now - entry.windowStart >= windowMs) {
         // Prune opportunistic expired entries on window rollover so an
@@ -217,7 +217,7 @@ export async function readBodyWithCap(req: Request, maxBytes: number): Promise<R
 // download alive too: RFC 5987 percent-encoding inflates CJK ~9x (3 UTF-8
 // bytes become 9 "%XX" chars), so a 60K-char CJK name would otherwise turn
 // into a ~540KB Content-Disposition and a permanently broken attachment.
-export const MAX_FILENAME_BYTES = 255;
+const MAX_FILENAME_BYTES = 255;
 
 export function truncateFilenameBytes(name: string, maxBytes: number = MAX_FILENAME_BYTES): string {
   if (Buffer.byteLength(name, 'utf8') <= maxBytes) return name;

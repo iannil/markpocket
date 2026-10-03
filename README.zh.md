@@ -89,6 +89,8 @@ docker compose up -d --build
 
 **v1 明确不做**（见 ADR）：AI/聊天/评论、仪表盘、原生 SQL 暴露、多租户、Calendar/Gantt、Lookup/Rollup、OT/CRDT 合并、百万行性能优化。
 
+**主题**：当前仅浅色模式。`globals.css` 中已预置暗色 token（`.dark`），但未接线切换入口、组件也未做暗色审计——暗色模式属 roadmap 项，不是已交付功能。
+
 ---
 
 ## 工作原理
@@ -159,10 +161,12 @@ markpocket/
 │   ├── plugin-csv/            # CSV 导入导出插件（参考实现）
 │   └── plugin-storage-local/  # 本地文件系统 storage adapter
 ├── docs/
-│   ├── STATUS.md           # 项目状态总览
-│   ├── migration/plan.md   # 迁移方案（teable → markpocket）
-│   ├── adr/                # 架构决策记录（0001–0009）
-│   └── redesign/           # Paper & Ink 设计 spec + 实施计划 + 进度
+│   ├── README.md           # 文档地图
+│   ├── STATUS.md           # 项目状态：功能矩阵、质量基线、迭代路线
+│   ├── adr/                # 架构决策记录（0001–0010）
+│   ├── api/                # tRPC + Agent 接入 API 参考
+│   ├── archive/            # 已归档的历史文档（迁移方案、SDD 计划）
+│   └── redesign/           # Paper & Ink 设计规范（现行 UI 标准）
 ├── CONTEXT.md             # 领域术语表
 ├── docker-compose.yml     # 生产式 compose（web + postgres）
 ├── dev.sh                 # 一键开发环境
@@ -207,8 +211,9 @@ E2E 测试账号与约定见 [`tests/e2e/README.md`](tests/e2e/README.md)。端�
 markpocket 处于 **v1 功能完成 + Paper & Ink 重设计中** 阶段。
 
 - ✅ **v1 核心功能（Phase 0–7）**：骨架、数据、视图、实时、表达式、富字段、历史、CSV/分享/角色 — 全部落地。
-- 🔄 **Paper & Ink 重设计**：App Shell（Topbar / Sidebar / Statusbar / Breadcrumb）已合并；Login、Bases 列表、Base 详情、Grid Editor UI 待重新换皮。
-- 📊 完整状态跟踪：[`docs/STATUS.md`](docs/STATUS.md)（项目全景）和 [`docs/redesign/status.md`](docs/redesign/status.md)（设计实施进度）。
+- ✅ **Paper & Ink 重设计**：已收官（2026-07）；设计规范仍是现行 UI 标准。
+- ✅ **Agent 接入层（ADR-0010)**：API Token + REST `/api/v1` + MCP `/api/mcp` + RSS 订阅 + 可下载 Agent Skill。
+- 📊 完整状态跟踪：[`docs/STATUS.md`](docs/STATUS.md)（项目全景：功能矩阵、质量基线、迭代路线）。
 
 尚未发布到任何 registry，也没有打 tag release。在首个 release 之前，请把 `master` 分支视作 unstable。
 

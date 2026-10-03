@@ -2,7 +2,7 @@
 
 - **状态**：Accepted
 - **日期**：2026-07-10
-- **相关**：落地 `docs/superpowers/specs/2026-07-09-plugin-csv-server-router-design.md`；延续 ADR-0007（编译期加载器与注册表）；第一个消费者 `@markpocket/plugin-csv`
+- **相关**：落地 `docs/archive/superpowers/specs/2026-07-09-plugin-csv-server-router-design.md`；延续 ADR-0007（编译期加载器与注册表）；第一个消费者 `@markpocket/plugin-csv`
 
 ## 背景
 

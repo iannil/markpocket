@@ -2,14 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Agent memory, kept current.** Engineering facts live here; project progress/roadmap in [`docs/STATUS.md`](docs/STATUS.md); the documentation map in [`docs/README.md`](docs/README.md). Update this file when conventions change — it is the first thing an agent reads.
+
 ## Project Overview
 
-**markpocket** is a self-hosted Airtable alternative — bases, tables, fields, records, views (Grid shipped; Form / Kanban / Gallery planned), real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.
+**markpocket** is a self-hosted Airtable alternative — bases, tables, fields, records, views (Grid shipped; Form / Kanban / Gallery planned), real-time collaboration, cell-level history, CSV in/out, and a four-channel agent access layer (REST / MCP / RSS / Skill, ADR-0010) — in a single Docker container.
 
 - **Single-tenant self-hosted** (ADR-0004): one container per team, no SaaS
 - **Row-per-cell storage** (ADR-0001): every cell is its own DB row with JSONB value
 - **Soft real-time** (ADR-0002): WebSocket broadcast + Last-Write-Wins, no OT/CRDT
 - **Expression fields, not a Formula DSL** (ADR-0003): write-time evaluation scoped to one record
+- **Agent access = tRPC reuse** (ADR-0010): every machine channel runs through the same caller + role checks as the UI
 - **Designed for <100k rows per table** (this constraint keeps the architecture simple)
 
 ## Build & Test Commands
@@ -127,10 +130,12 @@ markpocket/
 │   ├── plugin-csv/                     # CSV import/export plugin
 │   └── plugin-storage-local/           # Local filesystem storage adapter
 ├── docs/
-│   ├── adr/                            # Architecture Decision Records (0001-0009)
-│   ├── STATUS.md                       # Project status
-│   ├── migration/plan.md               # teable → markpocket migration plan
-│   └── redesign/                       # Paper & Ink redesign specs + progress
+│   ├── README.md                       # Documentation map (start here)
+│   ├── STATUS.md                       # Project status: feature matrix, quality baseline, roadmap
+│   ├── adr/                            # Architecture Decision Records (0001-0010)
+│   ├── api/                            # tRPC + agent-access API reference
+│   ├── archive/                        # Completed historical docs (migration plan, SDD plans/specs, redesign trackers)
+│   └── redesign/                       # Paper & Ink design spec (the live UI standard)
 └── CONTEXT.md                          # Domain glossary
 ```
 
@@ -142,6 +147,7 @@ markpocket/
 4. **Field type registry (ADR-0009)**: Server-side value semantics live in `FieldTypeContribution` objects registered in the `fieldTypeRegistry`. The `field-value.ts` module reads from the registry. Client-side `field-types.ts` only has type constants and UI metadata — no server registry.
 5. **Real-time**: WebSocket per-Base channel, authenticated via better-auth session cookie. Postgres `LISTEN/NOTIFY` bridges the gap between the Next.js process and the standalone gateway in dev mode.
 6. **tRPC routers**: One file per domain entity under `server/trpc/routers/`. Merged into the app router in `router.ts`.
+7. **Agent access layer (ADR-0010)**: REST `/api/v1`, MCP `/api/mcp`, RSS `/feed/{token}`, Skill `/api/skill` all authenticate via `api_token` Bearer tokens and execute through `agentCaller(userId)` — a synthetic-session tRPC caller, so role checks are identical to the UI. Shared edge: `server/agent-access/http.ts` (origin gate → 1MB body cap → token resolve → per-token rate limit → uniform error envelope). Canonical Origin check lives in `lib/http-guards.ts` `originAllowed`.
 
 ### Domain Model (from CONTEXT.md)
 

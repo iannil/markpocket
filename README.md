@@ -93,6 +93,8 @@ Sorted by what you'll touch first, not by what was hardest to build.
 
 Deliberately **out of scope for v1** (see ADRs): AI/chat/comments, dashboards, raw SQL exposure, multi-tenancy, Calendar/Gantt, Lookup/Rollup, OT/CRDT merge, and million-row performance work.
 
+**Theming**: light mode only for now. The dark-mode token set exists in `globals.css` (`.dark`) but no toggle is wired and components are not dark-audited; dark mode is roadmap work, not a shipped feature.
+
 ---
 
 ## How it works
@@ -163,10 +165,12 @@ markpocket/
 │   ├── plugin-csv/        # CSV import/export plugin (reference implementation)
 │   └── plugin-storage-local/  # Local-filesystem storage adapter
 ├── docs/
-│   ├── STATUS.md           # Project status overview
-│   ├── migration/plan.md   # The full rewrite plan (teable → markpocket)
-│   ├── adr/                # Architecture Decision Records (0001–0009)
-│   └── redesign/           # Paper & Ink design spec + implementation plan + progress
+│   ├── README.md           # Documentation map
+│   ├── STATUS.md           # Project status: feature matrix, quality baseline, roadmap
+│   ├── adr/                # Architecture Decision Records (0001–0010)
+│   ├── api/                # tRPC + agent-access API reference
+│   ├── archive/            # Completed historical docs (migration plan, SDD plans)
+│   └── redesign/           # Paper & Ink design spec (the live UI standard)
 ├── CONTEXT.md             # Domain glossary (what words mean here)
 ├── docker-compose.yml     # web + postgres (production-style)
 ├── dev.sh                 # one-shot dev environment
@@ -208,11 +212,12 @@ PRs welcome. The project follows a strict "no premature abstraction" rule (only 
 
 ## Status
 
-markpocket is at **v1 complete + Paper & Ink redesign in progress**.
+markpocket is at **v1 complete + security-hardened + agent access layer**.
 
 - ✅ **v1 Core (Phases 0–7)**: skeleton, data, views, realtime, expressions, rich fields, history, CSV/share/roles — all landed.
-- 🔄 **Paper & Ink redesign**: App Shell (Topbar / Sidebar / Statusbar / Breadcrumb) merged; Login, Bases List, Base Details, and Grid Editor UI ready for re-skinning.
-- 📊 Full status tracking: [`docs/STATUS.md`](docs/STATUS.md) (project-wide) and [`docs/redesign/status.md`](docs/redesign/status.md) (design implementation).
+- ✅ **Paper & Ink redesign**: shipped (2026-07); the design spec remains the UI standard.
+- ✅ **Agent access layer (ADR-0010)**: API tokens + REST `/api/v1` + MCP `/api/mcp` + RSS feeds + downloadable Agent Skill.
+- 📊 Full status tracking: [`docs/STATUS.md`](docs/STATUS.md) (project-wide: feature matrix, quality baseline, roadmap).
 
 It is not yet published to a registry and has no tagged release. Treat the `master` branch as unstable until the first release.
 

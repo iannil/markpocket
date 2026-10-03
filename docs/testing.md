@@ -3,7 +3,7 @@
 ## 快速开始
 
 ```bash
-pnpm test                       # 全部测试（248 个用例 / 30 个文件，~10s）
+pnpm test                       # 全部测试（550 个用例 / 54 个文件，~3s，无需 DB）
 pnpm test -- --run src/foo.test.ts   # 单文件
 pnpm --filter @markpocket/web typecheck  # 类型检查
 pnpm test:e2e-api               # API E2E（需实例运行，见 tests/e2e/README.md）
@@ -21,7 +21,11 @@ pnpm test:e2e-api               # API E2E（需实例运行，见 tests/e2e/READ
 | `apps/web/src/lib/view-ast.test.ts` | view options zod 结构校验（深度/节点数/字节数） |
 | `apps/web/src/lib/format.test.ts` / `initials.test.ts` | 共享格式化/首字母模块 |
 | `apps/web/src/server/expression.test.ts` | 服务端表达式物化 |
-| `apps/web/src/server/realtime/gateway.test.ts` | realtime 网关：鉴权、订阅限频、频道上限、心跳等（8 用例） |
+| `apps/web/src/server/realtime/gateway.test.ts` | realtime 网关：鉴权、订阅限频、频道上限、心跳、慢消费者背压（10 用例） |
+| `apps/web/src/lib/http-guards.test.ts` | body 上限/流式计数、并发限流器、文件名截断、Disposition、安全回调、Origin 校验 |
+| `apps/web/src/server/agent-access/*.test.ts` | token 生命周期、限流、错误映射、records-service 组合语义、RSS 转义、Skill 渲染 |
+| `apps/web/src/server/agent-access/mcp/server.test.ts` + `app/api/mcp/route.test.ts` | MCP 握手/工具分发/错误分级/HTTP 边缘 |
+| `apps/web/src/app/api/v1/**/route.test.ts` + `app/feed/[token]/route.test.ts` | REST 路由守卫（401/403/413/分页校验）与 feed fail-closed 语义 |
 | `apps/web/src/server/plugins/*` | 字段值语义 parity、loader、registry、validate |
 | `packages/plugin-csv` / `plugin-sdk` / `plugin-storage-local` | 各包自带单测（含 CSV 注入、BOM、路径穿越） |
 
@@ -37,11 +41,13 @@ pnpm test:e2e-api               # API E2E（需实例运行，见 tests/e2e/READ
 | `field-validation.test.ts` | 字段 options 校验 |
 | `share-member-invite.test.ts` | share/member/invite + 权限 |
 | `public-share.test.ts` | 公开端点（视图级隔离） |
+| `token.test.ts` | API token 创建/一次性展示/列表脱敏/吊销 |
+| `export.test.ts` | CSV 导出组装（排序、截断、注入中和） |
 
 ### E2E 场景（YAML）
 
 - `tests/e2e/api/` — API 场景，`node tests/run-api-tests.cjs` 执行（已进 CI 的 e2e job；语法未知的 assert 会直接报错，不会静默通过；`$env:`/`requires_env` 等约定见 `tests/e2e/README.md`）
-- `tests/e2e/browser/` — agent-browser 浏览器场景（未进 CI）
+- `tests/e2e/browser/` — agent-browser 浏览器场景 YAML（未进 CI，由 agent 技能手动驱动；曾经配套的 `run-browser-e2e.sh` 已删除——其内嵌断言早已与 YAML 场景脱节）
 
 ## tRPC 集成测试的 mock 模式
 

@@ -8,6 +8,7 @@ import { assertRole } from '@/lib/roles';
 import {
   contentLengthExceeds,
   MAX_UPLOAD_BODY_BYTES,
+  originAllowed,
   readBodyWithCap,
   readEnvNonNegativeInt,
   truncateFilenameBytes,
@@ -22,25 +23,16 @@ import { NextResponse } from 'next/server';
 const ALLOWED_MIME_RE =
   /^(image\/(png|jpeg|gif|webp|bmp|x-icon|avif)|audio\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+|text\/(plain|csv|markdown)|application\/(pdf|zip|json|octet-stream|msword|vnd\.[a-z0-9.+-]+|vnd\.openxmlformats-officedocument\.[a-z0-9.+-]+))$/i;
 
-// Cross-origin browser POSTs (CSRF) are refused: a browser always sends Origin
-// on cross-origin fetches. Missing Origin (curl, tests, server-side clients)
-// is allowed through — session auth still applies.
-function isCrossOrigin(req: Request): boolean {
-  const origin = req.headers.get('origin');
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== req.headers.get('host');
-  } catch {
-    return true;
-  }
-}
-
 // UPLOAD_USER_QUOTA_MB: per-user total upload quota in megabytes. Default
 // 2048, 0 disables the cap. See the quota check in POST for the threat model.
 const DEFAULT_UPLOAD_USER_QUOTA_MB = 2048;
 
 export async function POST(req: Request) {
-  if (isCrossOrigin(req)) {
+  // Cross-origin browser POSTs (CSRF) are refused: a browser always sends
+  // Origin on cross-origin fetches. Missing Origin (curl, tests, server-side
+  // clients) is allowed through — session auth still applies. Canonical copy:
+  // http-guards.originAllowed (ADR-0010).
+  if (!originAllowed(req)) {
     return NextResponse.json({ error: 'Cross-origin upload refused' }, { status: 403 });
   }
 

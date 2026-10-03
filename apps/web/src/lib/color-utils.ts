@@ -1,6 +1,6 @@
 // Self-contained port of teable packages/core/src/models/field/color-utils.ts.
 // Dropped the `color` npm dependency and teable-internal enum helpers; kept the
-// helpers Phase 1 needs (hex/rgb lookup, light-text hint, random pick, palette).
+// helpers the color picker needs (hex lookup, random pick, palette).
 
 import { Colors, rgbTuplesByColor } from './colors';
 
@@ -10,7 +10,7 @@ export interface IRGB {
   b: number;
 }
 
-export function getRgbForColor(color: Colors): IRGB | null {
+function getRgbForColor(color: Colors): IRGB | null {
   const tuple = rgbTuplesByColor[color];
   return tuple ? { r: tuple[0], g: tuple[1], b: tuple[2] } : null;
 }
@@ -20,12 +20,6 @@ export function getHexForColor(color: Colors): string | null {
   if (!rgb) return null;
   const hex = (rgb.r << 16) | (rgb.g << 8) | rgb.b;
   return `#${hex.toString(16).padStart(6, '0')}`;
-}
-
-// Light text reads better on the darker shades; the Light1/Light2 shades want dark text.
-export function shouldUseLightTextOnColor(color: Colors): boolean {
-  const s = String(color);
-  return !(s.endsWith('Light1') || s.endsWith('Light2'));
 }
 
 export function randomColor(exists: Colors[] = [], num = 1): Colors[] {
