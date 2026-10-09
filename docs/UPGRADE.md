@@ -120,6 +120,8 @@ Backs the agent access layer (ADR-0010): Bearer tokens for REST `/api/v1`, MCP `
 
 If upgrading an existing deployment:
 
+Before pulling new code, [back up the current instance](BACKUP.md), verify its checksums, and restore that backup in an isolated same-version drill. Confirm login, counts, attachment bytes, history, roles, and a new write there. Keep the backup and its protected deployment configuration available for rollback; a rollback must restore the database and attachments together. The [recovery evidence](release/2026-10-09-recovery-evidence.md) records one disposable drill, not a substitute for testing your own deployment.
+
 ```bash
 # Pull latest code
 git pull origin master
@@ -133,11 +135,12 @@ The container will apply pending migrations automatically.
 
 Before tagging a new release, verify the following:
 
-1. **End-to-end smoke test**: create a base, add tables, insert data, verify share links work, send invites, and export data
-2. **docker-compose up one-shot**: bring up from clean state (no existing DB volume) and confirm the app boots, migrations run, and the UI loads
-3. **Upgrade from empty DB**: start with an existing database that has earlier migrations, confirm the container applies the new migrations without error
-4. **CHANGELOG updated**: all significant changes listed in `CHANGELOG.md`
-5. **README updated**: if any setup steps, environment variables, or configuration changed
-6. **Tag pushed**: `git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1` — this triggers the GitHub Actions release workflow
-7. **Image published**: confirm the ghcr.io image (`ghcr.io/iannil/markpocket:v1.0.0-alpha.1`) is built and available
-8. **GitHub Release**: create a release note on GitHub linking to the CHANGELOG section
+1. **Backup and isolated recovery**: run [BACKUP.md](BACKUP.md) against the current version and verify both database and attachments before upgrade
+2. **End-to-end smoke test**: create a base, add tables, insert data, verify share links work, send invites, and export data
+3. **docker-compose up one-shot**: bring up from clean state (no existing DB volume) and confirm the app boots, migrations run, and the UI loads
+4. **Upgrade from earlier migrations**: start with a database that has earlier migrations and confirm the container applies the new migrations without error
+5. **CHANGELOG updated**: all significant changes listed in `CHANGELOG.md`
+6. **README updated**: if any setup steps, environment variables, or configuration changed
+7. **Tag pushed**: `git tag v1.0.0-alpha.1 && git push origin v1.0.0-alpha.1` — this triggers the GitHub Actions release workflow
+8. **Image published**: confirm the ghcr.io image (`ghcr.io/iannil/markpocket:v1.0.0-alpha.1`) is built and available
+9. **GitHub Release**: create a release note on GitHub linking to the CHANGELOG section

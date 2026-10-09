@@ -47,7 +47,7 @@ docker compose up -d --build
 
 补充说明：
 
-- **附件存储在数据库之外**：上传文件落在 `./data`（bind-mount 到容器的 `/app/data`）。备份时把 `./data` 和 `postgres_data` 卷一起备份。
+- **附件存储在数据库之外**：上传文件落在 `./data`（bind-mount 到容器的 `/app/data`）。请按照[实例备份与恢复指南](docs/BACKUP.md)同时备份数据库和 `./data`。
 - **可选配置**（`DISABLE_SIGNUP=1` 关闭注册、`STORAGE_PROVIDER` 等）从 `.env` 透传，见 `.env.example`。
 - Postgres 只发布在 `127.0.0.1:5433`（仅回环），可用本地客户端直连查看。
 - **反向代理注意事项**：tRPC/上传路由与 WebSocket 网关按请求的 `Host` 头校验 `Origin`，反代必须原样转发原始主机名（nginx：`proxy_set_header Host $host;`）——否则已登录的请求会被当作跨域而拒绝。

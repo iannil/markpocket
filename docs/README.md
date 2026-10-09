@@ -22,6 +22,7 @@
 | [`plugin-development.md`](plugin-development.md) | 插件开发（plugin-sdk、两个扩展点、注入面） | 写插件时 |
 | [`redesign/2026-07-01-paper-ink-design.md`](redesign/2026-07-01-paper-ink-design.md) | UI 现行设计规范（Paper & Ink：token、密度、hairline 边框） | 写任何界面 |
 | [`UPGRADE.md`](UPGRADE.md) | 版本升级与迁移说明（0007–0013） | 升级部署 |
+| [`BACKUP.md`](BACKUP.md) | 实例备份、校验与隔离恢复演练 | 备份、恢复或升级前 |
 | [`../CHANGELOG.md`](../CHANGELOG.md) | 逐版本变更 | 查"什么时候变的" |
 
 ## 归档

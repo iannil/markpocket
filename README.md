@@ -49,7 +49,7 @@ Then open **http://localhost:3000**. The container runs migrations automatically
 
 Notes:
 
-- **Attachments are persisted outside the database**: uploaded files land in `./data` (bind-mounted to the container's `/app/data`). Include `./data` in backups alongside the `postgres_data` volume.
+- **Attachments are persisted outside the database**: uploaded files land in `./data` (bind-mounted to the container's `/app/data`). Back up the database and `./data` together using the [instance backup and recovery guide](docs/BACKUP.md).
 - **Optional settings** (`DISABLE_SIGNUP=1` to close registration, `STORAGE_PROVIDER`, …) pass through from `.env` — see `.env.example`.
 - Postgres is published on `127.0.0.1:5433` (loopback only) if you want to inspect it with a local client.
 - **Behind a reverse proxy**: tRPC/upload routes and the WebSocket gateway validate the request's `Origin` against its `Host` header, so the proxy must forward the original host unchanged (nginx: `proxy_set_header Host $host;`) — otherwise authenticated calls are rejected as cross-origin.

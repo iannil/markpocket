@@ -50,9 +50,11 @@ Set `BACKUP_DIR` to the checked backup path. Keep the generated `RESTORE_DIR` an
 
 Verify login, table/record/cell counts, attachment bytes and checksums, history, roles, and a new write in the restored instance. A health endpoint alone is insufficient. CSV export omits attachment binaries, permissions, and history, so it cannot replace this process. Upgrade only after a same-version recovery succeeds; complete rollback requires both database and attachments to return together.
 
+The [2026-10-10 disposable recovery drill](release/2026-10-09-recovery-evidence.md) records the actual source and restored image, checksum results, counts, browser and API acceptance, and failure-path results. Repeat the drill for your own deployed version and data before an upgrade.
+
 ## Recovery acceptance scenarios
 
-The isolated Task 2 drill checks these outcomes with a disposable instance:
+An isolated drill should check these outcomes with a disposable instance:
 
 | Scenario | Expected result |
 | --- | --- |
