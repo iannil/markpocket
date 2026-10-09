@@ -11,16 +11,16 @@
   },
   "dependencies": {
     "@markpocket/plugin-sdk": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "zod": "^4.4.3"
+    "drizzle-orm": "^0.45.3",
+    "zod": "^4.6.5"
   },
   "peerDependencies": {
-    "react": "^19.2.7"
+    "react": "^19.3.0"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1",
-    "@types/react": "^19.2.17",
-    "react": "^19.2.7"
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
