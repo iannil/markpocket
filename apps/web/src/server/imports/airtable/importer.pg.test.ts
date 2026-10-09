@@ -234,10 +234,14 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('atomic importer PostgreSQL'
       const concurrentService = createImportService({ source: () => source, importer });
       const concurrent = await Promise.all([
         service.startImport(userId, concurrentInput),
-        concurrentService.startImport(userId, concurrentInput),
+        concurrentService.startImport(userId, {
+          ...concurrentInput,
+          requestId: concurrentInput.requestId.toUpperCase(),
+        }),
       ]);
       expect(concurrent[0]!.baseId).toBe(concurrent[1]!.baseId);
       expect(notifications).toBe(2);
+      expect(await readdir(join(dir, 'uploads'))).toHaveLength(2);
       expect(await db.select().from(s.base).where(eq(s.base.createdBy, userId))).toHaveLength(2);
       // Transport drops after COMMIT, then recovery cannot reach the database.
       // Keep both journal and committed bytes until the controlled recovery.
@@ -258,11 +262,14 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('atomic importer PostgreSQL'
       });
       const uncertain = createImportService({
         source: () => source,
-        importer: createImporter({
-          database: async () => uncertainDatabase,
-          workspaceId: userId,
-          journalDir: join(dir, 'journals'),
-        }),
+        importer: {
+          ...createImporter({
+            database: async () => uncertainDatabase,
+            workspaceId: userId,
+            journalDir: join(dir, 'journals'),
+          }),
+          receipt: importer.receipt,
+        },
       });
       const uncertainInput = { ...input, requestId: randomUUID() };
       await expect(uncertain.startImport(userId, uncertainInput)).rejects.toThrow(
@@ -279,6 +286,64 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('atomic importer PostgreSQL'
         'fixture bytes',
       );
       expect(await readdir(join(dir, 'journals'))).toHaveLength(0);
+      let recoveryEntered!: () => void, releaseRecovery!: () => Promise<void>;
+      const recoveryReady = new Promise<void>((resolve) => {
+        recoveryEntered = resolve;
+      });
+      let recoveryTransactions = 0;
+      const pendingDatabase = new Proxy(db, {
+        get(target, property) {
+          if (property === 'transaction')
+            return (callback: Parameters<typeof db.transaction>[0]) => {
+              if (++recoveryTransactions === 1) return target.transaction(callback);
+              return new Promise((resolve, reject) => {
+                releaseRecovery = async () => {
+                  try {
+                    resolve(await target.transaction(callback));
+                  } catch (error) {
+                    reject(error);
+                  }
+                };
+                recoveryEntered();
+              });
+            };
+          return Reflect.get(target, property);
+        },
+      });
+      const delayedRecoveryImporter = createImporter({
+        database: async () => pendingDatabase,
+        workspaceId: userId,
+        journalDir: join(dir, 'journals'),
+        beforeCommit: async () => {
+          throw Error('rollback');
+        },
+      });
+      const delayedRecovery = createImportService({
+        deadlineMs: 150,
+        source: () => source,
+        importer: { ...delayedRecoveryImporter, receipt: importer.receipt },
+      });
+      const filesBeforeRecovery = (await readdir(join(dir, 'uploads'))).length;
+      const pendingRun = delayedRecovery.startImport(userId, { ...input, requestId: randomUUID() });
+      const recoveryAssertion = expect(
+        Promise.race([
+          pendingRun,
+          new Promise((resolve) => setTimeout(() => resolve('hung recovery'), 300)),
+        ]),
+      ).rejects.toThrow('Import recovery required');
+      await recoveryReady;
+      try {
+        await recoveryAssertion;
+      } finally {
+        await releaseRecovery();
+      }
+      expect(await readdir(join(dir, 'journals'))).toHaveLength(1);
+      expect(await readdir(join(dir, 'uploads'))).toHaveLength(filesBeforeRecovery + 1);
+      expect(
+        (await delayedRecovery.preflightImport(userId, input.sourceBaseId, input.token)).tables,
+      ).toHaveLength(2);
+      expect(await cleanupImports(join(dir, 'journals'))).toBe(1);
+      expect(await readdir(join(dir, 'uploads'))).toHaveLength(filesBeforeRecovery);
     } finally {
       await db.delete(s.base).where(eq(s.base.createdBy, userId));
       await db.delete(s.workspace).where(eq(s.workspace.id, userId));

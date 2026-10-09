@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { canonicalRequestId } from './budget';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const RECOVERY_HINT =
@@ -24,6 +25,7 @@ export async function createJournal(
   keys: string[],
   dir = journalDirectory(),
 ): Promise<Journal> {
+  requestId = canonicalRequestId(requestId);
   if (!UUID.test(requestId) || keys.some((key) => !UUID.test(key)) || keys.length > 200)
     throw Error('Invalid import journal');
   await privateDirectory(dir);
@@ -52,14 +54,23 @@ export async function cleanJournal(
   journal: Journal,
   committed: boolean,
   remove: (key: string) => Promise<void>,
+  guard: () => void = () => {},
 ) {
-  if (!committed) for (const key of journal.keys) await remove(key);
+  if (!committed)
+    for (const key of journal.keys) {
+      guard();
+      await remove(key);
+    }
+  guard();
   await journal.discard();
 }
 // withLock must retain the request's database advisory lock until recover resolves.
 export async function recoverJournals(
   dir: string,
-  withLock: (requestId: string, recover: (committed: boolean) => Promise<void>) => Promise<void>,
+  withLock: (
+    requestId: string,
+    recover: (committed: boolean, guard?: () => void) => Promise<void>,
+  ) => Promise<void>,
   remove: (key: string) => Promise<void>,
 ) {
   await privateDirectory(dir);
@@ -88,7 +99,9 @@ export async function recoverJournals(
     } finally {
       await handle.close();
     }
-    await withLock(data.requestId, async (committed) => {
+    data.requestId = canonicalRequestId(data.requestId);
+    await withLock(data.requestId, async (committed, guard = () => {}) => {
+      guard();
       // A successful importer may have removed the journal while we waited.
       try {
         const info = await lstat(path);
@@ -97,7 +110,7 @@ export async function recoverJournals(
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
         throw error;
       }
-      await cleanJournal({ ...data, path, discard: () => unlink(path) }, committed, remove);
+      await cleanJournal({ ...data, path, discard: () => unlink(path) }, committed, remove, guard);
       recovered++;
     });
   }

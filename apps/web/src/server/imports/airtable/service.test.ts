@@ -32,6 +32,67 @@ const report = (id: string): ImportReport => ({
 });
 
 describe('import lifecycle', () => {
+  it('includes the initial pending receipt in the deadline and blocks late source work', async () => {
+    let release!: () => void;
+    const pending = new Promise<undefined>((resolve) => {
+      release = () => resolve(undefined);
+    });
+    const factory = vi.fn(() => source);
+    const service = createImportService({
+      deadlineMs: 10,
+      source: factory,
+      importer: { receipt: () => pending, write: vi.fn() },
+    });
+    const running = service.startImport('user', input());
+    try {
+      await expect(
+        Promise.race([
+          running,
+          new Promise((resolve) => setTimeout(() => resolve('hung receipt'), 60)),
+        ]),
+      ).rejects.toThrow('deadline');
+    } finally {
+      release();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(factory).not.toHaveBeenCalled();
+  });
+  it('joins mixed-case concurrent retries in the same active slot', async () => {
+    let release!: () => void, entered!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const request = input();
+    let stored: ImportReport | undefined;
+    const write = vi.fn(async () => {
+      stored = report(request.requestId);
+      return stored;
+    });
+    const service = createImportService({
+      source: () => ({
+        ...source,
+        schema: async () => {
+          entered();
+          await pending;
+          return schema;
+        },
+      }),
+      importer: { receipt: async () => stored, write },
+    });
+    const first = service.startImport('user', request);
+    await ready;
+    const second = service.startImport('user', {
+      ...request,
+      requestId: request.requestId.toUpperCase(),
+    });
+    release();
+    const results = await Promise.all([first, second]);
+    expect(results[0]).toEqual(results[1]);
+    expect(write).toHaveBeenCalledOnce();
+  });
   it('returns receipt before touching credentials or source', async () => {
     const request = input(),
       factory = vi.fn();
@@ -68,10 +129,14 @@ describe('import lifecycle', () => {
     await ready;
     await expect(service.importStatus('other', request.requestId)).rejects.toThrow('Access denied');
     await expect(service.cancelImport('other', request.requestId)).rejects.toThrow('Access denied');
-    expect((await service.importStatus('user', request.requestId)).status).toBe('running');
-    expect(await service.cancelImport('user', request.requestId)).toEqual({ cancelled: true });
+    expect((await service.importStatus('user', request.requestId.toUpperCase())).status).toBe(
+      'running',
+    );
+    expect(await service.cancelImport('user', request.requestId.toUpperCase())).toEqual({
+      cancelled: true,
+    });
     await assertion;
-    expect(await service.importStatus('user', request.requestId)).toEqual({
+    expect(await service.importStatus('user', request.requestId.toUpperCase())).toEqual({
       status: 'not-running',
     });
   });
@@ -91,8 +156,12 @@ describe('import lifecycle', () => {
       },
     });
     expect(await service.startImport('user', request)).toEqual(report(request.requestId));
-    expect(await service.cancelImport('user', request.requestId)).toEqual({ cancelled: false });
-    expect((await service.importStatus('user', request.requestId)).status).toBe('complete');
+    expect(await service.cancelImport('user', request.requestId.toUpperCase())).toEqual({
+      cancelled: false,
+    });
+    expect((await service.importStatus('user', request.requestId.toUpperCase())).status).toBe(
+      'complete',
+    );
   });
   it('deadline cancels a pending network request and allows another preflight', async () => {
     let calls = 0;
@@ -138,7 +207,7 @@ describe('import lifecycle', () => {
     });
     const running = service.startImport('user', request);
     await ready;
-    const cancellation = service.cancelImport('user', request.requestId);
+    const cancellation = service.cancelImport('user', request.requestId.toUpperCase());
     finish();
     await running;
     expect(await cancellation).toEqual({ cancelled: false });

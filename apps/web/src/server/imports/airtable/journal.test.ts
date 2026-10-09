@@ -8,7 +8,9 @@ import { createJournal, recoverJournals } from './journal';
 describe('private file journal', () => {
   it('records keys before put and recovers process leftovers', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'airtable-journal-'));
-    const journal = await createJournal(randomUUID(), [randomUUID()], dir);
+    const requestId = randomUUID();
+    const journal = await createJournal(requestId.toUpperCase(), [randomUUID()], dir);
+    expect(JSON.parse(await readFile(journal.path, 'utf8')).requestId).toBe(requestId);
     expect((await stat(journal.path)).mode & 0o777).toBe(0o600);
     expect((await stat(dir)).mode & 0o777).toBe(0o700);
     const remove = vi.fn().mockResolvedValue(undefined);

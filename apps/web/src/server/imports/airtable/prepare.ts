@@ -32,6 +32,7 @@ export async function prepareImport(
     await source.schema(input.sourceBaseId, input.token, signal),
     input.sourceBaseId,
   );
+  checkSignal(signal);
   if (plan.schemaHash !== input.schemaHash)
     throw new AirtableImportError('invalid_input', 'Source schema changed; run preflight again');
   if (plan.issues.length && !input.acceptLosses)

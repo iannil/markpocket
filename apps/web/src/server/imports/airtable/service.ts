@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { canonicalRequestId, withinDeadline } from './budget';
 import { createAirtableSource } from './client';
 import { createImporter, type Importer } from './importer';
 import { RECOVERY_HINT } from './journal';
@@ -42,7 +43,8 @@ export function createImportService(
   const importer = dependencies.importer ?? createImporter();
   const source = dependencies.source ?? (() => createAirtableSource());
   let active: Active | undefined;
-  function claim(userId: string, requestId: string) {
+  const deadline = () => Date.now() + (dependencies.deadlineMs ?? 120000);
+  function claim(userId: string, requestId: string, deadlineAt = deadline()) {
     if (active) throw new AirtableImportError('limit', 'Another import or preflight is running');
     let finish!: () => void;
     const done = new Promise<void>((resolve) => {
@@ -57,7 +59,6 @@ export function createImportService(
       finish,
     };
     active = slot;
-    const deadlineAt = Date.now() + (dependencies.deadlineMs ?? 120000);
     const timer = setTimeout(() => slot.controller.abort(), Math.max(1, deadlineAt - Date.now()));
     return {
       slot,
@@ -69,9 +70,13 @@ export function createImportService(
       },
     };
   }
-  async function receipt(userId: string, requestId: string) {
+  async function receipt(userId: string, requestId: string, deadlineAt: number) {
     try {
-      return await importer.receipt(userId, requestId);
+      return await withinDeadline(deadlineAt, async (guard) => {
+        const result = await importer.receipt(userId, requestId, deadlineAt);
+        guard();
+        return result;
+      });
     } catch (error) {
       throw safeError(error);
     }
@@ -81,7 +86,9 @@ export function createImportService(
       const operation = claim(userId, randomUUID());
       try {
         const result = preflight(
-          await source().schema(sourceBaseId, token, operation.slot.controller.signal),
+          await withinDeadline(operation.deadlineAt, () =>
+            source().schema(sourceBaseId, token, operation.slot.controller.signal),
+          ),
           sourceBaseId,
         );
         checkSignal(operation.slot.controller.signal);
@@ -93,20 +100,26 @@ export function createImportService(
       }
     },
     async startImport(userId: string, input: ImportInput): Promise<ImportReport> {
-      const existing = await receipt(userId, input.requestId);
+      const deadlineAt = deadline();
+      input = { ...input, requestId: canonicalRequestId(input.requestId) };
+      const existing = await receipt(userId, input.requestId, deadlineAt);
       if (existing) return existing;
       // Concurrent same-user retries wait for the active attempt, then use its
       // durable receipt. The active state contains no source or credentials.
       if (active?.requestId === input.requestId) {
         if (active.userId !== userId) throw Error('Access denied');
-        await active.done;
-        const completed = await receipt(userId, input.requestId);
+        const waiting = active.done;
+        await withinDeadline(deadlineAt, () => waiting);
+        const completed = await receipt(userId, input.requestId, deadlineAt);
         if (completed) return completed;
       }
-      const operation = claim(userId, input.requestId);
+      const operation = claim(userId, input.requestId, deadlineAt);
       const signal = operation.slot.controller.signal;
       try {
-        const prepared = await prepareImport(source(), input, signal, operation.slot.progress);
+        const prepared = await withinDeadline(deadlineAt, () =>
+          prepareImport(source(), input, signal, operation.slot.progress),
+        );
+        checkSignal(signal);
         operation.slot.progress.phase = 'writing';
         return await importer.write(userId, input, prepared, signal, operation.deadlineAt);
       } catch (error) {
@@ -116,7 +129,9 @@ export function createImportService(
       }
     },
     async importStatus(userId: string, requestId: string): Promise<ImportStatus> {
-      const completed = await receipt(userId, requestId);
+      const deadlineAt = deadline();
+      requestId = canonicalRequestId(requestId);
+      const completed = await receipt(userId, requestId, deadlineAt);
       if (completed) return { status: 'complete', report: completed };
       if (active?.requestId === requestId) {
         if (active.userId !== userId) throw Error('Access denied');
@@ -125,13 +140,15 @@ export function createImportService(
       return { status: 'not-running' };
     },
     async cancelImport(userId: string, requestId: string): Promise<{ cancelled: boolean }> {
-      if (await receipt(userId, requestId)) return { cancelled: false };
+      const deadlineAt = deadline();
+      requestId = canonicalRequestId(requestId);
+      if (await receipt(userId, requestId, deadlineAt)) return { cancelled: false };
       if (active?.requestId === requestId) {
         if (active.userId !== userId) throw Error('Access denied');
         const cancelling = active;
         cancelling.controller.abort();
-        await cancelling.done;
-        return { cancelled: !(await receipt(userId, requestId)) };
+        await withinDeadline(deadlineAt, () => cancelling.done);
+        return { cancelled: !(await receipt(userId, requestId, deadlineAt)) };
       }
       return { cancelled: false };
     },
