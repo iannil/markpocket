@@ -1,6 +1,7 @@
 import { pluginRouters } from '@/plugins.config';
 import { router } from './init';
 import { authRouter } from './routers/auth';
+import { airtableImportRouter } from './routers/airtable-import';
 import { baseRouter } from './routers/base';
 import { cellRouter } from './routers/cell';
 import { exportRouter } from './routers/export';
@@ -18,6 +19,7 @@ import { workspaceRouter } from './routers/workspace';
 
 export const appRouter = router({
   auth: authRouter,
+  airtableImport: airtableImportRouter,
   workspace: workspaceRouter,
   base: baseRouter,
   table: tableRouter,

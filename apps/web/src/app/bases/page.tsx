@@ -68,12 +68,20 @@ export default function BasesPage() {
           title="No bases yet"
           description="Create one to get going"
           action={
-            <Link
-              href="/bases/new"
-              className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"
-            >
-              create your first base
-            </Link>
+            <div className="flex gap-3">
+              <Link
+                href="/bases/new"
+                className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"
+              >
+                create your first base
+              </Link>
+              <Link
+                href="/bases/import-airtable"
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+              >
+                Import from Airtable
+              </Link>
+            </div>
           }
         />
       </div>
@@ -90,12 +98,20 @@ export default function BasesPage() {
               {bases.length} {bases.length === 1 ? 'base' : 'bases'}
             </p>
           </div>
-          <Link
-            href="/bases/new"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"
-          >
-            + new base
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/bases/import-airtable"
+              className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-muted"
+            >
+              Import from Airtable
+            </Link>
+            <Link
+              href="/bases/new"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm text-primary-foreground hover:opacity-90"
+            >
+              + new base
+            </Link>
+          </div>
         </header>
 
         <ul className="border-t border-border">
