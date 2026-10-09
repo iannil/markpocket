@@ -1,7 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { session } from './__test-utils';
+import { mockDb, session } from './__test-utils';
 
 const mocks = vi.hoisted(() => ({ exportBaseCsv: vi.fn() }));
+vi.mock('@/server/db', () => ({ db: mockDb() }));
 vi.mock('@/server/exports/csv', () => mocks);
 
 import { exportRouter } from './export';
