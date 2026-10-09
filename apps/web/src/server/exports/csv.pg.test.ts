@@ -253,17 +253,24 @@ pgIt(
     const s = await import('../db/schema');
     const { exportBaseCsv, exportTableCsv } = await import('./csv');
     const id = randomUUID();
+    const foreignBaseId = randomUUID();
+    const foreignTableId = randomUUID();
     try {
       await db.insert(s.workspace).values({ id, name: 'auth-test' });
       await db.insert(s.base).values({ id, workspaceId: id, name: 'auth-test' });
       await db.insert(s.table).values({ id, baseId: id, name: 'Test' });
+      await db.insert(s.base).values({ id: foreignBaseId, workspaceId: id, name: 'foreign' });
+      await db
+        .insert(s.table)
+        .values({ id: foreignTableId, baseId: foreignBaseId, name: 'Foreign' });
       await expect(exportBaseCsv(id, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
       await expect(exportTableCsv(id, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
       await db.insert(s.baseMember).values({ baseId: id, userId: id, role: 'viewer' });
-      expect(await exportBaseCsv(id, id, ['foreign-table'])).toEqual([]);
+      expect(await exportBaseCsv(id, id, [foreignTableId])).toEqual([]);
       expect(await exportBaseCsv(id, id, [])).toEqual([]);
       expect(await exportTableCsv(id, id)).toMatchObject({ exported: 0, truncated: false });
     } finally {
+      await db.delete(s.base).where(eq(s.base.id, foreignBaseId));
       await db.delete(s.base).where(eq(s.base.id, id));
       await db.delete(s.workspace).where(eq(s.workspace.id, id));
     }

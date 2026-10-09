@@ -14,8 +14,6 @@ export default function ExportTab() {
   const [selected, setSelected] = useState<Set<string> | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Truncation notices are informational, not failures — rendering them in
-  // the error channel showed successful exports in destructive red.
   const [note, setNote] = useState<string | null>(null);
 
   // Init selected to all tables once data loads
@@ -37,8 +35,6 @@ export default function ExportTab() {
         baseId,
         tableIds: [...selectedSet],
       });
-      const truncated = files.filter((f) => f.truncated);
-
       let downloaded = 0;
       for (const file of files) {
         const url = URL.createObjectURL(new Blob([file.csv], { type: 'text/csv' }));
@@ -51,11 +47,7 @@ export default function ExportTab() {
         // Small delay between downloads to avoid browser blocking
         await new Promise((r) => setTimeout(r, 200));
       }
-      if (truncated.length > 0) {
-        setNote(
-          truncated.map((f) => `${f.name} truncated at 10,000 of ${f.total} records`).join('; '),
-        );
-      } else if (downloaded > 1) {
+      if (downloaded > 1) {
         // Browsers gate automatic multi-file downloads behind a permission
         // prompt; a.click() cannot detect the block, so surface the hint
         // instead of failing silently.
@@ -83,7 +75,9 @@ export default function ExportTab() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Select tables to export as CSV files. Each table downloads as a separate file.
+        Export every record in the selected tables as CSV. Current view filters do not apply. Each
+        request supports up to 100,000 records per table and 8 MiB of CSV data. CSV does not include
+        attachment files, permissions, or history; use an instance backup to preserve them.
       </p>
 
       <ul className="border-t border-border">

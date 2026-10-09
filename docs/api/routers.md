@@ -94,7 +94,7 @@ Auth column: **P** = protectedProcedure (requires session), **Pub** = publicProc
 
 | Procedure | Auth | Input | Output | Description |
 |-----------|------|-------|--------|-------------|
-| `exportBase` | P | `{ baseId: string }` | `{ name: string; csv: string }[]` | Exports all tables in a base as CSV files. Requires **viewer** role. Each table becomes one CSV file. Supports Text, Number, Boolean, Select, and Multi-Select field types. |
+| `exportBase` | P | `{ baseId: string; tableIds?: string[] }` | `{ tableId: string; name: string; csv: string; total: number; truncated: false }[]` | Exports all selected tables in a base as separate CSV files. Viewer+. Complete within the shared request budget: 100,000 rows per table, 8 MiB of CSV text, and 16 MiB of raw JSON cell text per page. Exceeding a limit fails without a file. Current view filters do not apply. |
 
 ---
 
@@ -174,4 +174,4 @@ Injected by the `@markpocket/plugin-csv` plugin via `...pluginRouters` (ADR-0008
 | Procedure | Auth | Input | Output | Description |
 |-----------|------|-------|--------|-------------|
 | `import` | P | `{ tableId: string, csvText: string (≤5MB UTF-8 bytes) }` | import report (rowCount, skippedHeaders, emptyCellRows, partial-failure marker) | Parses CSV and writes records through the core write path (expression cells materialize). Editor+ on the table. |
-| `export` | P | `{ tableId: string }` | `{ csv: string, truncated: boolean, total: number }` | Exports the table as CSV (injection-neutralized, 10k-row cap with truncation flag). Viewer+. |
+| `export` | P | `{ tableId: string }` | `{ csv: string; truncated: false; exported: number }` | Exports every record within the budget (injection-neutralized). Viewer+. The 100,000-row, 8 MiB CSV, and 16 MiB raw page limits fail explicitly without a partial file. `truncated` remains for compatibility and is always `false`. CSV omits attachment files, permissions, and history; use an instance backup to preserve them. |

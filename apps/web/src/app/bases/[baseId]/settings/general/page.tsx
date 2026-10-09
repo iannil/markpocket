@@ -81,7 +81,7 @@ export default function GeneralTab() {
             tables: tables.data ?? [],
             onExport: async (tableId: string) => {
               try {
-                const { csv, truncated, exported } = await utils.client.csv.export.query({
+                const { csv, exported } = await utils.client.csv.export.query({
                   tableId,
                 });
                 const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -89,14 +89,11 @@ export default function GeneralTab() {
                 a.href = url;
                 const tableName = (tables.data ?? []).find((t) => t.id === tableId)?.name;
                 const fileBase = tableName ? tableName.replace(/[^a-zA-Z0-9_-]/g, '_') : tableId;
-                a.download = `${fileBase}.csv`;
+                const safeTableId = tableId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+                a.download = `${fileBase}-${safeTableId}.csv`;
                 a.click();
                 URL.revokeObjectURL(url);
-                if (truncated) {
-                  toast.info(
-                    `Showing the first 10,000 records${exported > 0 ? ` of ${exported}` : ''}`,
-                  );
-                }
+                toast.success(`Exported ${exported} records`);
               } catch (err) {
                 toast.error(err instanceof Error ? err.message : 'Export failed');
               }

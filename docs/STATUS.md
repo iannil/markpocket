@@ -57,7 +57,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 | 公开分享（只读单视图页） | ✅ | `routers/{share,public-share}.ts`、`app/share/[token]/` | 视图级隔离 + 隐藏字段投影，fail-closed |
 | 邀请（48h token、email 匹配） | ✅ | `routers/invite.ts` | 角色上限 editor/viewer |
 | 成员与角色（owner/editor/viewer） | ✅ | `lib/roles.ts`、`base_member` 表 | rank 比较，最后 owner 保护 |
-| CSV 导入/导出 | ✅ | `packages/plugin-csv/` | 导入 50k 行上限 + 表达式物化；导出 10k 截断 + 注入中和 |
+| CSV 导入/导出 | ✅ | `packages/plugin-csv/` | 导入 50k 行上限 + 表达式物化；导出在预算内完整返回，每表 ≤100,000 行、每请求 ≤8 MiB，超限失败；CSV 非实例备份；注入中和 |
 | 附件上传/下载 | ✅ | `app/api/{upload,files}/`、`packages/plugin-storage-local/` | MIME 白名单 + ACL + 配额；compose `./data` 卷 |
 | 鉴权 | ✅ | `server/auth.ts`（better-auth 密码 + 可选 OIDC） | `DISABLE_SIGNUP` 可关注册 |
 | 大表分页 + 虚拟滚动 | ✅ | `use-paged-records.ts`、`@tanstack/react-virtual` | 行高 32px |

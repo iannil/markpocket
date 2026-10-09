@@ -22,6 +22,8 @@ ADR-0007 让插件能在编译期注册进核心，但只验证了 storage（纯
 
 5. **静态合并契约**：声明了 router 的插件必须出现在 `pluginRouters`；一个单测守 `csv ∈ pluginRouters`（client 类型契约的护栏）。
 
+2026-10：完整 CSV 导出通过 `CoreServerApi.exports.tableCsv` 复用主机的只读快照服务。两个入口共享每表 100,000 行、每请求 8 MiB CSV 与每页 16 MiB 原始 JSON 单元格文本的预算；超限明确失败，`truncated` 兼容字段恒为 `false`。CSV 仅作数据交换，附件文件、权限和历史须由实例备份保存。
+
 ## 后果
 
 **正面**

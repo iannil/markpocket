@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — complete CSV export
+
+- Both Base settings entry points now export complete tables within the shared request budget: up to 100,000 records per table, 8 MiB of CSV text per request, and 16 MiB of raw JSON cell text per page. Exceeding a limit fails explicitly without a partial download.
+- The plugin and Base export responses keep `truncated` for compatibility; successful exports always return `false`. CSV remains a data exchange format; instance backups preserve attachment files, permissions, and history.
+
 ## Unreleased — agent access layer (2026-10-03)
 
 Four machine-facing channels on one Bearer-token layer (ADR-0010: [docs/api/agent-access.md](docs/api/agent-access.md)).
