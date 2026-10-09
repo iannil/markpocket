@@ -1,5 +1,5 @@
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { request as httpsRequest } from 'node:https';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { Readable } from 'node:stream';
@@ -38,43 +38,42 @@ async function resolveWithAbort(
   });
 }
 
-function ipv4Public(address: string): boolean {
-  const p = address.split('.').map(Number);
-  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
-  const [a, b, c] = p;
-  return (
-    a !== 0 &&
-    a !== 10 &&
-    a !== 127 &&
-    a < 224 &&
-    !(a === 100 && b >= 64 && b <= 127) &&
-    !(a === 169 && b === 254) &&
-    !(a === 172 && b >= 16 && b <= 31) &&
-    !(a === 192 && (b === 0 || b === 168)) &&
-    !(a === 198 && (b === 18 || b === 19)) &&
-    !(a === 198 && b === 51 && c === 100) &&
-    !(a === 203 && b === 0 && c === 113)
-  );
-}
-
-function ipv6Public(address: string): boolean {
-  const lower = address.toLowerCase().split('%')[0];
-  if (lower.includes('.')) {
-    const embedded = lower.slice(lower.lastIndexOf(':') + 1);
-    return !lower.startsWith('::ffff:') && ipv4Public(embedded) && !lower.startsWith('::');
-  }
-  const first = Number.parseInt(lower.replace(/^::/, '0:').split(':')[0] || '0', 16);
-  return (
-    first >= 0x2000 &&
-    first <= 0x3fff &&
-    !lower.startsWith('2001:db8:') &&
-    !lower.startsWith('2001:db8::')
-  );
-}
+const reservedIpv4 = new BlockList();
+for (const [network, prefix] of [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.88.99.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+] as const)
+  reservedIpv4.addSubnet(network, prefix, 'ipv4');
+const globalIpv6 = new BlockList();
+globalIpv6.addSubnet('2000::', 3, 'ipv6');
+const reservedIpv6 = new BlockList();
+for (const [network, prefix] of [
+  ['2001::', 23],
+  ['2001:2::', 48],
+  ['2001:db8::', 32],
+  ['2002::', 16],
+  ['3fff::', 20],
+] as const)
+  reservedIpv6.addSubnet(network, prefix, 'ipv6');
 
 export function isPublicAddress(address: string): boolean {
   const family = isIP(address);
-  return family === 4 ? ipv4Public(address) : family === 6 ? ipv6Public(address) : false;
+  return family === 4
+    ? !reservedIpv4.check(address, 'ipv4')
+    : family === 6 && globalIpv6.check(address, 'ipv6') && !reservedIpv6.check(address, 'ipv6');
 }
 
 export async function validateAttachmentUrl(
@@ -145,7 +144,10 @@ export const nativeRequest: NetworkRequest = (url, address, headers, signal, max
         signal,
         timeout: 30_000,
         servername: url.hostname,
-        lookup: (_hostname, _options, callback) => callback(null, address.address, address.family),
+        lookup: (_hostname, options, callback) => {
+          if (options.all) callback(null, [{ address: address.address, family: address.family }]);
+          else callback(null, address.address, address.family);
+        },
       },
       (response) => {
         collectBoundedStream(response, maxBytes, signal)

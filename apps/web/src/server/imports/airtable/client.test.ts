@@ -44,6 +44,18 @@ describe('bounded Airtable client', () => {
     );
   });
 
+  it('accepts opaque Airtable offsets and URL encodes them', async () => {
+    const opaque = 'itrSJ1l4jlPyxEG6c/recxxx+more=';
+    const { source, request } = sourceFor([
+      { status: 200, body: page([record(1)], opaque) },
+      { status: 200, body: page([record(2)]) },
+    ]);
+    const batches = [];
+    for await (const batch of source.records(baseId, tableId, 'pat', signal)) batches.push(batch);
+    expect(batches).toHaveLength(2);
+    expect(request.mock.calls[1][0].searchParams.get('offset')).toBe(opaque);
+  });
+
   it('rejects repeated offsets and record IDs', async () => {
     const repeatedOffset = sourceFor([
       { status: 200, body: page([record(1)], 'again') },
@@ -79,14 +91,44 @@ describe('bounded Airtable client', () => {
     await expect(source.schema(baseId, 'pat', signal)).rejects.toThrow('byte limit');
   });
 
-  it('does not send PAT with attachment and checks total byte limit', async () => {
+  it('does not send PAT with attachment and enforces the aggregate byte limit', async () => {
+    const mebibyte = 1024 * 1024;
+    const sizes = [...Array.from({ length: 6 }, () => 10 * mebibyte), 4 * mebibyte, 1];
     const request = vi.fn<NetworkRequest>(async (_url, _address, headers) => {
       expect(headers.Authorization).toBeUndefined();
-      return { status: 200, headers: {}, body: Buffer.alloc(1) };
+      return { status: 200, headers: {}, body: Buffer.alloc(sizes.shift()!) };
     });
     const source = createAirtableSource({ resolve, request });
-    await source.attachment('https://v5.airtableusercontent.com/file', signal);
-    expect(request).toHaveBeenCalledOnce();
+    for (let n = 0; n < 7; n++) {
+      await source.attachment(`https://v5.airtableusercontent.com/file${n}`, signal);
+    }
+    await expect(
+      source.attachment('https://v5.airtableusercontent.com/file7', signal),
+    ).rejects.toThrow('Attachment total exceeded');
+    expect(request).toHaveBeenCalledTimes(8);
+  });
+
+  it('budgets actual JSON response bytes including whitespace across pages', async () => {
+    const firstJson = JSON.stringify(
+      page([{ id: 'rec1', fields: { fldName: 'line\nbreak' } }], 'next'),
+    );
+    const firstBody = Buffer.from(
+      firstJson + ' '.repeat(AIRTABLE_LIMITS.recordsBytes - firstJson.length - 1),
+    );
+    const bodies = [firstBody, Buffer.from(JSON.stringify(page([record(2)])))];
+    const request = vi.fn<NetworkRequest>(async () => ({
+      status: 200,
+      headers: {},
+      body: bodies.shift()!,
+    }));
+    const source = createAirtableSource({ resolve, request, sleep: async () => {} });
+    await expect(
+      (async () => {
+        for await (const batch of source.records(baseId, tableId, 'pat', signal))
+          expect(batch.length).toBe(1);
+      })(),
+    ).rejects.toThrow('byte limit');
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it('retries 429 once then fails, and stops on cancellation', async () => {

@@ -194,15 +194,18 @@ export function preflight(input: AirtableSchema, sourceBaseId = ''): Preflight {
   const issues: Preflight['issues'] = [];
   const tables = schema.tables.map((table) => {
     const used = new Set(table.fields.map((field) => field.name));
+    const collidingField = table.fields.find((field) => field.name === 'Airtable record ID');
     let sourceName = 'Airtable record ID';
-    if (used.has(sourceName)) sourceName = `Airtable record ID [source ${table.id}]`;
+    if (collidingField) sourceName = `Airtable record ID [source ${collidingField.id}]`;
     for (let suffix = 2; used.has(sourceName); suffix++) {
-      sourceName = `Airtable record ID [source ${table.id} ${suffix}]`;
+      sourceName = `Airtable record ID [source ${collidingField!.id} ${suffix}]`;
     }
     const fields: MappedField[] = [];
+    const skippedFieldIds: string[] = [];
     for (const field of table.fields) {
       const mapped = mapField(field, schema);
       if (!mapped) {
+        skippedFieldIds.push(field.id);
         issues.push({
           tableId: table.id,
           fieldId: field.id,
@@ -228,7 +231,14 @@ export function preflight(input: AirtableSchema, sourceBaseId = ''): Preflight {
       options: { sourceBaseId, sourceTableId: table.id, sourceRecordId: true },
       sourceType: 'recordId',
     };
-    return { sourceId: table.id, name: table.name, fields, sourceRecordIdField };
+    return {
+      sourceId: table.id,
+      name: table.name,
+      fields,
+      sourceFieldIds: table.fields.map((field) => field.id),
+      skippedFieldIds,
+      sourceRecordIdField,
+    };
   });
   const schemaHash = createHash('sha256').update(JSON.stringify(schema)).digest('hex');
   return { schemaHash, tables, issues };
@@ -313,8 +323,12 @@ export function validateRecordValues(
   targetRecordIds?: Map<string, Set<string>>,
 ): void {
   const fields = new Map(table.fields.map((field) => [field.sourceId, field]));
+  const allowedFieldIds = new Set(table.sourceFieldIds);
+  const skippedFieldIds = new Set(table.skippedFieldIds);
   for (const record of records) {
     for (const [id, raw] of Object.entries(record.fields)) {
+      if (!allowedFieldIds.has(id)) invalid('Unexpected Airtable field');
+      if (skippedFieldIds.has(id)) continue;
       if (raw == null) continue;
       const field = fields.get(id);
       if (!field) continue;

@@ -25,12 +25,18 @@ describe('attachment network boundary', () => {
     '127.0.0.1',
     '10.0.0.1',
     '169.254.169.254',
+    '192.0.2.1',
+    '198.18.0.1',
+    '240.0.0.1',
     '::1',
     '::ffff:127.0.0.1',
     'fc00::1',
     'fe80::1',
     'ff02::1',
     '2001:db8::1',
+    '2001:0db8::1',
+    '2001:0DB8:0:0:0:0:0:1',
+    '2001:2::1',
   ])('rejects nonpublic %s', async (address) => {
     expect(isPublicAddress(address)).toBe(false);
     await expect(

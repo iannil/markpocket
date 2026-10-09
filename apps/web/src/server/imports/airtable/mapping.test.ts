@@ -50,7 +50,7 @@ describe('pure mapping', () => {
               { id: 'fldOne', name: 'Airtable record ID', type: 'singleLineText' },
               {
                 id: 'fldTwo',
-                name: 'Airtable record ID [source tblCollision]',
+                name: 'Airtable record ID [source fldOne]',
                 type: 'singleLineText',
               },
             ],
@@ -59,7 +59,7 @@ describe('pure mapping', () => {
       }),
     );
     expect(collision.tables[0].sourceRecordIdField.name).toBe(
-      'Airtable record ID [source tblCollision 2]',
+      'Airtable record ID [source fldOne 2]',
     );
     expect(plan.tables[0].fields[0].options).toMatchObject({
       sourceBaseId: 'appSource01',
@@ -95,6 +95,19 @@ describe('pure mapping', () => {
     );
     expect(() => mapValue({ ...table.fields[0], sourceType: 'number' }, '2')).toThrow(
       'Invalid number',
+    );
+  });
+
+  it('accepts explicit skipped IDs but rejects unexpected or name-keyed record fields', () => {
+    const table = preflight(fixture).tables[0];
+    expect(() =>
+      validateRecordValues([{ id: 'rec1', fields: { fldUnsupported: 'anything' } }], table),
+    ).not.toThrow();
+    expect(() =>
+      validateRecordValues([{ id: 'rec1', fields: { fldUnexpected: 'anything' } }], table),
+    ).toThrow('Unexpected Airtable field');
+    expect(() => validateRecordValues([{ id: 'rec1', fields: { Name: 'Alice' } }], table)).toThrow(
+      'Unexpected Airtable field',
     );
   });
 });

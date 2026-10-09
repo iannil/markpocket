@@ -59,6 +59,8 @@ export type PreflightTable = {
   sourceId: string;
   name: string;
   fields: MappedField[];
+  sourceFieldIds: string[];
+  skippedFieldIds: string[];
   sourceRecordIdField: MappedField;
 };
 export type Preflight = { schemaHash: string; tables: PreflightTable[]; issues: ImportIssue[] };

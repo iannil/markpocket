@@ -40,6 +40,7 @@ const defaultSleep = (ms: number, signal: AbortSignal) =>
     signal.addEventListener('abort', abort, { once: true });
   });
 const idPattern = /^[A-Za-z0-9_-]{1,64}$/;
+const offsetPattern = /^[\x21-\x7e]{1,1024}$/;
 function invalid(message: string): never {
   throw new AirtableImportError('invalid_data', message);
 }
@@ -54,7 +55,7 @@ function parsePage(raw: unknown): { records: AirtableRecord[]; offset?: string }
   )
     invalid('Invalid Airtable records page');
   const offset = 'offset' in raw ? raw.offset : undefined;
-  if (offset !== undefined && (typeof offset !== 'string' || !idPattern.test(offset)))
+  if (offset !== undefined && (typeof offset !== 'string' || !offsetPattern.test(offset)))
     invalid('Invalid Airtable offset');
   const records = raw.records.map((record: unknown) => {
     if (
@@ -119,7 +120,7 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
     token: string,
     signal: AbortSignal,
     maxBytes: number,
-  ): Promise<unknown> {
+  ): Promise<{ data: unknown; bytes: number }> {
     if (!token || token.length > 1024)
       throw new AirtableImportError('invalid_input', 'Invalid Airtable token');
     const combined = deadlineSignal(signal);
@@ -154,7 +155,10 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
       if (response.status !== 200)
         throw new AirtableImportError('upstream', 'Airtable request failed');
       try {
-        return JSON.parse(response.body.toString('utf8')) as unknown;
+        return {
+          data: JSON.parse(response.body.toString('utf8')) as unknown,
+          bytes: response.body.length,
+        };
       } catch {
         return invalid('Invalid Airtable JSON');
       }
@@ -171,7 +175,7 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
         signal,
         AIRTABLE_LIMITS.metadataBytes,
       );
-      return parseSchema(raw);
+      return parseSchema(raw.data);
     },
     async *records(
       baseId: string,
@@ -187,9 +191,8 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
         check(signal);
         const path = `/v0/${baseId}/${tableId}?pageSize=100&returnFieldsByFieldId=true${offset ? `&offset=${encodeURIComponent(offset)}` : ''}`;
         const raw = await api(path, token, signal, AIRTABLE_LIMITS.recordsBytes - recordsBytes);
-        const page = parsePage(raw);
-        const bytes = Buffer.byteLength(JSON.stringify(raw));
-        recordsBytes += bytes;
+        const page = parsePage(raw.data);
+        recordsBytes += raw.bytes;
         if (recordsBytes > AIRTABLE_LIMITS.recordsBytes)
           throw new AirtableImportError('limit', 'Record data limit exceeded');
         for (const record of page.records) {
