@@ -58,6 +58,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 | 邀请（48h token、email 匹配） | ✅ | `routers/invite.ts` | 角色上限 editor/viewer |
 | 成员与角色（owner/editor/viewer） | ✅ | `lib/roles.ts`、`base_member` 表 | rank 比较，最后 owner 保护 |
 | CSV 导入/导出 | ✅ | `packages/plugin-csv/` | 导入 50k 行上限 + 表达式物化；导出在预算内完整返回，每表 ≤100,000 行、每请求 ≤8 MiB，超限失败；CSV 非实例备份；注入中和 |
+| Airtable Base 导入 | 🧪 预览版 | `apps/web/src/server/imports/airtable/`、`/bases/import-airtable` | 新建 Base；受控 fixture 与独立 PG 已验证，真实 Airtable PAT 端到端尚未验证；仅 local storage；见 [`AIRTABLE_IMPORT.md`](AIRTABLE_IMPORT.md) |
 | 附件上传/下载 | ✅ | `app/api/{upload,files}/`、`packages/plugin-storage-local/` | MIME 白名单 + ACL + 配额；compose `./data` 卷 |
 | 鉴权 | ✅ | `server/auth.ts`（better-auth 密码 + 可选 OIDC） | `DISABLE_SIGNUP` 可关注册 |
 | 大表分页 + 虚拟滚动 | ✅ | `use-paged-records.ts`、`@tanstack/react-virtual` | 行高 32px |
@@ -110,7 +111,7 @@ UI/交互：
 8. **field.orderIndex 无人写入**：字段实际按插入序显示（reorder 未实现，默认 0）。
 
 测试/架构：
-9. **手写 SQL 无真库回归**：死引用清理、CSV 导入等手写 SQL 逻辑没有针对真实库的回归测试（CI e2e 只覆盖 HTTP 层）。
+9. **部分手写 SQL 缺少真库回归**：死引用清理、CSV 导入等逻辑仍缺少针对真实库的回归测试（CI e2e 只覆盖 HTTP 层）；Airtable 导入已有独立 PG16 fixture 验收，但真实 Airtable PAT 端到端尚未验证。
 10. **Agent 限流为进程内计数**：多副本部署各副本独立计数（单容器部署无影响）。
 11. **MCP 为无状态协议子集**：无 SSE 推流/会话/批量；协议演进需跟进手写实现。
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — Airtable import preview
+
+- Added an authenticated Airtable import wizard that previews field conversions and skipped fields, copies supported records and attachments into a new Base, and returns a JSON issue report. It uses read-only PAT scopes, a durable receipt for idempotent retries, and a local-file recovery journal (migration 0014).
+- Added the [migration guide](docs/AIRTABLE_IMPORT.md) and [acceptance evidence](docs/release/2026-10-10-airtable-import-evidence.md). Fixture and isolated PostgreSQL acceptance are distinguished from live Airtable verification, which remains outstanding.
+
 ## Unreleased — complete CSV export
 
 - Both Base settings entry points now export complete tables within the shared request budget: up to 100,000 records per table, 8 MiB of CSV text per request, and 16 MiB of raw JSON cell text per page. Exceeding a limit fails explicitly without a partial download.

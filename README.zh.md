@@ -83,6 +83,7 @@ docker compose up -d --build
 - **cell 级历史** —— 谁、何时、旧值→新值，append-only 时间轴。
 - **附件** —— 可插拔 storage adapter（默认本地 FS；S3 后续）。
 - **CSV 导入导出** —— 标量数据可靠往返，以参考插件形式提供（`packages/plugin-csv`）。
+- **Airtable 导入预览版** —— 页面向导把一个源 Base 一次性迁入新 Base，展示字段映射、复制附件并提供问题报告。使用前请阅读[迁移限制与准备指南](docs/AIRTABLE_IMPORT.md)。
 - **可插拔内核** —— 插件 SDK 已落地两个扩展点（storage adapter、字段类型），外加 tRPC router 与 UI slot 两种集成面（ADR-0006..0009）。
 - **鉴权与分享** —— better-auth（密码 + 可选 OIDC）、per-Base 三层角色（owner / editor / viewer）、限定单视图的只读公开分享链接。
 - **Agent 接入** —— 同一套 Bearer token 层上的四条机器接入通道（ADR-0010）：带 OpenAPI 规范的 REST API（`/api/v1`）、面向 Claude Code / Cursor 的 MCP 服务器（`/api/mcp`）、分享视图的 RSS 订阅（`/feed/{token}`）、可下载的 Agent Skill（`/api/skill`）。见 [docs/api/agent-access.md](docs/api/agent-access.md)。

@@ -87,6 +87,7 @@ Sorted by what you'll touch first, not by what was hardest to build.
 - **Cell-level history** — append-only timeline of who changed what, when, with old/new values.
 - **Attachments** — pluggable storage adapter (local FS by default; S3 later).
 - **CSV import / export** — round-trippable for scalar data, shipped as the reference plugin (`packages/plugin-csv`).
+- **Airtable import preview** — a guided, one-time migration into a new Base with field mapping, attachment copies, and an issue report. [Read the limits and preparation steps](docs/AIRTABLE_IMPORT.md).
 - **Pluggable core** — a plugin SDK with two landed extension points (storage adapters, field types) plus tRPC router + UI-slot integration surfaces (ADR-0006..0009).
 - **Auth & sharing** — better-auth (email/password + optional OIDC), three roles per Base (owner / editor / viewer), and read-only public share links scoped to a single view.
 - **Agent access** — four machine-facing channels on one Bearer-token layer (ADR-0010): a REST API with OpenAPI spec (`/api/v1`), an MCP server for Claude Code / Cursor (`/api/mcp`), RSS feeds of shared views (`/feed/{token}`), and a downloadable Agent Skill (`/api/skill`). See [docs/api/agent-access.md](docs/api/agent-access.md).
