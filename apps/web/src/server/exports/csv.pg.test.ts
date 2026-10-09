@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq, sql as querySql } from 'drizzle-orm';
 import { expect, it, vi } from 'vitest';
 
 const pgIt = it.skipIf(process.env.EXPORT_PG_TEST !== '1');
+const pgSlowIt = it.skipIf(
+  process.env.EXPORT_PG_TEST !== '1' || process.env.EXPORT_PG_SLOW_TEST !== '1',
+);
 
 pgIt(
   'exports 10001 rows with stable ties from PostgreSQL',
@@ -277,3 +280,73 @@ pgIt(
   },
   60000,
 );
+
+pgSlowIt(
+  'redacts a real statement timeout and releases the slot for the next export',
+  async () => {
+    const { db } = await import('../db');
+    const s = await import('../db/schema');
+    const { exportTableCsv } = await import('./csv');
+    const id = randomUUID();
+    await db.insert(s.workspace).values({ id, name: 'statement-timeout-test' });
+    try {
+      await db.insert(s.base).values({ id, workspaceId: id, name: 'statement-timeout-test' });
+      await db.insert(s.baseMember).values({ baseId: id, userId: id, role: 'viewer' });
+      await db.insert(s.table).values({ id, baseId: id, name: 'Test' });
+      await db.insert(s.field).values({ id, tableId: id, name: 'Name', type: 'text' });
+      await db.insert(s.record).values({ id, tableId: id });
+      await db.insert(s.cell).values({ id, recordId: id, fieldId: id, value: 'after' });
+
+      const originalTransaction = db.transaction.bind(db);
+      const transaction = vi.spyOn(db, 'transaction').mockImplementationOnce((callback, config) =>
+        originalTransaction(async (tx) => {
+          const execute = tx.execute.bind(tx);
+          let injected = false;
+          return callback(
+            new Proxy(tx, {
+              get(target, key, receiver) {
+                if (key !== 'execute') return Reflect.get(target, key, receiver);
+                return async (...args: Parameters<typeof tx.execute>) => {
+                  // The service's first execute sets LOCAL statement_timeout=30s.
+                  const result = await execute(...args);
+                  if (!injected) {
+                    injected = true;
+                    await execute(querySql`select pg_sleep(31)`);
+                  }
+                  return result;
+                };
+              },
+            }),
+          );
+        }, config),
+      );
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(exportTableCsv(id, id)).rejects.toMatchObject({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'CSV export failed. No files were exported.',
+        });
+        expect(transaction).toHaveBeenCalledOnce();
+        expect(injectedErrorCode(log.mock.calls[0]?.[1])).toBe('57014');
+      } finally {
+        transaction.mockRestore();
+        log.mockRestore();
+      }
+      expect(await exportTableCsv(id, id)).toMatchObject({
+        csv: 'Name\nafter',
+        exported: 1,
+        truncated: false,
+      });
+    } finally {
+      await db.delete(s.base).where(eq(s.base.id, id));
+      await db.delete(s.workspace).where(eq(s.workspace.id, id));
+    }
+  },
+  70000,
+);
+
+function injectedErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const value = error as { code?: string; cause?: unknown };
+  return value.code === '57014' ? value.code : injectedErrorCode(value.cause);
+}
