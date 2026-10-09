@@ -222,7 +222,7 @@ it.skipIf(process.env.EXPORT_PG_TEST !== '1')('exports 10001 rows with stable ti
 ```
 
 - [ ] **Step 2：在专用测试数据库验证 RED。** 本地使用独立 PG16 实例和该实例的 `DATABASE_URL`，先 `pnpm db:migrate`，再 `EXPORT_PG_TEST=1 pnpm exec vitest run apps/web/src/server/exports/csv.pg.test.ts`。预期缺少 `./csv`。未配置真库时不能把 skipped 当通过。
-- [ ] **Step 3：实现服务的快照读取部分。** 新建 `csv.ts`，以下代码与下一步骤在同一个文件。
+- [ ] **Step 3：实现服务的快照读取部分。** 单页 250 行读取单元格前，先在 PostgreSQL 内合计 JSON 文本字节；超过 16 MiB 时明确失败，防止巨型单元格在 8 MiB 输出预算检查前被传入 Node。新建 `csv.ts`，以下代码与下一步骤在同一个文件。
 
 ```ts
 import { asc, desc, eq, inArray, sql as querySql } from 'drizzle-orm';

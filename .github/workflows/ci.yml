@@ -119,6 +119,10 @@ jobs:
           exit 1
       - name: API e2e tests
         run: node tests/run-api-tests.cjs
+      - name: CSV export PostgreSQL regressions
+        run: pnpm exec vitest run apps/web/src/server/exports/csv.pg.test.ts
+        env:
+          EXPORT_PG_TEST: '1'
       # The server runs in the background with its output redirected — without
       # this step a later failure (e.g. an e2e scenario) would leave its logs
       # invisible.

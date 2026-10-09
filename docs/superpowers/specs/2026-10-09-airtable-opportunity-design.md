@@ -51,7 +51,7 @@ E1：保留 `csv.export({tableId})` 与 `export.exportBase({baseId, tableIds?})`
 
 E2：一个请求使用一个 PostgreSQL repeatable-read/read-only 事务，字段、记录和单元格来自同一个快照；表内顺序 `createdAt DESC, id DESC`，字段顺序 `orderIndex ASC, id ASC`。Base 导出的表序 `orderIndex ASC, id ASC`。
 
-E3：单请求串行读取，每页 250 行；每表最多 100,000 行；返回 CSV 原文合计最多 8 MiB；单进程最多 1 个导出，忙时立即失败。阈值是此版本资源预算，不是“无限行”；100,001 行或超过字节预算必须明确失败，不生成可误认为完整的下载。
+E3：单请求串行读取，每页 250 行；每表最多 100,000 行；返回 CSV 原文合计最多 8 MiB；单页数据库原始 JSON 单元格文本最多 16 MiB，超限明确失败；单进程最多 1 个导出，忙时立即失败。阈值是此版本资源预算，不是“无限行”；100,001 行或超过字节预算必须明确失败，不生成可误认为完整的下载。
 
 E4：保留 `csvEscape` 的公式注入中和、字段格式化；空表返回表头。文件名追加 table ID，避免同名表相互覆盖。保留浏览器多文件下载提示。
 
