@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -141,6 +141,41 @@ it('starts a second import with a new request ID after completion', async () => 
   expect(mocks.start.mock.calls[1][0].requestId).not.toBe(mocks.start.mock.calls[0][0].requestId);
   expect((await screen.findByRole('link', { name: 'Open new Base' })).getAttribute('href')).toBe(
     '/bases/base-second',
+  );
+});
+
+it('does not let an older start response overwrite a new import after polling confirms completion', async () => {
+  let resolveStart!: (value: typeof report) => void;
+  let completedReport: typeof report | null = null;
+  mocks.start.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveStart = resolve;
+      }),
+  );
+  mocks.query.mockImplementation((input: { requestId: string }) => ({
+    data:
+      completedReport && input.requestId === completedReport.requestId
+        ? { status: 'complete', report: completedReport }
+        : undefined,
+    isError: false,
+  }));
+  const view = render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  await screen.findByText(/Unsupported field/);
+  fireEvent.click(screen.getByLabelText(/I understand/));
+  fireEvent.click(screen.getByRole('button', { name: 'Create new Base' }));
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1));
+  completedReport = { ...report, requestId: mocks.start.mock.calls[0][0].requestId };
+  view.rerender(<Page />);
+  expect(await screen.findByRole('link', { name: 'Open new Base' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Start another import' }));
+  fill();
+  await act(async () => resolveStart(completedReport!));
+  expect(screen.queryByRole('link', { name: 'Open new Base' })).toBeNull();
+  expect((screen.getByLabelText('Read-only personal access token') as HTMLInputElement).value).toBe(
+    'pat-secret',
   );
 });
 

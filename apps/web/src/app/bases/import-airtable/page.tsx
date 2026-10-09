@@ -32,6 +32,7 @@ export default function AirtableImportPage() {
   const utils = trpc.useUtils();
   const [checking, setChecking] = useState(false);
   const previewGeneration = useRef(0);
+  const startGeneration = useRef(0);
   const cancel = trpc.airtableImport.cancel.useMutation();
   const status = trpc.airtableImport.status.useQuery(
     { requestId: requestId ?? '' },
@@ -41,6 +42,7 @@ export default function AirtableImportPage() {
   useEffect(
     () => () => {
       previewGeneration.current += 1;
+      startGeneration.current += 1;
     },
     [],
   );
@@ -72,6 +74,7 @@ export default function AirtableImportPage() {
   }
   function startAnotherImport() {
     invalidatePreview();
+    startGeneration.current += 1;
     setRequestId(null);
     setReport(null);
     setSourceBaseId('');
@@ -111,6 +114,7 @@ export default function AirtableImportPage() {
     )
       return;
     const id = requestId ?? crypto.randomUUID();
+    const generation = ++startGeneration.current;
     setRequestId(id);
     sessionStorage.setItem(storageKey, id);
     setError('');
@@ -126,13 +130,18 @@ export default function AirtableImportPage() {
         schemaHash: preview.schemaHash,
         acceptLosses: accepted,
       });
-      setReport(result);
-      sessionStorage.removeItem(storageKey);
+      if (generation === startGeneration.current) {
+        setReport(result);
+        sessionStorage.removeItem(storageKey);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      if (generation === startGeneration.current)
+        setError(err instanceof Error ? err.message : 'Import failed');
     } finally {
-      setRunning(false);
-      setToken('');
+      if (generation === startGeneration.current) {
+        setRunning(false);
+        setToken('');
+      }
     }
   }
   async function onCancel() {

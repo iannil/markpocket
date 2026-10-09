@@ -38,6 +38,7 @@ Date: 2026-10-10. Branch: `codex/airtable-import-wizard`. This is fixture and is
 | Final review `env -u DATABASE_URL pnpm test` | 634 passed, 12 skipped, 65 passed files, 3 skipped files; no type errors |
 | Final review `pnpm format:check`, `pnpm lint`, `pnpm typecheck` | all passed; lint/typecheck successful in 4 workspace packages |
 | Final review production `pnpm build` against isolated PG | passed, including `/bases/import-airtable` route |
+| Final polling/start race review | A deferred start mutation resolved after polling had shown completion and the user had opened a fresh form; the new regression failed before the guard and passed afterward. Page suite: 12 passed. `pnpm typecheck`, `pnpm format:check`, and full ordinary suite passed: 635 passed, 12 skipped. This page-only change did not rerun PG tests. |
 
 All shell checks used Node 24 and pnpm 10.32.1 via `/private/tmp/markpocket-toolbin` in this isolated worktree. The full release checks and production build ran **before** the temporary browser binding was introduced, against the production source code. After the binding was removed, `git diff` confirmed no router change. The dedicated app processes and exact `markpocket-import-pg-01a12134` container were stopped after validation; its volume and evidence were retained. No unrelated dev service or data was modified.
 
