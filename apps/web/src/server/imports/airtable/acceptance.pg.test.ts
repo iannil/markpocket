@@ -77,24 +77,25 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('Airtable acceptance on isol
     const { createImportService } = await import('./service');
     const userId = randomUUID();
     const dir = await mkdtemp(join(tmpdir(), 'airtable-acceptance-'));
+    const originalUploadDir = process.env.UPLOAD_DIR;
     process.env.UPLOAD_DIR = join(dir, 'uploads');
-    await db
-      .insert(s.user)
-      .values({ id: userId, name: 'Acceptance fixture', email: `${userId}@example.test` });
-    await db.insert(s.workspace).values({ id: userId, name: 'Acceptance fixture' });
-    const service = createImportService({
-      source: () => source,
-      importer: createImporter({ workspaceId: userId, journalDir: join(dir, 'journals') }),
-    });
-    const input = {
-      requestId: randomUUID(),
-      sourceBaseId: 'appFixture',
-      token: 'fixture-only',
-      name: 'Acceptance import',
-      schemaHash: preflight(schema, 'appFixture').schemaHash,
-      acceptLosses: true,
-    };
     try {
+      await db
+        .insert(s.user)
+        .values({ id: userId, name: 'Acceptance fixture', email: `${userId}@example.test` });
+      await db.insert(s.workspace).values({ id: userId, name: 'Acceptance fixture' });
+      const service = createImportService({
+        source: () => source,
+        importer: createImporter({ workspaceId: userId, journalDir: join(dir, 'journals') }),
+      });
+      const input = {
+        requestId: randomUUID(),
+        sourceBaseId: 'appFixture',
+        token: 'fixture-only',
+        name: 'Acceptance import',
+        schemaHash: preflight(schema, 'appFixture').schemaHash,
+        acceptLosses: true,
+      };
       const preview = await service.preflightImport(userId, input.sourceBaseId, input.token);
       expect(preview.issues.map((issue) => issue.kind)).toEqual(['snapshot', 'skip']);
       await expect(
@@ -153,6 +154,40 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('Airtable acceptance on isol
             fields.map((field) => field.id),
           ),
         );
+      const expectedSourceFields = new Map([
+        ['tblPeople', ['fldName', 'fldCheck', 'fldTeam', 'fldChoice', 'fldFile', 'fldFormula']],
+        ['tblTeams', ['fldName']],
+      ]);
+      for (const tableReport of report.tables) {
+        const tableFields = fields.filter((field) => field.tableId === tableReport.targetId);
+        const sourceIds = tableFields
+          .filter((field) => !(field.options as { sourceRecordId?: boolean }).sourceRecordId)
+          .map((field) => {
+            expect(field.options).toMatchObject({
+              sourceBaseId: input.sourceBaseId,
+              sourceTableId: tableReport.sourceId,
+            });
+            return (field.options as { sourceFieldId: string }).sourceFieldId;
+          });
+        expect(sourceIds.sort()).toEqual(expectedSourceFields.get(tableReport.sourceId)!.sort());
+        const [sourceIdField] = tableFields.filter(
+          (field) => (field.options as { sourceRecordId?: boolean }).sourceRecordId,
+        );
+        expect(sourceIdField?.options).toMatchObject({
+          sourceBaseId: input.sourceBaseId,
+          sourceTableId: tableReport.sourceId,
+          sourceRecordId: true,
+        });
+        const tableRecords = records.filter((record) => record.tableId === tableReport.targetId);
+        const sourceCells = cells.filter((cell) => cell.fieldId === sourceIdField?.id);
+        expect(sourceCells).toHaveLength(tableRecords.length);
+        expect(new Set(sourceCells.map((cell) => cell.recordId))).toEqual(
+          new Set(tableRecords.map((record) => record.id)),
+        );
+        const expectedIds =
+          tableReport.sourceId === 'tblPeople' ? people.map((person) => person.id) : ['recTeam'];
+        expect(sourceCells.map((cell) => cell.value).sort()).toEqual(expectedIds.sort());
+      }
       const check = fields.find((field) => field.name === 'Check')!;
       expect(
         cells.filter((cell) => cell.fieldId === check.id && cell.value === false),
@@ -178,10 +213,15 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('Airtable acceptance on isol
       );
       expect(await readdir(join(dir, 'journals'))).toHaveLength(0);
     } finally {
-      await db.delete(s.base).where(eq(s.base.createdBy, userId));
-      await db.delete(s.workspace).where(eq(s.workspace.id, userId));
-      await db.delete(s.user).where(eq(s.user.id, userId));
-      await rm(dir, { recursive: true, force: true });
+      try {
+        await db.delete(s.base).where(eq(s.base.createdBy, userId));
+        await db.delete(s.workspace).where(eq(s.workspace.id, userId));
+        await db.delete(s.user).where(eq(s.user.id, userId));
+      } finally {
+        if (originalUploadDir === undefined) delete process.env.UPLOAD_DIR;
+        else process.env.UPLOAD_DIR = originalUploadDir;
+        await rm(dir, { recursive: true, force: true });
+      }
     }
   });
 });

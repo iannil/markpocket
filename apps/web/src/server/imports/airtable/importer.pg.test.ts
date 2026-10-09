@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
@@ -72,30 +72,31 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('atomic importer PostgreSQL'
     const { createImporter, cleanupImports } = await import('./importer');
     const userId = randomUUID();
     const dir = await mkdtemp(join(tmpdir(), 'airtable-import-pg-'));
+    const originalUploadDir = process.env.UPLOAD_DIR;
     process.env.UPLOAD_DIR = join(dir, 'uploads');
-    await db
-      .insert(s.user)
-      .values({ id: userId, name: 'Import fixture', email: `${userId}@example.test` });
-    await db.insert(s.workspace).values({ id: userId, name: 'Import fixture' });
-    let notifications = 0;
-    const importer = createImporter({
-      workspaceId: userId,
-      journalDir: join(dir, 'journals'),
-      publish: async () => {
-        notifications++;
-        throw Error('notification failure');
-      },
-    });
-    const service = createImportService({ source: () => source, importer });
-    const input = {
-      requestId: randomUUID(),
-      sourceBaseId: 'appFixture',
-      token: 'secret',
-      name: 'Imported',
-      schemaHash: preflight(schema, 'appFixture').schemaHash,
-      acceptLosses: true,
-    };
     try {
+      await db
+        .insert(s.user)
+        .values({ id: userId, name: 'Import fixture', email: `${userId}@example.test` });
+      await db.insert(s.workspace).values({ id: userId, name: 'Import fixture' });
+      let notifications = 0;
+      const importer = createImporter({
+        workspaceId: userId,
+        journalDir: join(dir, 'journals'),
+        publish: async () => {
+          notifications++;
+          throw Error('notification failure');
+        },
+      });
+      const service = createImportService({ source: () => source, importer });
+      const input = {
+        requestId: randomUUID(),
+        sourceBaseId: 'appFixture',
+        token: 'secret',
+        name: 'Imported',
+        schemaHash: preflight(schema, 'appFixture').schemaHash,
+        acceptLosses: true,
+      };
       const report = await service.startImport(userId, input);
       expect(report.records).toBe(2);
       expect(report.attachments).toBe(1);
@@ -345,9 +346,15 @@ describe.skipIf(process.env.IMPORT_PG_TEST !== '1')('atomic importer PostgreSQL'
       expect(await cleanupImports(join(dir, 'journals'))).toBe(1);
       expect(await readdir(join(dir, 'uploads'))).toHaveLength(filesBeforeRecovery);
     } finally {
-      await db.delete(s.base).where(eq(s.base.createdBy, userId));
-      await db.delete(s.workspace).where(eq(s.workspace.id, userId));
-      await db.delete(s.user).where(eq(s.user.id, userId));
+      try {
+        await db.delete(s.base).where(eq(s.base.createdBy, userId));
+        await db.delete(s.workspace).where(eq(s.workspace.id, userId));
+        await db.delete(s.user).where(eq(s.user.id, userId));
+      } finally {
+        if (originalUploadDir === undefined) delete process.env.UPLOAD_DIR;
+        else process.env.UPLOAD_DIR = originalUploadDir;
+        await rm(dir, { recursive: true, force: true });
+      }
     }
   });
 });

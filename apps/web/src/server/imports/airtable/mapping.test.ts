@@ -39,6 +39,17 @@ describe('pure mapping', () => {
     const plan = preflight(fixture, 'appSource01');
     expect(plan.tables).toHaveLength(2);
     expect(plan.issues.map((issue) => issue.kind)).toEqual(['snapshot', 'skip']);
+    expect(
+      plan.issues.map(({ tableId, tableName, fieldId, fieldName }) => ({
+        tableId,
+        tableName,
+        fieldId,
+        fieldName,
+      })),
+    ).toEqual([
+      { tableId: 'tblPeople', tableName: 'People', fieldId: 'fldScore', fieldName: 'Score' },
+      { tableId: 'tblPeople', tableName: 'People', fieldId: 'fldUnsupported', fieldName: 'Nope' },
+    ]);
     expect(plan.tables[0].sourceRecordIdField.name).toBe('Airtable record ID');
     const collision = preflight(
       parseSchema({

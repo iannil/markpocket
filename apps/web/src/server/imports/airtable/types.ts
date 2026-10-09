@@ -2,7 +2,9 @@ import type { CellValue, FieldOptions, FieldType } from '@/lib/field-types';
 
 export type ImportIssue = {
   tableId: string;
+  tableName: string;
   fieldId: string;
+  fieldName: string;
   kind: 'snapshot' | 'skip';
   message: string;
 };

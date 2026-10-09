@@ -54,7 +54,16 @@ const preview = {
       },
     },
   ],
-  issues: [{ tableId: 'tbl12345678', fieldId: 'fld1', kind: 'skip', message: 'Unsupported field' }],
+  issues: [
+    {
+      tableId: 'tbl12345678',
+      tableName: 'People',
+      fieldId: 'fld1',
+      fieldName: 'Unsupported',
+      kind: 'skip',
+      message: 'Unsupported field',
+    },
+  ],
 };
 function fill() {
   fireEvent.change(screen.getByLabelText('Airtable Base ID'), { target: { value: 'app12345678' } });
@@ -100,6 +109,72 @@ it('requires preflight and acknowledgement, then sends its current hash and requ
   expect(screen.getByRole('link', { name: 'Open new Base' }).getAttribute('href')).toBe(
     '/bases/base-new',
   );
+});
+
+it('starts a second import with a new request ID after completion', async () => {
+  mocks.query.mockReturnValue({
+    data: { status: 'running', progress: { phase: 'writing', records: 1, attachments: 0 } },
+    isError: false,
+  });
+  const secondReport = {
+    ...report,
+    requestId: '550e8400-e29b-41d4-a716-446655440001',
+    baseId: 'base-second',
+  };
+  mocks.start.mockResolvedValueOnce(report).mockResolvedValueOnce(secondReport);
+  render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  await screen.findByText(/Unsupported field/);
+  fireEvent.click(screen.getByLabelText(/I understand/));
+  fireEvent.click(screen.getByRole('button', { name: 'Create new Base' }));
+  expect((await screen.findByRole('link', { name: 'Open new Base' })).getAttribute('href')).toBe(
+    '/bases/base-new',
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Start another import' }));
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  await screen.findByText(/Unsupported field/);
+  fireEvent.click(screen.getByLabelText(/I understand/));
+  fireEvent.click(screen.getByRole('button', { name: 'Create new Base' }));
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2));
+  expect(mocks.start.mock.calls[1][0].requestId).not.toBe(mocks.start.mock.calls[0][0].requestId);
+  expect((await screen.findByRole('link', { name: 'Open new Base' })).getAttribute('href')).toBe(
+    '/bases/base-second',
+  );
+});
+
+it('identifies each skipped field and table in preview and result', async () => {
+  const issues = [
+    {
+      tableId: 'tblPeople',
+      tableName: 'People',
+      fieldId: 'fldButton',
+      fieldName: 'Action',
+      kind: 'skip',
+      message: 'Unsupported Airtable field type',
+    },
+    {
+      tableId: 'tblTeams',
+      tableName: 'Teams',
+      fieldId: 'fldButton2',
+      fieldName: 'Workflow',
+      kind: 'skip',
+      message: 'Unsupported Airtable field type',
+    },
+  ];
+  mocks.preflight.mockResolvedValue({ ...preview, issues });
+  mocks.start.mockResolvedValue({ ...report, issues });
+  render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  expect(await screen.findByText(/People.*Action.*fldButton/)).toBeTruthy();
+  expect(screen.getByText(/Teams.*Workflow.*fldButton2/)).toBeTruthy();
+  fireEvent.click(screen.getByLabelText(/I understand/));
+  fireEvent.click(screen.getByRole('button', { name: 'Create new Base' }));
+  await screen.findByRole('link', { name: 'Open new Base' });
+  expect(screen.getByText(/People.*Action.*fldButton/)).toBeTruthy();
+  expect(screen.getByText(/Teams.*Workflow.*fldButton2/)).toBeTruthy();
 });
 
 it('allows cancellation while running and never reports success from cancel alone', async () => {

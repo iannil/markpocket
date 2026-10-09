@@ -12,6 +12,9 @@ const inputClass =
   'mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring';
 const buttonClass =
   'inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50';
+function issueLabel(issue: Preflight['issues'][number]) {
+  return `${issue.kind === 'snapshot' ? 'Static snapshot' : 'Skipped'}: ${issue.tableName ?? issue.tableId} (${issue.tableId}) · ${issue.fieldName ?? issue.fieldId} (${issue.fieldId}) — ${issue.message}`;
+}
 
 export default function AirtableImportPage() {
   useBreadcrumbSetter([{ label: 'Import from Airtable' }]);
@@ -46,15 +49,19 @@ export default function AirtableImportPage() {
     if (saved && /^[0-9a-f-]{36}$/i.test(saved)) setRequestId(saved);
   }, []);
   useEffect(() => {
-    if (status.data?.status === 'complete') {
+    if (
+      requestId &&
+      status.data?.status === 'complete' &&
+      status.data.report.requestId === requestId
+    ) {
       setReport(status.data.report);
       setRunning(false);
       setToken('');
       sessionStorage.removeItem(storageKey);
     }
-  }, [status.data]);
+  }, [requestId, status.data]);
 
-  const serverRunning = status.data?.status === 'running';
+  const serverRunning = !!requestId && status.data?.status === 'running';
   const active = !report && (running || serverRunning);
 
   function invalidatePreview() {
@@ -63,9 +70,19 @@ export default function AirtableImportPage() {
     setAccepted(false);
     setError('');
   }
+  function startAnotherImport() {
+    invalidatePreview();
+    setRequestId(null);
+    setReport(null);
+    setSourceBaseId('');
+    setToken('');
+    setName('');
+    setCancelled(false);
+    sessionStorage.removeItem(storageKey);
+  }
   async function onPreview(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (checking || active) return;
+    if (checking || active || report) return;
     const generation = ++previewGeneration.current;
     setError('');
     setPreview(null);
@@ -84,7 +101,14 @@ export default function AirtableImportPage() {
     }
   }
   async function onStart() {
-    if (!preview || (preview.issues.length > 0 && !accepted) || !token || !name.trim() || active)
+    if (
+      !preview ||
+      (preview.issues.length > 0 && !accepted) ||
+      !token ||
+      !name.trim() ||
+      active ||
+      report
+    )
       return;
     const id = requestId ?? crypto.randomUUID();
     setRequestId(id);
@@ -211,12 +235,12 @@ export default function AirtableImportPage() {
           <button
             className={buttonClass}
             type="submit"
-            disabled={checking || active || !sourceBaseId || !token || !name.trim()}
+            disabled={checking || active || !!report || !sourceBaseId || !token || !name.trim()}
           >
             {checking ? 'Checking…' : 'Preview import'}
           </button>
         </form>
-        {preview && (
+        {preview && !report && (
           <section
             className="space-y-3 rounded-md border border-border p-4"
             aria-label="Import preview"
@@ -241,9 +265,7 @@ export default function AirtableImportPage() {
                 <p className="text-xs font-medium">Static values and skipped fields</p>
                 <ul className="ml-4 list-disc text-xs text-muted-foreground">
                   {preview.issues.map((issue) => (
-                    <li key={`${issue.tableId}-${issue.fieldId}`}>
-                      {issue.kind === 'snapshot' ? 'Static snapshot' : 'Skipped'}: {issue.message}
-                    </li>
+                    <li key={`${issue.tableId}-${issue.fieldId}`}>{issueLabel(issue)}</li>
                   ))}
                 </ul>
               </div>
@@ -331,7 +353,7 @@ export default function AirtableImportPage() {
             {report.issues.length > 0 && (
               <ul className="ml-4 list-disc text-xs">
                 {report.issues.map((issue) => (
-                  <li key={`${issue.tableId}-${issue.fieldId}`}>{issue.message}</li>
+                  <li key={`${issue.tableId}-${issue.fieldId}`}>{issueLabel(issue)}</li>
                 ))}
               </ul>
             )}
@@ -341,6 +363,9 @@ export default function AirtableImportPage() {
               </Link>
               <button type="button" className="underline" onClick={downloadReport}>
                 Download JSON report
+              </button>
+              <button type="button" className="underline" onClick={startAnotherImport}>
+                Start another import
               </button>
             </div>
           </section>

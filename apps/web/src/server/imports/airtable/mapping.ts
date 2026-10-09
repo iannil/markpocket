@@ -208,7 +208,9 @@ export function preflight(input: AirtableSchema, sourceBaseId = ''): Preflight {
         skippedFieldIds.push(field.id);
         issues.push({
           tableId: table.id,
+          tableName: table.name,
           fieldId: field.id,
+          fieldName: field.name,
           kind: 'skip',
           message: 'Unsupported Airtable field type',
         });
@@ -217,7 +219,9 @@ export function preflight(input: AirtableSchema, sourceBaseId = ''): Preflight {
       if (SNAPSHOT.has(field.type))
         issues.push({
           tableId: table.id,
+          tableName: table.name,
           fieldId: field.id,
+          fieldName: field.name,
           kind: 'snapshot',
           message: 'Imported as static text snapshot',
         });
