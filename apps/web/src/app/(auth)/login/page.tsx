@@ -61,7 +61,7 @@ function LoginPageInner() {
         <p className="text-sm text-muted-foreground mt-1">the airtable you own</p>
       </div>
 
-      <form onSubmit={onSubmit} className="w-[360px] space-y-3" noValidate={false}>
+      <form method="post" onSubmit={onSubmit} className="w-[360px] space-y-3" noValidate={false}>
         <label className="block">
           <span className="text-xs text-muted-foreground">email</span>
           <input

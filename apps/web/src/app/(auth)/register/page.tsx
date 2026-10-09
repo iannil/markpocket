@@ -100,7 +100,7 @@ function RegisterPageInner() {
         <p className="text-sm text-muted-foreground mt-1">the airtable you own</p>
       </div>
 
-      <form onSubmit={onSubmit} className="w-[360px] space-y-3">
+      <form method="post" onSubmit={onSubmit} className="w-[360px] space-y-3">
         <label className="block">
           <span className="text-xs text-muted-foreground">name</span>
           <input
