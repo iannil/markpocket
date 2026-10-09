@@ -136,6 +136,16 @@ export interface CoreServerApi {
   fieldTypes: CoreFieldTypes;
   auth: CoreAuth;
   realtime: CoreRealtime;
+  exports: {
+    tableCsv(
+      tableId: string,
+      userId: string,
+    ): Promise<{
+      csv: string;
+      exported: number;
+      truncated: false;
+    }>;
+  };
 }
 
 export type ServerRouterFactory<TRouter> = (core: CoreServerApi) => TRouter;

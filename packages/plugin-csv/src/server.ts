@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { TRPCError, type CoreServerApi, type ServerRouterFactory } from '@markpocket/plugin-sdk';
 import { protectedProcedure, router } from '@markpocket/plugin-sdk/trpc';
 
-import { cellToCsv, csvEscape, csvUnguard, parseCsv, parseCsvBoolean } from './csv';
+import { csvUnguard, parseCsv, parseCsvBoolean } from './csv';
 
 type SelectOption = { id: string; name: string; color: string };
 
@@ -15,7 +15,6 @@ const MAX_IMPORT_ROWS = 50_000;
 // Rows per import transaction — the same discipline the core expression
 // backfill applies: a 50k-row single transaction would amass ~500k statements.
 const IMPORT_BATCH_ROWS = 500;
-const EXPORT_LIMIT = 10_000;
 // Mirrors the core cell router's cap (apps/web cell.ts MAX_CELL_VALUE_BYTES):
 // the CSV wire limit alone (5MB) would let a single text cell store ~5MB,
 // a bypass of the interactive-edit limit. Kept as a copy because the plugin
@@ -236,34 +235,7 @@ function buildRouter(core: CoreServerApi) {
       }),
     export: protectedProcedure
       .input(z.object({ tableId: z.string() }))
-      .query(async ({ ctx, input }) => {
-        await auth.assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
-        const fields = (await db
-          .select()
-          .from(schema.field)
-          .where(
-            eq((schema.field as { tableId: unknown }).tableId as never, input.tableId),
-          )) as Array<{
-          id: string;
-          name: string;
-          type: string;
-          options: Record<string, unknown>;
-          orderIndex: number;
-        }>;
-        // 保持旧 REST 导出列序：旧 route 用 `.orderBy(field.orderIndex)`。
-        fields.sort((a, b) => a.orderIndex - b.orderIndex);
-        // Fetch limit+1 to detect truncation without a second count query.
-        const fetched = await queries.listRecordsPivoted(input.tableId, {}, 0, EXPORT_LIMIT + 1);
-        const truncated = fetched.length > EXPORT_LIMIT;
-        const records = truncated ? fetched.slice(0, EXPORT_LIMIT) : fetched;
-        const header = fields.map((f) => csvEscape(f.name)).join(',');
-        const lines = records.map((r) =>
-          fields
-            .map((f) => csvEscape(cellToCsv(r.cells[f.id], f.type, f.options, fieldTypes)))
-            .join(','),
-        );
-        return { csv: [header, ...lines].join('\n'), truncated, exported: records.length };
-      }),
+      .query(({ ctx, input }) => core.exports.tableCsv(input.tableId, ctx.session.user.id)),
   });
 }
 

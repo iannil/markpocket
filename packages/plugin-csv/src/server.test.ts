@@ -126,6 +126,9 @@ function fakeCore(fields: FieldRow[], opts: { failAfterRecords?: number } = {}) 
       },
     },
     auth: { assertTableRole: vi.fn().mockResolvedValue(undefined) },
+    exports: {
+      tableCsv: vi.fn().mockResolvedValue({ csv: 'Name\nAlice', exported: 1, truncated: false }),
+    },
     realtime: { publishTableChange: publishSpy },
   } as unknown as CoreServerApi;
   return { core, records, cells, cellHistoryRows, materialized, txs, publishSpy };
@@ -386,15 +389,11 @@ describe('csv plugin — import', () => {
 });
 
 describe('csv plugin — export', () => {
-  it('does not broadcast a realtime change (read-only query)', async () => {
-    const { core, publishSpy } = fakeCore([
-      { id: 'f-name', name: 'Name', type: 'text', options: {}, orderIndex: 0 },
-    ]);
-
-    const res = await callerFor(core).export({ tableId: 't1' });
-
-    expect(res.csv).toBe('Name');
-    expect(res.truncated).toBe(false);
+  it('delegates complete export with caller identity', async () => {
+    const { core, publishSpy } = fakeCore([]);
+    const result = await callerFor(core).export({ tableId: 't1' });
+    expect(core.exports.tableCsv).toHaveBeenCalledWith('t1', 'u1');
+    expect(result).toEqual({ csv: 'Name\nAlice', exported: 1, truncated: false });
     expect(publishSpy).not.toHaveBeenCalled();
   });
 });

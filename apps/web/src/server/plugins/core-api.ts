@@ -36,4 +36,12 @@ export const coreServerApi: CoreServerApi = {
   // handed in, so plugins broadcast through the identical LISTEN/NOTIFY path
   // the core routers use (same echo-suppression semantics included).
   realtime: { publishTableChange },
+  // Load when called: the service uses field-value, which loads the plugin barrel.
+  // A static import here would cycle back through plugins.config during setup.
+  exports: {
+    tableCsv: async (tableId, userId) => {
+      const { exportTableCsv } = await import('@/server/exports/csv');
+      return exportTableCsv(tableId, userId);
+    },
+  },
 };

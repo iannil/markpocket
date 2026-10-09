@@ -245,3 +245,28 @@ pgIt('preserves expected authorization errors at both public wrappers', async ()
   await expect(exportBaseCsv(missingId, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
   await expect(exportTableCsv(missingId, 'outsider')).rejects.toMatchObject({ code: 'NOT_FOUND' });
 });
+
+pgIt(
+  'gates both exports and excludes unselected or foreign tables',
+  async () => {
+    const { db } = await import('../db');
+    const s = await import('../db/schema');
+    const { exportBaseCsv, exportTableCsv } = await import('./csv');
+    const id = randomUUID();
+    try {
+      await db.insert(s.workspace).values({ id, name: 'auth-test' });
+      await db.insert(s.base).values({ id, workspaceId: id, name: 'auth-test' });
+      await db.insert(s.table).values({ id, baseId: id, name: 'Test' });
+      await expect(exportBaseCsv(id, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await expect(exportTableCsv(id, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+      await db.insert(s.baseMember).values({ baseId: id, userId: id, role: 'viewer' });
+      expect(await exportBaseCsv(id, id, ['foreign-table'])).toEqual([]);
+      expect(await exportBaseCsv(id, id, [])).toEqual([]);
+      expect(await exportTableCsv(id, id)).toMatchObject({ exported: 0, truncated: false });
+    } finally {
+      await db.delete(s.base).where(eq(s.base.id, id));
+      await db.delete(s.workspace).where(eq(s.workspace.id, id));
+    }
+  },
+  60000,
+);
