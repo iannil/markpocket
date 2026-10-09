@@ -13,7 +13,7 @@ Execution date: 2026-10-10 Asia/Shanghai (backup timestamp 2026-10-09 UTC). Cand
 | Restore Compose project | `markpocket-drill-56ruk1-restore` |
 | Backup creation | `2026-10-09T16:16:51Z` in `manifest.txt` |
 | Synthetic Base | `Recovery drill 2026-10-10` |
-| Attachment SHA-256 | `5af626d295807663ae1a93c2705f26846dd8ed41757e257b3059b92875937272` (31 bytes) |
+| Attachment SHA-256 | `5af626d295807663ae1a93c2705f26846dd8ed41757e257b3059b92875937272` (31 bytes from the planned `printf 'markpocket recovery attachment\n'`) |
 
 The image was rebuilt locally from the source commit above because the earlier `markpocket:recovery-test` image predated that commit and carried no source label. The source and restore used separate directories, containers, networks, PostgreSQL volumes, and `data/` bind mounts. Only the web service bound `127.0.0.1:3300`; no original deployment or export-test database was used. The source web was stopped before the restore web started. No `down -v` or `pg_restore --clean` was run.
 
@@ -34,6 +34,7 @@ Counts were captured before any restored-instance write or API e2e test:
 
 Failure checks on the disposable source and backup copies:
 
+- With source `web` running, using the existing successful `backup/` destination made `backup-instance.sh` exit 2. The same web container's `StartedAt` stayed `2026-10-09T16:25:05.954912491Z`, `Running` stayed `true`, and `RestartCount` stayed 0 before and after. The original backup's `COMPLETE` remained present.
 - Backing up while source `web` was stopped succeeded and left it stopped.
 - Changing one byte in a copied `data.tar.gz` made `shasum -a 256 -c SHA256SUMS` exit 1. That copy was never restored.
 - A Docker wrapper injected exit 42 at `pg_dump`. The backup exited 42, had no `COMPLETE`, and restarted the source `web` that had been running. An initial injection attempt exited 2 before reaching Docker because the wrapper `PATH` lacked Node for manifest version parsing; adding `/private/tmp/markpocket-toolbin` and using a fresh destination produced the expected injected result.
