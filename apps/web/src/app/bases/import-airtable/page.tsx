@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
@@ -28,12 +28,19 @@ export default function AirtableImportPage() {
   const [error, setError] = useState('');
   const utils = trpc.useUtils();
   const [checking, setChecking] = useState(false);
+  const previewGeneration = useRef(0);
   const cancel = trpc.airtableImport.cancel.useMutation();
   const status = trpc.airtableImport.status.useQuery(
     { requestId: requestId ?? '' },
     { enabled: !!requestId && !report, refetchInterval: running || requestId ? 1000 : false },
   );
 
+  useEffect(
+    () => () => {
+      previewGeneration.current += 1;
+    },
+    [],
+  );
   useEffect(() => {
     const saved = sessionStorage.getItem(storageKey);
     if (saved && /^[0-9a-f-]{36}$/i.test(saved)) setRequestId(saved);
@@ -47,29 +54,37 @@ export default function AirtableImportPage() {
     }
   }, [status.data]);
 
+  const serverRunning = status.data?.status === 'running';
+  const active = !report && (running || serverRunning);
+
   function invalidatePreview() {
+    previewGeneration.current += 1;
     setPreview(null);
     setAccepted(false);
     setError('');
   }
   async function onPreview(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (checking || active) return;
+    const generation = ++previewGeneration.current;
     setError('');
     setPreview(null);
     setAccepted(false);
     setChecking(true);
     try {
       const result = await utils.client.airtableImport.preflight.mutate({ sourceBaseId, token });
-      setPreview(result);
+      if (generation === previewGeneration.current) setPreview(result);
     } catch (err) {
-      setToken('');
-      setError(err instanceof Error ? err.message : 'Preflight failed');
+      if (generation === previewGeneration.current) {
+        setToken('');
+        setError(err instanceof Error ? err.message : 'Preflight failed');
+      }
     } finally {
       setChecking(false);
     }
   }
   async function onStart() {
-    if (!preview || (preview.issues.length > 0 && !accepted) || !token || !name.trim() || running)
+    if (!preview || (preview.issues.length > 0 && !accepted) || !token || !name.trim() || active)
       return;
     const id = requestId ?? crypto.randomUUID();
     setRequestId(id);
@@ -104,10 +119,10 @@ export default function AirtableImportPage() {
       const result = await cancel.mutateAsync({ requestId });
       if (result.cancelled) {
         setCancelled(true);
+        setRunning(false);
         setToken('');
-      } else {
-        await status.refetch();
       }
+      await status.refetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not confirm cancellation');
     } finally {
@@ -176,7 +191,10 @@ export default function AirtableImportPage() {
               autoComplete="off"
               maxLength={1024}
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => {
+                setToken(e.target.value);
+                if (checking) invalidatePreview();
+              }}
               className={inputClass}
             />
           </label>
@@ -193,7 +211,7 @@ export default function AirtableImportPage() {
           <button
             className={buttonClass}
             type="submit"
-            disabled={checking || running || !sourceBaseId || !token || !name.trim()}
+            disabled={checking || active || !sourceBaseId || !token || !name.trim()}
           >
             {checking ? 'Checking…' : 'Preview import'}
           </button>
@@ -244,7 +262,7 @@ export default function AirtableImportPage() {
               type="button"
               className={buttonClass}
               disabled={
-                running || !token || !name.trim() || (preview.issues.length > 0 && !accepted)
+                active || !token || !name.trim() || (preview.issues.length > 0 && !accepted)
               }
               onClick={() => void onStart()}
             >
@@ -252,7 +270,7 @@ export default function AirtableImportPage() {
             </button>
           </section>
         )}
-        {running && (
+        {active && (
           <section
             className="space-y-2 rounded-md border border-border p-4 text-sm"
             aria-live="polite"
@@ -287,12 +305,12 @@ export default function AirtableImportPage() {
             {error}
           </p>
         )}
-        {!running && cancelled && !report && (
+        {!active && cancelled && !report && (
           <p className="text-sm">
             Import cancelled. To retry, enter the token again and use the same request ID.
           </p>
         )}
-        {!running && requestId && !report && !preview && (
+        {!active && requestId && !report && !preview && (
           <p className="text-xs text-muted-foreground">
             Request {requestId}:{' '}
             {status.data?.status === 'not-running'

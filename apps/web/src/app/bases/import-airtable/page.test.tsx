@@ -168,3 +168,76 @@ it('shows a completed receipt after refresh without asking for the token', async
   );
   expect(sessionStorage.getItem('airtable-import-request-id')).toBeNull();
 });
+
+it('restores active progress and cancellation from a running server status', async () => {
+  sessionStorage.setItem('airtable-import-request-id', report.requestId);
+  mocks.query.mockImplementation((input: { requestId: string }) => ({
+    data:
+      input.requestId === report.requestId
+        ? { status: 'running', progress: { phase: 'records', records: 42, attachments: 3 } }
+        : undefined,
+    isError: false,
+    refetch: mocks.status,
+  }));
+  mocks.status.mockResolvedValue({ data: { status: 'not-running' } });
+  render(<Page />);
+  expect(await screen.findByText(/records · 42 records · 3 attachments/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel import' }));
+  await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith({ requestId: report.requestId }));
+  expect(screen.queryByRole('link', { name: 'Open new Base' })).toBeNull();
+});
+
+it('discards a preflight response after its source Base changes', async () => {
+  let release!: (value: typeof preview) => void;
+  mocks.preflight.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  fireEvent.change(screen.getByLabelText('Airtable Base ID'), { target: { value: 'app87654321' } });
+  release(preview);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Preview import' })).toBeTruthy());
+  expect(screen.queryByRole('button', { name: 'Create new Base' })).toBeNull();
+  expect(mocks.start).not.toHaveBeenCalled();
+});
+
+it('returns to retry guidance when a restored request is no longer running', async () => {
+  sessionStorage.setItem('airtable-import-request-id', report.requestId);
+  let serverStatus = 'running';
+  mocks.query.mockImplementation((input: { requestId: string }) => ({
+    data:
+      input.requestId === report.requestId
+        ? serverStatus === 'running'
+          ? { status: 'running', progress: { phase: 'writing', records: 9, attachments: 0 } }
+          : { status: 'not-running' }
+        : undefined,
+    isError: false,
+  }));
+  const view = render(<Page />);
+  expect(await screen.findByRole('button', { name: 'Cancel import' })).toBeTruthy();
+  serverStatus = 'not-running';
+  view.rerender(<Page />);
+  expect(screen.queryByRole('button', { name: 'Cancel import' })).toBeNull();
+  expect(screen.getByText(/No running import found/)).toBeTruthy();
+});
+
+it('hides running controls once the start response confirms completion', async () => {
+  mocks.query.mockImplementation((input: { requestId: string }) => ({
+    data: input.requestId
+      ? { status: 'running', progress: { phase: 'writing', records: 2, attachments: 0 } }
+      : undefined,
+    isError: false,
+  }));
+  render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  await screen.findByText(/Unsupported field/);
+  fireEvent.click(screen.getByLabelText(/I understand/));
+  fireEvent.click(screen.getByRole('button', { name: 'Create new Base' }));
+  expect(await screen.findByRole('link', { name: 'Open new Base' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Cancel import' })).toBeNull();
+});
