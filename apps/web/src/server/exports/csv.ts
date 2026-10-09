@@ -24,8 +24,11 @@ const RAW_PAGE_LIMIT = 16 * 1024 * 1024;
 const EXPORT_DEADLINE_MS = 60_000;
 const PAGE_TIMEOUT_MESSAGE = 'CSV export timed out. Export fewer tables or use an instance backup.';
 
-export async function readCsvFiles(tx: ExportTx, tables: ExportTable[]): Promise<CsvFile[]> {
-  const deadline = Date.now() + EXPORT_DEADLINE_MS;
+export async function readCsvFiles(
+  tx: ExportTx,
+  tables: ExportTable[],
+  deadline = Date.now() + EXPORT_DEADLINE_MS,
+): Promise<CsvFile[]> {
   const budget = { remainingBytes: 8 * 1024 * 1024 };
   const files: CsvFile[] = [];
   for (const selectedTable of tables) {
@@ -92,7 +95,10 @@ export async function readCsvFiles(tx: ExportTx, tables: ExportTable[]): Promise
 }
 
 let active = false;
-async function snapshot(tables: (tx: ExportTx) => Promise<ExportTable[]>): Promise<CsvFile[]> {
+async function snapshot(
+  tables: (tx: ExportTx) => Promise<ExportTable[]>,
+  deadline: number,
+): Promise<CsvFile[]> {
   if (active) {
     throw new TRPCError({
       code: 'TOO_MANY_REQUESTS',
@@ -104,10 +110,18 @@ async function snapshot(tables: (tx: ExportTx) => Promise<ExportTable[]>): Promi
     return await db.transaction(
       async (tx) => {
         await tx.execute(querySql`set local statement_timeout = '30s'`);
-        return readCsvFiles(tx, await tables(tx));
+        return readCsvFiles(tx, await tables(tx), deadline);
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
+  } finally {
+    active = false;
+  }
+}
+
+async function withExportErrors<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
   } catch (error) {
     if (error instanceof CsvBudgetError) {
       throw new TRPCError({ code: 'PAYLOAD_TOO_LARGE', message: error.message });
@@ -118,28 +132,34 @@ async function snapshot(tables: (tx: ExportTx) => Promise<ExportTable[]>): Promi
       code: 'INTERNAL_SERVER_ERROR',
       message: 'CSV export failed. No files were exported.',
     });
-  } finally {
-    active = false;
   }
 }
 
 export async function exportTableCsv(tableId: string, userId: string) {
-  await assertTableRole(tableId, userId, 'viewer');
-  const [file] = await snapshot((tx) =>
-    tx.select({ id: table.id, name: table.name }).from(table).where(eq(table.id, tableId)),
-  );
-  if (!file) throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });
-  return { csv: file.csv, exported: file.total, truncated: false as const };
+  const deadline = Date.now() + EXPORT_DEADLINE_MS;
+  return withExportErrors(async () => {
+    await assertTableRole(tableId, userId, 'viewer');
+    const [file] = await snapshot(
+      (tx) =>
+        tx.select({ id: table.id, name: table.name }).from(table).where(eq(table.id, tableId)),
+      deadline,
+    );
+    if (!file) throw new TRPCError({ code: 'NOT_FOUND', message: 'Table not found' });
+    return { csv: file.csv, exported: file.total, truncated: false as const };
+  });
 }
 
 export async function exportBaseCsv(baseId: string, userId: string, tableIds?: string[]) {
-  await assertRole(baseId, userId, 'viewer');
-  return snapshot(async (tx) => {
-    const rows = await tx
-      .select({ id: table.id, name: table.name })
-      .from(table)
-      .where(eq(table.baseId, baseId))
-      .orderBy(asc(table.orderIndex), asc(table.id));
-    return rows.filter((row) => !tableIds || tableIds.includes(row.id));
+  const deadline = Date.now() + EXPORT_DEADLINE_MS;
+  return withExportErrors(async () => {
+    await assertRole(baseId, userId, 'viewer');
+    return snapshot(async (tx) => {
+      const rows = await tx
+        .select({ id: table.id, name: table.name })
+        .from(table)
+        .where(eq(table.baseId, baseId))
+        .orderBy(asc(table.orderIndex), asc(table.id));
+      return rows.filter((row) => !tableIds || tableIds.includes(row.id));
+    }, deadline);
   });
 }

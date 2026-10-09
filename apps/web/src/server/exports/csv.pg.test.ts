@@ -179,3 +179,69 @@ pgIt(
   },
   60000,
 );
+
+pgIt('redacts database failures during both authorization queries', async () => {
+  const { db } = await import('../db');
+  const { exportBaseCsv, exportTableCsv } = await import('./csv');
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    for (const invoke of [
+      () => exportBaseCsv('base', 'user'),
+      () => exportTableCsv('table', 'user'),
+    ]) {
+      const select = vi.spyOn(db, 'select').mockImplementationOnce(() => {
+        throw new Error('secret database detail');
+      });
+      try {
+        await expect(invoke()).rejects.toMatchObject({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'CSV export failed. No files were exported.',
+        });
+      } finally {
+        select.mockRestore();
+      }
+    }
+  } finally {
+    log.mockRestore();
+  }
+});
+
+pgIt(
+  'counts transaction setup toward the page deadline',
+  async () => {
+    const { db } = await import('../db');
+    const s = await import('../db/schema');
+    const { exportBaseCsv } = await import('./csv');
+    const id = randomUUID();
+    await db.insert(s.workspace).values({ id, name: 'setup-deadline-test' });
+    try {
+      await db.insert(s.base).values({ id, workspaceId: id, name: 'setup-deadline-test' });
+      await db.insert(s.baseMember).values({ baseId: id, userId: id, role: 'viewer' });
+      await db.insert(s.table).values({ id, baseId: id, name: 'Test' });
+      let now = 0;
+      const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const originalTransaction = db.transaction.bind(db);
+      const setup = vi.spyOn(db, 'transaction').mockImplementationOnce((callback, config) => {
+        now = 60_000;
+        return originalTransaction(callback, config);
+      });
+      try {
+        await expect(exportBaseCsv(id, id)).rejects.toMatchObject({ code: 'TIMEOUT' });
+      } finally {
+        setup.mockRestore();
+        clock.mockRestore();
+      }
+    } finally {
+      await db.delete(s.base).where(eq(s.base.id, id));
+      await db.delete(s.workspace).where(eq(s.workspace.id, id));
+    }
+  },
+  60000,
+);
+
+pgIt('preserves expected authorization errors at both public wrappers', async () => {
+  const { exportBaseCsv, exportTableCsv } = await import('./csv');
+  const missingId = randomUUID();
+  await expect(exportBaseCsv(missingId, 'outsider')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  await expect(exportTableCsv(missingId, 'outsider')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+});
