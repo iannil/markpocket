@@ -25,21 +25,28 @@ Check that `web` returned to its original state. If the script reports a restart
 
 ## Restore to an isolated instance
 
-Practice recovery in a new directory with a separate Compose project, separate containers, an empty PostgreSQL volume, and an empty `data/` directory. Bind its web port to `127.0.0.1:3300`. Use the same code and image version recorded in `manifest.txt`. Keep the original instance and its database and attachments intact.
+Practice recovery in a new directory with a separate Compose project, separate containers, an empty PostgreSQL volume, and an empty `data/` directory. Create a fresh directory and derive its project name once for every drill:
+
+```bash
+RESTORE_DIR=$(mktemp -d /private/tmp/mp-restore-XXXXXX)
+RESTORE_PROJECT=$(basename "$RESTORE_DIR" | tr '[:upper:]' '[:lower:]')
+```
+
+Prepare an isolated `docker-compose.yml` and protected `.env` in `RESTORE_DIR`. The Compose file must not set fixed `container_name` values or reuse another instance's volume, and its web port must bind to `127.0.0.1:3300:3000`. Use the same code and image version recorded in `manifest.txt`. Keep the original instance and its database and attachments intact.
 
 After checking `COMPLETE` and every SHA-256 checksum, extract the archive into the new instance's empty `data/` directory. Start only its PostgreSQL service, then restore the dump into its empty database:
 
 ```bash
 mkdir "$RESTORE_DIR/data"
 tar -xzf "$BACKUP_DIR/data.tar.gz" -C "$RESTORE_DIR/data"
-docker compose -p mp-drill-restore -f "$RESTORE_DIR/docker-compose.yml" up -d --wait postgres
-docker compose -p mp-drill-restore -f "$RESTORE_DIR/docker-compose.yml" exec -T postgres \
+docker compose -p "$RESTORE_PROJECT" -f "$RESTORE_DIR/docker-compose.yml" up -d --wait postgres
+docker compose -p "$RESTORE_PROJECT" -f "$RESTORE_DIR/docker-compose.yml" exec -T postgres \
   pg_restore -U markpocket -d markpocket --no-owner --no-acl --exit-on-error \
   < "$BACKUP_DIR/database.dump"
-docker compose -p mp-drill-restore -f "$RESTORE_DIR/docker-compose.yml" up -d web
+docker compose -p "$RESTORE_PROJECT" -f "$RESTORE_DIR/docker-compose.yml" up -d web
 ```
 
-Set `BACKUP_DIR` and `RESTORE_DIR` to the checked backup and new instance paths. The isolated Compose file must use its own project resources and bind `127.0.0.1:3300:3000`. If the restore reports existing tables, create a fresh isolated target instead of deleting an existing deployment. Do not run `pg_restore --clean` against an existing database or overwrite its `data/` directory. Do not use `docker compose down -v` on a user deployment.
+Set `BACKUP_DIR` to the checked backup path. Keep the generated `RESTORE_DIR` and `RESTORE_PROJECT` values for every command in the same drill. If the restore reports existing tables, create a fresh isolated target instead of deleting an existing deployment. Do not run `pg_restore --clean` against an existing database or overwrite its `data/` directory. Do not use `docker compose down -v` on a user deployment.
 
 Verify login, table/record/cell counts, attachment bytes and checksums, history, roles, and a new write in the restored instance. A health endpoint alone is insufficient. CSV export omits attachment binaries, permissions, and history, so it cannot replace this process. Upgrade only after a same-version recovery succeeds; complete rollback requires both database and attachments to return together.
 
