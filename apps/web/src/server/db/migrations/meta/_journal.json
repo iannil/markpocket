@@ -99,6 +99,13 @@
       "when": 1790959906316,
       "tag": "0013_dark_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791566206269,
+      "tag": "0014_clever_mantis",
+      "breakpoints": true
     }
   ]
 }
