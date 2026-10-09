@@ -13,7 +13,7 @@
     "@markpocket/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.0.1"
+    "@types/node": "^26.6.4"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
