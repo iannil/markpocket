@@ -1,6 +1,6 @@
 # ADR-0015: Webhook subscriptions and PostgreSQL outbox
 
-Status: Accepted (credentials, transport and subscription model implemented; outbox, worker and management UI follow in I4–I6).
+Status: Accepted (credentials, transport, subscription model and transactional outbox implemented; worker and management UI follow in I5–I6).
 
 ## Decision
 
@@ -14,9 +14,17 @@ Each POST validates HTTPS on port 443, no userinfo or fragment, and a maximum UR
 
 PostgreSQL triggers cover record/cell mutations, including plugins, CSV and Airtable imports. Events are visible only after commit, disappear on rollback, and deduplicate by `(subscriptionId, txid, recordId)`; deletion wins within a transaction. Payloads include only eventId, type, baseId, tableId, recordId and occurredAt. Consumers retrieve values with a separately scoped token; deleted records are handled by ID. Initial imports can generate many notifications.
 
+`markpocket_record_outbox()` runs as an AFTER INSERT/UPDATE/DELETE row trigger on both `record` and `cell`. The source is `apps/web/src/server/webhooks/outbox.sql`, appended verbatim to generated migration `0019_nebulous_jocasta.sql`. It does not depend on realtime publication or any specific application writer. Direct SQL, F batch writes, legacy cell upserts and CSV plugin imports therefore share the same transactional boundary. Airtable import also writes these tables; its current fresh-table import has no preexisting subscriptions to notify.
+
+Every trigger locks relevant subscription rows in ascending ID order and keeps those locks through commit, serializing collection and capacity checks for concurrent writers. The existing SQL deadlock/lock-timeout mapping remains a retryable conflict on core record/cell/batch APIs. A record insert plus several cell writes creates one delivery for each matching subscription. A subsequent deletion changes it to `record.deleted`; for changed-only subscriptions, that transaction's changed event is removed instead. Deleted-only subscriptions collect only the deletion. These corrections still apply if the same transaction has already marked a subscription overflow. Cell cascades with no surviving record parent emit nothing. Events from separate transactions remain separate, and delivery order is not guaranteed; consumers fetching a changed record that now returns 404 must treat it as deleted.
+
+The delivery row holds identifiers and delivery bookkeeping, never cell values or credentials. Its UUID is the event ID, and its bigint transaction ID is only an internal deduplication key. There is deliberately no record foreign key, so deleted-record notifications survive. The subscription foreign key cascades, so subscription, Table or Base removal discards queued deliveries. Indexes support unique transaction/record coalescing, per-subscription pending/leased counts, scheduled claims and expired leases.
+
 The in-process worker claims at most 20 deliveries per second using SKIP LOCKED, concurrency two and 30-second leases. Automatic delivery allows five attempts with retry delays of 1s/10s/60s/300s: 2xx succeeds, 408/429/5xx and network failures retry, and other 4xx/3xx terminate. Delivery is at least once; receivers deduplicate by eventId. Sign exact UTF-8 body bytes with HMAC-SHA256 over `timestamp + '.' + rawBody`, using X-MarkPocket-Event, X-MarkPocket-Timestamp and X-MarkPocket-Signature headers.
 
 At 10,000 pending/leased deliveries, mark the subscription overflow, record overflowAt and stop collecting new events without failing business writes. The resulting gap is explicit and not lossless. Owner-confirmed recovery requires reconciliation. Keep terminal delivery logs seven days with bounded cleanup. Owners may pause/resume and manually retry an individual dead delivery. Recheck creator ownership before sending; loss of owner permission pauses delivery. Base/table deletion cascades subscriptions and their queued deliveries.
+
+The first new event beyond capacity changes the subscription to overflow in the same business transaction, without enqueueing that event. Coalescing an existing transaction/record delivery still works at capacity. Succeeded/dead rows do not consume capacity; leased rows do. Rollback restores both the delivery changes and any overflow transition. Overflow remains explicit even if a later same-transaction deletion frees a slot, because an intervening record event may already have been skipped. Paused, overflow and disabled subscriptions collect no new events.
 
 Rotation must clear in-flight leases and pending sends must use the new secret; an already dispatched request can still complete under the old secret. Rotation and other lifecycle APIs are deferred until the outbox exists, so lease clearing can be implemented atomically. Production worker shutdown follows server.ts: stop claims, drain or abort requests, then close PostgreSQL. Development uses an explicit one-shot worker command, not another service.
 
@@ -27,3 +35,5 @@ Rotation must clear in-flight leases and pending sends must use the new secret; 
 `transport.ts`: postWebhook(url, body, headers, signal) returns only `{ status }`; parseWebhookUrl validates syntax and literal-address safety; createWebhookTransport provides server-side test injection.
 
 `subscriptions.ts`: createSubscription(userId, input) returns `{ id, secret }` once; lockWebhookSubscriptions and assertWebhookOwner are shared transaction primitives. Later mutations must acquire the same table lock before re-reading subscription state and checking owner membership. No list or rotation endpoint exists yet.
+
+`schema.ts`: webhookDelivery exposes id, subscriptionId, transactionId (`bigint` in TypeScript), baseId, tableId, recordId, eventType, occurredAt, state (`pending | leased | succeeded | dead`), attempts, nextAttemptAt, leaseUntil, leaseToken, lastStatus and lastError. New rows default to pending, zero attempts and nextAttemptAt=now. The future worker must project only the six public event fields, excluding internal transactionId and bookkeeping.

@@ -1,4 +1,5 @@
 import {
+  bigint,
   index,
   integer,
   jsonb,
@@ -35,6 +36,46 @@ export const webhookSubscription = pgTable(
     overflowAt: timestamp('overflow_at', { withTimezone: true }),
   },
   (t) => ({ tableIdx: index('webhook_subscription_table_id_idx').on(t.tableId) }),
+);
+
+/** Durable event metadata only. Record IDs deliberately survive record deletion. */
+export const webhookDelivery = pgTable(
+  'webhook_delivery',
+  {
+    id: uuid('id').primaryKey(),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => webhookSubscription.id, { onDelete: 'cascade' }),
+    transactionId: bigint('transaction_id', { mode: 'bigint' }).notNull(),
+    baseId: text('base_id').notNull(),
+    tableId: text('table_id').notNull(),
+    recordId: text('record_id').notNull(),
+    eventType: text('event_type').$type<'record.changed' | 'record.deleted'>().notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    state: text('state')
+      .$type<'pending' | 'leased' | 'succeeded' | 'dead'>()
+      .notNull()
+      .default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    leaseUntil: timestamp('lease_until', { withTimezone: true }),
+    leaseToken: uuid('lease_token'),
+    lastStatus: integer('last_status'),
+    lastError: text('last_error'),
+  },
+  (t) => ({
+    transactionRecordUq: uniqueIndex('webhook_delivery_subscription_transaction_record_uq').on(
+      t.subscriptionId,
+      t.transactionId,
+      t.recordId,
+    ),
+    subscriptionStateIdx: index('webhook_delivery_subscription_state_idx').on(
+      t.subscriptionId,
+      t.state,
+    ),
+    dueIdx: index('webhook_delivery_state_next_attempt_idx').on(t.state, t.nextAttemptAt),
+    leaseIdx: index('webhook_delivery_state_lease_until_idx').on(t.state, t.leaseUntil),
+  }),
 );
 
 // --- domain tables (plan §5 Phase 1 subset, row-per-cell) ---
