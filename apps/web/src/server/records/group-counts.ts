@@ -1,5 +1,6 @@
 import { eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
+import { groupKey } from '@/lib/group-key';
 import type { FieldOptions } from '@/lib/field-types';
 import { parseViewOptions } from '@/lib/view-ast';
 import { compileFilter } from '@/lib/view-query';
@@ -33,8 +34,7 @@ export async function getGroupCounts(
           );
       const counts = new Map<string | null, number>();
       for (const row of rows) {
-        const value = row.value;
-        const key = value == null || value === '' ? null : String(value);
+        const key = groupKey(row.value);
         const count = Number(row.count);
         if (count) counts.set(key, (counts.get(key) ?? 0) + count);
       }

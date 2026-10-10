@@ -1,6 +1,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 
+import { groupKey } from './group-key';
 import { FieldType, type FieldOptions } from './field-types';
 import { isFilterGroup, type FilterNode, type GroupSpec, type SortSpec } from './view-ast';
 
@@ -135,11 +136,10 @@ export function applyGroup<T extends { id: string; cells: Record<string, unknown
 ): { key: string | null; records: T[] }[] {
   if (!group?.length) return [{ key: null, records }];
   const fieldId = group[0]!.fieldId;
-  const buckets = new Map<string, T[]>();
-  const order: string[] = [];
+  const buckets = new Map<string | null, T[]>();
+  const order: (string | null)[] = [];
   for (const r of records) {
-    const v = r.cells[fieldId];
-    const key = v == null || v === '' ? '__empty__' : String(v);
+    const key = groupKey(r.cells[fieldId]);
     if (!buckets.has(key)) {
       buckets.set(key, []);
       order.push(key);
@@ -147,7 +147,7 @@ export function applyGroup<T extends { id: string; cells: Record<string, unknown
     buckets.get(key)!.push(r);
   }
   return order.map((k) => ({
-    key: k === '__empty__' ? null : k,
+    key: k,
     records: buckets.get(k)!,
   }));
 }

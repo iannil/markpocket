@@ -187,6 +187,17 @@ describe('compileSort', () => {
 });
 
 describe('applyGroup', () => {
+  it('keeps literal __empty__ text separate from absent and empty values', () => {
+    const records = [
+      { id: 'missing', cells: {} },
+      { id: 'empty', cells: { f1: '' } },
+      { id: 'literal', cells: { f1: '__empty__' } },
+    ];
+    expect(applyGroup(records, [{ fieldId: 'f1' }])).toEqual([
+      { key: null, records: records.slice(0, 2) },
+      { key: '__empty__', records: [records[2]] },
+    ]);
+  });
   it('returns single group with null key when no group spec', () => {
     const records = [
       { id: 'r1', cells: {} },

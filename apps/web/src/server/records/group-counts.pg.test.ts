@@ -18,7 +18,7 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('group counts', () => {
       ).rejects.toBeDefined();
       const { db } = await import('../db');
       const { record, cell } = await import('../db/schema');
-      for (const value of [null, '', 1, '1', true, 'true', ['a', 'b'], 'a,b']) {
+      for (const value of [null, '', '__empty__', 1, '1', true, 'true', ['a', 'b'], 'a,b']) {
         const id = randomUUID();
         await db.insert(record).values({ id, tableId: f.tableId, createdBy: f.userId });
         if (value !== null)
@@ -27,18 +27,19 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('group counts', () => {
             .values({ id: randomUUID(), recordId: id, fieldId: f.textId, value });
       }
       expect(await f.caller.record.groupCounts({ tableId: f.tableId, viewId: v.id })).toEqual({
-        total: 8,
-        groups: [{ key: null, count: 8 }],
+        total: 9,
+        groups: [{ key: null, count: 9 }],
       });
       await f.caller.view.updateOptions({
         id: v.id,
         options: { group: [{ fieldId: f.textId }, { fieldId: f.numberId }] },
       });
       expect(await f.viewer.record.groupCounts({ tableId: f.tableId, viewId: v.id })).toEqual({
-        total: 8,
+        total: 9,
         groups: [
           { key: null, count: 2 },
           { key: '1', count: 2 },
+          { key: '__empty__', count: 1 },
           { key: 'a,b', count: 2 },
           { key: 'true', count: 2 },
         ],
