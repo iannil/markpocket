@@ -3,6 +3,12 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
+import { ImportReportView } from '@/components/airtable-import/import-report';
+import {
+  AIRTABLE_LIMITS,
+  AIRTABLE_IMPORT_DEADLINE_MS,
+  formatAirtableBytes,
+} from '@/lib/airtable-import-limits';
 import { useBreadcrumbSetter } from '@/lib/breadcrumb-context';
 import { trpc } from '@/lib/trpc/client';
 import type { ImportReport, Preflight } from '@/server/imports/airtable/types';
@@ -195,9 +201,7 @@ export default function AirtableImportPage() {
             history are not imported.
           </p>
           <p className="mt-2">
-            Limits: 20 tables, 100 fields per table, 10,000 records, 100,000 nonempty cells, 16 MiB
-            record data, 200 attachments, 10 MiB each and 64 MiB total. Imports have a 120 second
-            deadline and require local storage.
+            Imports require local storage. Review the budgets in the schema preview.
           </p>
         </div>
         <form method="post" onSubmit={(e) => void onPreview(e)} className="space-y-3">
@@ -255,6 +259,36 @@ export default function AirtableImportPage() {
             aria-label="Import preview"
           >
             <h2 className="text-sm font-semibold">Preview</h2>
+            <section aria-label="Import budgets" className="space-y-2 text-xs">
+              <h3 className="font-medium">Import budgets</h3>
+              <p>
+                {preview.tables.length} / {AIRTABLE_LIMITS.tables} tables
+              </p>
+              <ul className="ml-4 list-disc">
+                {preview.tables.map((table) => (
+                  <li key={table.sourceId}>
+                    {table.name}: {table.sourceFieldIds.length} / {AIRTABLE_LIMITS.fieldsPerTable}{' '}
+                    source fields
+                  </li>
+                ))}
+              </ul>
+              <p className="text-muted-foreground">
+                Schema preview does not read records or download attachments.
+              </p>
+              <ul className="ml-4 list-disc text-muted-foreground">
+                {[
+                  `${AIRTABLE_LIMITS.records.toLocaleString('en-US')} records total`,
+                  `${AIRTABLE_LIMITS.cells.toLocaleString('en-US')} nonempty cells including source IDs`,
+                  `${formatAirtableBytes(AIRTABLE_LIMITS.recordsBytes)} records JSON`,
+                  `${AIRTABLE_LIMITS.attachments} unique attachments`,
+                  `${formatAirtableBytes(AIRTABLE_LIMITS.attachmentBytes)} per attachment`,
+                  `${formatAirtableBytes(AIRTABLE_LIMITS.totalAttachmentBytes)} total attachment bytes`,
+                  `${AIRTABLE_IMPORT_DEADLINE_MS / 1000} seconds deadline`,
+                ].map((limit) => (
+                  <li key={limit}>{limit} — Checked during import</li>
+                ))}
+              </ul>
+            </section>
             {preview.tables.map((table) => (
               <div key={table.sourceId} className="text-xs">
                 <p className="font-medium">
@@ -355,19 +389,9 @@ export default function AirtableImportPage() {
             aria-label="Import result"
           >
             <h2 className="font-semibold">Import complete</h2>
-            <p>
-              {report.tables.length} tables · {report.records} records · {report.cells} cells ·{' '}
-              {report.attachments} attachments
-            </p>
-            {report.issues.length > 0 && (
-              <ul className="ml-4 list-disc text-xs">
-                {report.issues.map((issue) => (
-                  <li key={`${issue.tableId}-${issue.fieldId}`}>{issueLabel(issue)}</li>
-                ))}
-              </ul>
-            )}
-            <div className="flex gap-3">
-              <Link href={`/bases/${report.baseId}`} className="underline">
+            <ImportReportView report={report} />
+            <div className="flex flex-wrap gap-3">
+              <Link href={`/bases/${encodeURIComponent(report.baseId)}`} className="underline">
                 Open new Base
               </Link>
               <button type="button" className="underline" onClick={downloadReport}>

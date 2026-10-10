@@ -7,17 +7,9 @@ import {
 import { parseSchema } from './mapping';
 import { secureRequest, type NetworkDependencies } from './network';
 
-export const AIRTABLE_LIMITS = {
-  tables: 20,
-  fieldsPerTable: 100,
-  records: 10_000,
-  cells: 100_000,
-  recordsBytes: 16 * 1024 * 1024,
-  attachments: 200,
-  attachmentBytes: 10 * 1024 * 1024,
-  totalAttachmentBytes: 64 * 1024 * 1024,
-  metadataBytes: 2 * 1024 * 1024,
-} as const;
+import { AIRTABLE_LIMITS, AIRTABLE_IMPORT_DEADLINE_MS } from '@/lib/airtable-import-limits';
+
+export { AIRTABLE_LIMITS } from '@/lib/airtable-import-limits';
 
 type ClientDependencies = NetworkDependencies & {
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -82,7 +74,7 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
   const now = dependencies.now ?? Date.now;
   const sleep = dependencies.sleep ?? defaultSleep;
   const started = now();
-  const lifetime = AbortSignal.timeout(120_000);
+  const lifetime = AbortSignal.timeout(AIRTABLE_IMPORT_DEADLINE_MS);
   let lastApiAt = -Infinity;
   let apiGate: Promise<void> = Promise.resolve();
   let recordCount = 0;
@@ -93,7 +85,7 @@ export function createAirtableSource(dependencies: ClientDependencies = {}): Air
   const attachmentUrls = new Set<string>();
   const deadlineSignal = (signal: AbortSignal) => AbortSignal.any([signal, lifetime]);
   const check = (signal: AbortSignal) => {
-    if (signal.aborted || lifetime.aborted || now() - started >= 120_000)
+    if (signal.aborted || lifetime.aborted || now() - started >= AIRTABLE_IMPORT_DEADLINE_MS)
       throw new AirtableImportError('cancelled', 'Import deadline or cancellation reached');
   };
 

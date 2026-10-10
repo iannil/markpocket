@@ -10,6 +10,10 @@ The Workspace **Import from Airtable** wizard creates a new markpocket Base from
 
 Open Workspace → **Import from Airtable**, enter the Base ID (`app…`), token, and new Base name, and select **Preview import**. Review every mapped field and the static or skipped fields. If issues appear, acknowledge them before **Create new Base** is enabled. Wait for the result, then open the new Base and download the JSON report. Keep the report for the source-to-target table ID mapping and issue list; it contains no PAT or attachment URLs.
 
+## Readable reconciliation
+
+The completed result shows total records and cells, copied attachments and their bytes in IEC units (B, KiB, MiB), and each table’s source ID, target ID, and imported row count. Static snapshots and skipped fields are listed separately with their table and field names and IDs. Snapshot values will not recalculate. The same reconciliation is recovered after a refresh using the request ID; the JSON download remains available.
+
 ## Field treatment
 
 | Airtable source type | markpocket result |
@@ -28,7 +32,7 @@ Each target table gains an **Airtable record ID** text field, with a suffix if t
 
 ## Limits and retry behavior
 
-An attempt may contain at most 20 tables, 100 source fields per table, 10,000 records total, 100,000 nonempty cells including source IDs, 16 MiB of JSON record data, 200 unique attachments, 10 MiB per attachment, and 64 MiB of attachment bytes overall. The entire attempt has a 120-second deadline. Exceeding a limit fails explicitly and does not create a partial Base.
+An attempt may contain at most 20 tables, 100 source fields per table, 10,000 records total, 100,000 nonempty cells including source IDs, 16 MiB of JSON record data, 200 unique attachments, 10 MiB per attachment, and 64 MiB of attachment bytes overall. The entire attempt has a 120-second deadline. The schema preview shows the known table count and source field count per table, including skipped fields. Records, nonempty cells, record JSON bytes, unique attachments, per-file bytes, total attachment bytes, and the deadline are labeled **Checked during import**: preview does not read all records or download files to claim these budgets passed. Exceeding a limit fails explicitly and does not create a partial Base.
 
 The wizard keeps only a request ID in session storage so a refresh can recover a running or completed status. It does not keep the token. On failure or cancellation, enter the token again, preview again, and retry with the same request ID. A completed request ID returns the existing result rather than creating a duplicate Base. Cancelling is cooperative; if commit already completed, the result is the completed Base. If that Base was later deleted, retrying its request ID creates a new import, not a sync or restoration of the deleted Base.
 

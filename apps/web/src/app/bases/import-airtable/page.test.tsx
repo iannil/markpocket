@@ -351,3 +351,46 @@ it('hides running controls once the start response confirms completion', async (
   expect(await screen.findByRole('link', { name: 'Open new Base' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Cancel import' })).toBeNull();
 });
+
+it('shows schema counts and runtime budgets without fetching source records', async () => {
+  mocks.preflight.mockResolvedValue({
+    ...preview,
+    tables: [{ ...preview.tables[0], sourceFieldIds: ['f1', 'f2'], skippedFieldIds: ['f2'] }],
+  });
+  render(<Page />);
+  fill();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview import' }));
+  const budget = await screen.findByRole('region', { name: 'Import budgets' });
+  expect(budget.textContent).toContain('1 / 20 tables');
+  expect(budget.textContent).toContain('People: 2 / 100 source fields');
+  for (const limit of ['10,000', '100,000', '16 MiB', '200', '10 MiB', '64 MiB', '120 seconds'])
+    expect(budget.textContent).toContain(limit);
+  expect(budget.textContent?.match(/Checked during import/g)).toHaveLength(7);
+  expect(mocks.preflight).toHaveBeenCalledTimes(1);
+  expect(mocks.start).not.toHaveBeenCalled();
+});
+
+it('restores readable table reconciliation after refresh', async () => {
+  const completed = {
+    ...report,
+    tables: [
+      { sourceId: 'tblSource', targetId: 'tblTarget', name: 'Recovered people', records: 2 },
+    ],
+    attachmentBytes: 1024,
+  };
+  sessionStorage.setItem('airtable-import-request-id', report.requestId);
+  mocks.query.mockImplementation((input: { requestId: string }) => ({
+    data:
+      input.requestId === report.requestId ? { status: 'complete', report: completed } : undefined,
+    isError: false,
+  }));
+  render(<Page />);
+  const reconciliation = await screen.findByRole('region', { name: 'Import reconciliation' });
+  expect(reconciliation.textContent).toContain('Recovered people');
+  expect(reconciliation.textContent).toContain('tblSource');
+  expect(reconciliation.textContent).toContain('tblTarget');
+  expect(reconciliation.textContent).toContain('1 KiB');
+  expect(screen.getByRole('button', { name: 'Download JSON report' })).toBeTruthy();
+  expect(mocks.preflight).not.toHaveBeenCalled();
+  expect(mocks.start).not.toHaveBeenCalled();
+});
