@@ -1,6 +1,6 @@
 # ADR-0015: Webhook subscriptions and PostgreSQL outbox
 
-Status: Accepted (credentials, transport, subscription model and transactional outbox implemented; worker and management UI follow in I5–I6).
+Status: Accepted (credentials, transport, subscription model, transactional outbox and worker implemented; management UI follows in I6).
 
 ## Decision
 
@@ -26,7 +26,19 @@ At 10,000 pending/leased deliveries, mark the subscription overflow, record over
 
 The first new event beyond capacity changes the subscription to overflow in the same business transaction, without enqueueing that event. Coalescing an existing transaction/record delivery still works at capacity. Succeeded/dead rows do not consume capacity; leased rows do. Rollback restores both the delivery changes and any overflow transition. Overflow remains explicit even if a later same-transaction deletion frees a slot, because an intervening record event may already have been skipped. Paused, overflow and disabled subscriptions collect no new events.
 
-Rotation must clear in-flight leases and pending sends must use the new secret; an already dispatched request can still complete under the old secret. Rotation and other lifecycle APIs are deferred until the outbox exists, so lease clearing can be implemented atomically. Production worker shutdown follows server.ts: stop claims, drain or abort requests, then close PostgreSQL. Development uses an explicit one-shot worker command, not another service.
+Rotation must clear in-flight leases and pending sends must use the new secret; an already dispatched request can still complete under the old secret. Rotation and other lifecycle APIs follow in I6 and must clear leases atomically. Production worker shutdown follows server.ts: stop claims, drain or abort requests, then close PostgreSQL. Development uses an explicit one-shot worker command, not another service.
+
+## Worker and lifecycle coordination
+
+`worker.ts` uses a short claim transaction that first locks active subscriptions in ascending ID order with SKIP LOCKED, validates their current encryption key/ciphertext, then locks scheduled or expired delivery rows in `(nextAttemptAt, id)` order with SKIP LOCKED. It claims only two rows at a time and increments each attempt once. Wrong/missing keys mark active subscriptions disabled before touching delivery state, attempt count, event IDs or leases. Restoring a key alone does not reactivate subscriptions; an owner must explicitly recover them. Paused and overflow states, including overflowAt, are retained. An expired fifth lease becomes dead without a sixth send.
+
+Each batch waits for both requests and their acknowledgements to settle before claiming the next pair, for at most ten pairs. A send recheck takes the lifecycle table advisory lock, checks and share-locks creator membership, then locks the subscription and delivery in that order. Claim does not lock membership, preventing a membership/subscription inversion with lifecycle operations. Trigger collection, claim, and I6 lifecycle mutations must all retain subscription-before-delivery ordering; I6 takes its advisory lock and owner membership check before these row locks. Acknowledgement and cleanup only lock delivery rows and never acquire subscription locks afterwards.
+
+All transactions end before network I/O. The dispatch boundary is the final committed active/owner/token/key check; a lifecycle change after dispatch cannot recall bytes already sent. Rotation invalidates lease tokens so an old acknowledgement cannot overwrite new work. Acknowledgement requires matching event ID, leased state, unexpired lease and lease token. A crash after a successful send but before acknowledgement therefore resends the same event ID and exact metadata body after lease expiry. Receivers must deduplicate by that ID.
+
+The production scheduler starts only after migrations and uses an unref'ed one-second setTimeout after each settled batch, never overlapping batches. Shutdown immediately stops further claims and aborts active transports, waits for all in-flight acknowledgements, then permits the PostgreSQL pool to close. Transport's five-second total deadline bounds network work. Once per minute the worker removes at most 1000 succeeded/dead events whose occurredAt is older than seven days, without changing overflow markers. Background errors expose only a fixed worker message; delivery errors store only network, timeout, unsafe_target or http_status.
+
+Development intentionally has no resident sender. An operator may run `cd apps/web && pnpm exec tsx --env-file=.env scripts/webhooks-once.ts` to process one bounded batch and close the pool. This sends to configured endpoints and must be invoked intentionally. No production worker or external endpoint is started by tests. Server-only transport, clock, scheduler and fixture-subscription seams permit isolated tests; neither API input nor environment variables select a test scope. Production always runs unscoped.
 
 ## Implementation interfaces
 
@@ -36,4 +48,6 @@ Rotation must clear in-flight leases and pending sends must use the new secret; 
 
 `subscriptions.ts`: createSubscription(userId, input) returns `{ id, secret }` once; lockWebhookSubscriptions and assertWebhookOwner are shared transaction primitives. Later mutations must acquire the same table lock before re-reading subscription state and checking owner membership. No list or rotation endpoint exists yet.
 
-`schema.ts`: webhookDelivery exposes id, subscriptionId, transactionId (`bigint` in TypeScript), baseId, tableId, recordId, eventType, occurredAt, state (`pending | leased | succeeded | dead`), attempts, nextAttemptAt, leaseUntil, leaseToken, lastStatus and lastError. New rows default to pending, zero attempts and nextAttemptAt=now. The future worker must project only the six public event fields, excluding internal transactionId and bookkeeping.
+`schema.ts`: webhookDelivery exposes id, subscriptionId, transactionId (`bigint` in TypeScript), baseId, tableId, recordId, eventType, occurredAt, state (`pending | leased | succeeded | dead`), attempts, nextAttemptAt, leaseUntil, leaseToken, lastStatus and lastError. New rows default to pending, zero attempts and nextAttemptAt=now. The worker projects only the six public event fields, excluding internal transactionId and bookkeeping.
+
+`worker.ts`: retryDelayMs(attempt), runWebhookBatch() returning claimed/succeeded/failed, startWebhookWorker() returning an async stop(). Claim, send, token-guarded acknowledgement and bounded cleanup helpers are exported for deterministic crash/lifecycle tests. No lifecycle mutation endpoint calls those helpers; I6 invalidates leases atomically under the ordering above. The public payload contains only the six event fields and uses timestamped HMAC headers over its exact JSON bytes.

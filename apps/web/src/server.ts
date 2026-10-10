@@ -93,7 +93,11 @@ const SHUTDOWN_FORCE_EXIT_MS = 8_000;
 // closes idle keep-alive sockets on Node >=19), tell every ws client to fail
 // over (gateway.closeAll), then drain the Postgres pool. A second signal
 // during shutdown skips the wait — the operator clearly wants out now.
-function registerShutdown(server: Server, closeAllClients: () => void): void {
+function registerShutdown(
+  server: Server,
+  closeAllClients: () => void,
+  stopWebhooks: () => Promise<void>,
+): void {
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
     if (shuttingDown) process.exit(1);
@@ -107,7 +111,11 @@ function registerShutdown(server: Server, closeAllClients: () => void): void {
     void (async () => {
       let exitCode = 0;
       try {
-        await new Promise<void>((resolve) => server.close(() => resolve()));
+        // Abort transports and stop claims immediately, before waiting on HTTP drain.
+        await Promise.all([
+          stopWebhooks(),
+          new Promise<void>((resolve) => server.close(() => resolve())),
+        ]);
         closeAllClients();
         // Ends the pool AND postgres.js' dedicated LISTEN connection
         // (sql.end() cascades into listen.sql), so nothing is left mid-query.
@@ -147,6 +155,8 @@ app
     // This single process both mutates and hosts the gateway; deliver via pg so the
     // path is identical to dev (where the gateway runs in a separate process).
     await startRealtimeSubscription();
+    const { startWebhookWorker } = await import('./server/webhooks/worker');
+    const webhooks = !dev ? startWebhookWorker() : null;
 
     const server = createServer((req, res) => {
       const parsedUrl = parse(req.url ?? '/', true);
@@ -175,7 +185,7 @@ app
       console.log(`> markpocket ready on http://localhost:${port} (dev=${dev})`);
     });
 
-    registerShutdown(server, closeAll);
+    registerShutdown(server, closeAll, () => webhooks?.stop() ?? Promise.resolve());
   })
   .catch((err: unknown) => {
     // Startup failures (prepare, dynamic imports, subscription wiring) must

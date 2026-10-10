@@ -35,6 +35,7 @@ services:
       DATABASE_URL: postgresql://markpocket:${POSTGRES_PASSWORD}@postgres:5432/markpocket
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env (openssl rand -base64 32)}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:-}
       NODE_ENV: production
       UPLOAD_DIR: /app/data/uploads
       # The container always listens on 3000 — pin PORT so a stray PORT in
