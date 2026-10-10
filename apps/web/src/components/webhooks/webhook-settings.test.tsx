@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   role: 'owner',
+  removeError: null as { message: string } | null,
+  rotateError: null as { message: string } | null,
   state: 'overflow',
   slots: 1,
   tables: vi.fn(),
@@ -62,11 +64,12 @@ vi.mock('@/lib/trpc/client', () => ({
       create: { useMutation: () => ({ mutate: vi.fn() }) },
       pause: { useMutation: () => ({ mutate: vi.fn() }) },
       resume: { useMutation: () => ({ mutate: mocks.resume }) },
-      remove: { useMutation: () => ({ mutate: mocks.remove }) },
+      remove: { useMutation: () => ({ mutate: mocks.remove, error: mocks.removeError }) },
       retry: { useMutation: () => ({ mutate: mocks.retry }) },
       rotate: {
         useMutation: (options: { onSuccess: (value: { secret: string }) => void }) => ({
           mutate: () => options.onSuccess({ secret: 'once-only-secret' }),
+          error: mocks.rotateError,
         }),
       },
     },
@@ -76,10 +79,24 @@ import { WebhookSettings, WebhookStateNotice } from './webhook-settings';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.role = 'owner';
+  mocks.removeError = null;
+  mocks.rotateError = null;
   mocks.state = 'overflow';
   mocks.slots = 1;
 });
 afterEach(cleanup);
+it.each(['Remove', 'Rotate secret'])(
+  'shows %s errors inside the active confirmation dialog',
+  (action) => {
+    if (action === 'Remove') mocks.removeError = { message: 'Removal failed. Try again.' };
+    else mocks.rotateError = { message: 'Rotation failed. Try again.' };
+    render(<WebhookSettings baseId="base" />);
+    fireEvent.click(screen.getByRole('button', { name: action }));
+    const alert = screen.getByRole('alert');
+    expect(screen.getByRole('dialog').contains(alert)).toBe(true);
+    expect(alert.textContent).toContain('failed. Try again.');
+  },
+);
 it('makes the overflow gap and administrator recovery explicit', () => {
   const { rerender } = render(
     <WebhookStateNotice state="overflow" overflowAt="2026-10-10T00:00:00Z" />,

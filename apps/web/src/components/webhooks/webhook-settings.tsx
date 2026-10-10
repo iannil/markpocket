@@ -349,7 +349,13 @@ function EndpointCard({ endpoint, tableId }: { endpoint: Endpoint; tableId: stri
         confirmLabel="Remove endpoint"
         pending={remove.isPending}
         onConfirm={() => remove.mutate({ id: endpoint.id })}
-      />
+      >
+        {remove.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {remove.error.message}
+          </p>
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={rotateOpen}
         onOpenChange={setRotateOpen}
@@ -358,7 +364,13 @@ function EndpointCard({ endpoint, tableId }: { endpoint: Endpoint; tableId: stri
         confirmLabel="Rotate secret"
         pending={rotate.isPending}
         onConfirm={() => rotate.mutate({ id: endpoint.id })}
-      />
+      >
+        {rotate.error && (
+          <p role="alert" className="text-sm text-destructive">
+            {rotate.error.message}
+          </p>
+        )}
+      </ConfirmDialog>
     </article>
   );
 }
