@@ -74,30 +74,36 @@ function Builder({
   isOwner: boolean;
 }) {
   const parsed = formConfigSchema.safeParse(options.form);
-  const [config, setConfig] = useState<FormConfig>(
-    parsed.success
-      ? parsed.data
-      : {
-          title: 'New form',
-          description: '',
-          fields: [],
-          successMessage: 'Thank you. Your response has been received.',
-        },
+  const savedConfig: FormConfig = parsed.success
+    ? parsed.data
+    : {
+        title: 'New form',
+        description: '',
+        fields: [],
+        successMessage: 'Thank you. Your response has been received.',
+      };
+  const savedSnapshot = JSON.stringify(options.form);
+  const [draft, setDraft] = useState<{ config: FormConfig; baseline: string | undefined } | null>(
+    null,
   );
-  const [dirty, setDirty] = useState(false);
+  // Clean screens always follow the query result. Drafts retain the saved version
+  // they began from so a later refresh can surface an editing conflict.
+  const config = readOnly ? savedConfig : (draft?.config ?? savedConfig);
+  const dirty = draft !== null;
+  const conflict = draft !== null && draft.baseline !== savedSnapshot;
   const [days, setDays] = useState(30);
   const [url, setUrl] = useState('');
   const [confirm, setConfirm] = useState<'rotate' | string | null>(null);
   const utils = trpc.useUtils();
   const publications = trpc.form.list.useQuery({ viewId }, { enabled: isOwner });
   const save = trpc.view.updateOptions.useMutation({
-    onSuccess: () => {
-      setDirty(false);
+    onSuccess: async () => {
+      await utils.view.list.invalidate({ tableId });
+      setDraft(null);
       setUrl('');
       toast.success(
         'Form saved. Field changes invalidate published links; publish again if needed.',
       );
-      void utils.view.list.invalidate({ tableId });
       void utils.form.list.invalidate({ viewId });
     },
     onError: (err) => toast.error(err.message),
@@ -119,8 +125,7 @@ function Builder({
     onError: (err) => toast.error(err.message),
   });
   function update(next: FormConfig) {
-    setConfig(next);
-    setDirty(true);
+    setDraft((current) => ({ config: next, baseline: current ? current.baseline : savedSnapshot }));
   }
   const selected = config.fields.map((entry) => ({
     ...fields.find((f) => f.id === entry.fieldId),
@@ -164,6 +169,17 @@ function Builder({
           Only selected fields are public. Changing selected fields or required settings invalidates
           published links.
         </p>
+        {conflict && (
+          <div role="alert" className="space-y-2 text-sm">
+            <p>
+              The saved form changed since you started editing. Your edits are preserved; saving
+              will replace the latest configuration.
+            </p>
+            <Button variant="outline" onClick={() => setDraft(null)}>
+              Use latest saved form
+            </Button>
+          </div>
+        )}
         <label className="block space-y-1">
           Title
           <Input

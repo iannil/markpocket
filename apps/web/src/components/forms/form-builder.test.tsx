@@ -21,6 +21,7 @@ vi.mock('@/lib/trpc/client', () => ({
         useQuery: () => ({
           data: [
             { id: 'f', name: 'Name', type: 'text', options: {} },
+            { id: 'email', name: 'Email', type: 'text', options: {} },
             { id: 'secret', name: 'Private attachment', type: 'attachment', options: {} },
           ],
         }),
@@ -90,5 +91,52 @@ it('owner publishes with default 30-day expiry and must save changes first', () 
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Changed' } });
   expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(
     true,
+  );
+});
+
+function refreshConfig() {
+  state.options = {
+    form: {
+      title: 'Updated contact',
+      description: 'Latest saved configuration',
+      successMessage: 'Updated success',
+      fields: [{ fieldId: 'email', required: true }],
+    },
+  };
+}
+it('clean owner adopts the refreshed same-view projection before publishing', () => {
+  const ui = render(<FormBuilder viewId="v" tableId="t" readOnly={false} isOwner />);
+  refreshConfig();
+  ui.rerender(<FormBuilder viewId="v" tableId="t" readOnly={false} isOwner />);
+  expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Updated contact');
+  expect(screen.getByRole('heading', { name: 'Updated contact' })).toBeDefined();
+  expect(screen.queryByLabelText('Name')).toBeNull();
+  expect((screen.getByLabelText('Email') as HTMLInputElement).required).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  expect(state.publish).toHaveBeenCalledWith({ viewId: 'v', expiresInDays: 30 });
+});
+it('viewer adopts a refreshed same-view preview', () => {
+  const ui = render(<FormBuilder viewId="v" tableId="t" readOnly />);
+  refreshConfig();
+  ui.rerender(<FormBuilder viewId="v" tableId="t" readOnly />);
+  expect(screen.getByRole('heading', { name: 'Updated contact' })).toBeDefined();
+  expect(screen.queryByLabelText('Name')).toBeNull();
+  expect((screen.getByLabelText('Email') as HTMLInputElement).required).toBe(true);
+});
+it('preserves unsaved edits and flags a changed server configuration until latest is adopted', () => {
+  const ui = render(<FormBuilder viewId="v" tableId="t" readOnly={false} isOwner />);
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My local title' } });
+  refreshConfig();
+  ui.rerender(<FormBuilder viewId="v" tableId="t" readOnly={false} isOwner />);
+  expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('My local title');
+  expect(screen.getByRole('alert').textContent).toContain('changed since you started editing');
+  expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Use latest saved form' }));
+  expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Updated contact');
+  expect(screen.queryByLabelText('Name')).toBeNull();
+  expect((screen.getByRole('button', { name: 'Publish' }) as HTMLButtonElement).disabled).toBe(
+    false,
   );
 });
