@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { FieldLike } from '@/app/bases/[baseId]/tables/[tableId]/cell-renderers';
+import { RecordDetail } from '@/components/records/record-detail';
 import { Button } from '@/components/ui/button';
 import { usePresence } from '@/components/realtime/realtime-provider';
 import type { SelectOption } from '@/lib/field-types';
@@ -130,6 +131,9 @@ function ConfiguredBoard({
   const upsert = trpc.cell.upsert.useMutation();
   const presence = usePresence(scope.baseId);
   const members = trpc.member.list.useQuery({ baseId: scope.baseId });
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   // Refs enforce exclusion synchronously, including drops before React renders.
@@ -220,7 +224,12 @@ function ConfiguredBoard({
           </Button>
         </p>
       )}
-      <div className="flex min-h-0 flex-1 gap-4 overflow-auto p-4" aria-label="Kanban board">
+      <div
+        ref={boardRef}
+        tabIndex={-1}
+        className="flex min-h-0 flex-1 gap-4 overflow-auto p-4"
+        aria-label="Kanban board"
+      >
         {lanes.map((lane) => (
           <KanbanLane
             key={JSON.stringify(lane.choiceId)}
@@ -230,6 +239,10 @@ function ConfiguredBoard({
             targets={lanes.filter((target) => target.choiceId !== KANBAN_UNAVAILABLE_CHOICE_ID)}
             pending={pending}
             onMove={(id, target) => void move(id, target)}
+            onOpen={(id, trigger) => {
+              detailTrigger.current = trigger;
+              setDetailId(id);
+            }}
             onVisible={(ids) => {
               const key = lane.choiceId ?? '';
               if (ids) visible.current.set(key, ids);
@@ -250,6 +263,27 @@ function ConfiguredBoard({
           />
         ))}
       </div>
+      {detailId && (
+        <RecordDetail
+          tableId={scope.tableId}
+          recordId={detailId}
+          readOnly={scope.readOnly}
+          onClose={() => {
+            setDetailId(null);
+            const trigger = detailTrigger.current;
+            const currentCard = Array.from(
+              boardRef.current?.querySelectorAll<HTMLElement>('[data-record-id]') ?? [],
+            ).find((card) => card.dataset.recordId === detailId);
+            // Status edits may move or filter away the old card element.
+            const focusTarget = trigger?.isConnected
+              ? trigger
+              : (currentCard?.querySelector<HTMLButtonElement>(
+                  'button[aria-label="Open record details"]',
+                ) ?? boardRef.current);
+            focusTarget?.focus();
+          }}
+        />
+      )}
     </>
   );
 }

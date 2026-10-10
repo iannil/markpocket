@@ -2,6 +2,7 @@
 
 import { memo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
@@ -339,6 +340,8 @@ export const CellRenderer = memo(function CellRenderer({
 });
 
 export interface EditingCellProps {
+  /** Detail forms use an explicit save action instead of blur writes. */
+  commitOnBlur?: boolean;
   field: FieldLike;
   record: RecordLike;
   users: UserLike[];
@@ -354,6 +357,7 @@ export interface EditingCellProps {
 // The editing session owns its draft locally — a keystroke re-renders only this
 // component, never the grid. The grid just tracks WHICH cell is editing.
 export function EditingCell({
+  commitOnBlur = true,
   field,
   record,
   users,
@@ -424,15 +428,25 @@ export function EditingCell({
   }
 
   const inlineInput = (type: string) => (
-    <Input
-      className="h-full rounded-none border-0 bg-muted px-2.5 focus-visible:border-0 focus-visible:ring-0"
-      type={type}
-      autoFocus
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onKeyDown={inlineKeyDown}
-      onBlur={() => commitInline(null)}
-    />
+    <>
+      <Input
+        className="h-full rounded-none border-0 bg-muted px-2.5 focus-visible:border-0 focus-visible:ring-0"
+        type={type}
+        aria-label={field.name}
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={inlineKeyDown}
+        onBlur={() => {
+          if (commitOnBlur) commitInline(null);
+        }}
+      />
+      {!commitOnBlur && (
+        <Button size="sm" variant="outline" onClick={() => commitInline(null)}>
+          Save {field.name}
+        </Button>
+      )}
+    </>
   );
 
   switch (field.type) {

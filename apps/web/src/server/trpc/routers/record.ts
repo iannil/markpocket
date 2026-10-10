@@ -22,6 +22,19 @@ import { getKanbanPage, kanbanPageInputSchema } from '../../records/kanban-page'
 import { batchInputSchema, writeBatch } from '../../records/write-batch';
 
 export const recordRouter = router({
+  get: protectedProcedure
+    .input(z.object({ tableId: z.string(), id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
+      const rows = await listRecordsPivoted(
+        input.tableId,
+        { where: eq(record.id, input.id) },
+        0,
+        1,
+      );
+      if (!rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'Record not found' });
+      return rows[0];
+    }),
   kanbanPage: protectedProcedure.input(kanbanPageInputSchema).query(async ({ ctx, input }) => {
     await assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
     return getKanbanPage(input);

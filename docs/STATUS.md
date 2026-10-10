@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-10-10（原子写入 foundation 与 Grid G1–G4 已实现，隔离验证及部分浏览器验证，未发布）
+> **最后更新**：2026-10-10（foundation、Grid G1–G4、Form P1–P4、Kanban K1–K3 已实现，隔离验证及部分浏览器验证，未发布）
 > 本文档是项目的**现在时**：功能矩阵、质量基线、已知限制、迭代路线。给 LLM agent 的使用说明——执行任何迭代前先通读本文；改架构前先读对应 ADR（§3）；每完成一个迭代回来更新对应小节。
 > 逐版本变更见 `CHANGELOG.md`；术语定义见 `../../CONTEXT.md`；文档索引见 `README.md`。
 
@@ -14,7 +14,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 
 ## 2. 当前状态总览
 
-Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form P1–P4 已实现：配置、发布生命周期、匿名原子提交与表单 UI，组件/API fixture 验证通过；P4 浏览器验收由 controller 在提交后执行。Kanban、Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
+Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form P1–P4 已实现：配置、发布生命周期、匿名原子提交与表单 UI，组件/API fixture 验证通过；P4 浏览器验收由 controller 在提交后执行。Kanban K1–K3 已实现：服务端独立列分页/计数、拖动与菜单移动、受权限保护的记录详情；隔离 PostgreSQL/组件验证通过，controller 已验收看板创建/分页/失败重试/键盘/390px/viewer/native drag。详情浏览器与同源多人实时运行验收待完成。Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
 
 | 维度 | 状态 |
 |---|---|
@@ -52,7 +52,8 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 | Base/Table/Field/Record CRUD | ✅ | `server/trpc/routers/{base,table,field,record,cell}.ts` | 全部带角色校验 |
 | Grid 视图（filter/sort/group/列宽/隐藏列） | ✅ | `lib/view-query.ts`、`lib/view-ast.ts`、`components/view-config/` | 编译为 SQL 片段 |
 | Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | 本地实现；fixture 验证；未发布，P4 live 浏览器验证待完成 |
-| Kanban / Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
+| Kanban 视图 | ✅ | `components/kanban/`、`components/records/` | 本地实现，独立列 50 卡分页；详情/多人运行验收待完成，未发布；见 [说明](KANBAN.md) |
+| Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
 | 字段类型（10 种） | ✅ | `server/plugins/builtin-fields/` | 10 个 Contribution + parity 测试 |
 | Expression 字段（写时物化 + 回填） | ✅ | `lib/expression-eval.ts`、`server/expression.ts` | 手写求值器，无第三方公式库 |
 | 实时协作（WS + LISTEN/NOTIFY + presence + LWW） | ✅ | `server/realtime/`、`realtime-server.ts` | dev 拆进程，prod 单进程 |
@@ -129,7 +130,7 @@ UI/交互：
 - 手写 SQL 的真库回归测试（docker 起一次性 PG，修 §8.9）
 
 **v2 候选（大步，需先补 ADR）**
-- Form：完成发布前 live 浏览器验收；[使用说明](FORMS.md)。Kanban / Gallery：后续视图渲染层工作。
+- Form：完成发布前 live 浏览器验收；[使用说明](FORMS.md)。Kanban：详情浏览器与同源多人运行验收待完成；[说明](KANBAN.md)。Gallery：后续视图渲染层工作。
 - Lookup / Rollup 字段（依赖 Link 语义扩展；CONTEXT.md 术语已标注"v2 推迟"）
 - S3 storage adapter（扩展点就绪，`plugin-storage-local` 为参考实现）
 - Excel/JSON 导入导出（`plugin-csv` 为参考插件）

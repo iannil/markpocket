@@ -15,6 +15,7 @@ const mockUtils = vi.hoisted(() => {
     field: { list: { invalidate: vi.fn() } },
     view: { list: { invalidate: vi.fn() } },
     record: {
+      get: { invalidate: vi.fn() },
       list: { invalidate: vi.fn() },
       groupCounts: { invalidate: vi.fn() },
       kanbanPage: { invalidate: vi.fn() },
@@ -176,6 +177,7 @@ describe('change invalidation', () => {
     expect(mockUtils.current.field.list.invalidate).toHaveBeenCalledWith({ tableId: 't2' });
     expect(mockUtils.current.view.list.invalidate).toHaveBeenCalledTimes(2);
     expect(mockUtils.current.record.list.invalidate).toHaveBeenCalledTimes(2);
+    expect(mockUtils.current.record.get.invalidate).toHaveBeenCalledTimes(2);
     expect(mockUtils.current.record.kanbanPage.invalidate).toHaveBeenCalledTimes(2);
     expect(mockUtils.current.record.kanbanPage.invalidate).toHaveBeenCalledWith({ tableId: 't1' });
     expect(mockUtils.current.base.list.invalidate).not.toHaveBeenCalled();
@@ -208,6 +210,7 @@ describe('change invalidation', () => {
     expect(mockUtils.current.field.list.invalidate).not.toHaveBeenCalled();
     expect(mockUtils.current.view.list.invalidate).not.toHaveBeenCalled();
     expect(mockUtils.current.record.list.invalidate).not.toHaveBeenCalled();
+    expect(mockUtils.current.record.get.invalidate).not.toHaveBeenCalled();
 
     view.unmount();
   });
@@ -274,6 +277,7 @@ describe('reconnect compensation', () => {
     expect(mockUtils.current.field.list.invalidate).toHaveBeenCalledTimes(1);
     expect(mockUtils.current.view.list.invalidate).toHaveBeenCalledTimes(1);
     expect(mockUtils.current.record.list.invalidate).toHaveBeenCalledTimes(1);
+    expect(mockUtils.current.record.get.invalidate).toHaveBeenCalledTimes(1);
     expect(mockUtils.current.record.kanbanPage.invalidate).toHaveBeenCalledTimes(1);
 
     view.unmount();

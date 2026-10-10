@@ -53,6 +53,7 @@ function invalidateTableData(utils: TrpcUtils, tableId: string): void {
   utils.field.list.invalidate({ tableId });
   utils.view.list.invalidate({ tableId });
   utils.record.list.invalidate({ tableId });
+  utils.record.get.invalidate({ tableId });
   utils.record.groupCounts.invalidate({ tableId });
   utils.record.kanbanPage.invalidate({ tableId });
 }
@@ -170,6 +171,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         utils.field.list.invalidate();
         utils.view.list.invalidate();
         utils.record.list.invalidate();
+        utils.record.get.invalidate();
         utils.record.groupCounts.invalidate();
         utils.record.kanbanPage.invalidate();
       }, CHANGE_INVALIDATE_DEBOUNCE_MS);

@@ -275,40 +275,44 @@ describe('publicShareRouter — view-bound share', () => {
     expect(countRecords).not.toHaveBeenCalled();
   });
 
-  it('strips hidden field metadata and cell data while keeping its filter active', async () => {
-    (listRecordsPivoted as any).mockClear();
-    queueSelects([
-      [SHARE({ viewId: 'v1' })],
-      [TABLE_ROW],
-      FIELDS,
-      [
-        {
-          id: 'v1',
-          tableId: 't1',
-          // Filter on the hidden field must still constrain the query.
-          options: {
-            hiddenFields: ['f2'],
-            filter: {
-              op: 'and',
-              conditions: [{ fieldId: 'f2', operator: 'equals', operand: 'x' }],
+  it.each(['grid', 'kanban'])(
+    '%s strips hidden field metadata and cells while keeping the filter active',
+    async (type) => {
+      (listRecordsPivoted as any).mockClear();
+      queueSelects([
+        [SHARE({ viewId: 'v1' })],
+        [TABLE_ROW],
+        FIELDS,
+        [
+          {
+            id: 'v1',
+            tableId: 't1',
+            type,
+            // Filter on the hidden field must still constrain the query.
+            options: {
+              hiddenFields: ['f2'],
+              filter: {
+                op: 'and',
+                conditions: [{ fieldId: 'f2', operator: 'equals', operand: 'x' }],
+              },
             },
           },
-        },
-      ],
-    ]);
-    const result = await publicShareRouter
-      .createCaller({ session: null })
-      .getRecords({ token: 'tok', tableId: 't1' });
-    expect(result).not.toBeNull();
-    // Hidden field dropped from metadata…
-    expect(result!.fields.map((f: { id: string }) => f.id)).toEqual(['f1']);
-    // …and from every record's cells…
-    expect(result!.records[0]!.cells).toEqual({ f1: 'public' });
-    expect(result!.records[1]!.cells).toEqual({ f1: 'also-public' });
-    // …but the filter compiled against the FULL field map (non-null where).
-    const opts = (listRecordsPivoted as any).mock.calls[0]![1];
-    expect(opts.where).not.toBeNull();
-  });
+        ],
+      ]);
+      const result = await publicShareRouter
+        .createCaller({ session: null })
+        .getRecords({ token: 'tok', tableId: 't1' });
+      expect(result).not.toBeNull();
+      // Hidden field dropped from metadata…
+      expect(result!.fields.map((f: { id: string }) => f.id)).toEqual(['f1']);
+      // …and from every record's cells…
+      expect(result!.records[0]!.cells).toEqual({ f1: 'public' });
+      expect(result!.records[1]!.cells).toEqual({ f1: 'also-public' });
+      // …but the filter compiled against the FULL field map (non-null where).
+      const opts = (listRecordsPivoted as any).mock.calls[0]![1];
+      expect(opts.where).not.toBeNull();
+    },
+  );
 
   it('passes offset through on the view-bound path too', async () => {
     (listRecordsPivoted as any).mockClear();

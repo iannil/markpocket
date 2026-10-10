@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Kanban records and protected details (2026-10-10)
+
+- Added Kanban status/title configuration, SQL counts, independent 50-card lane pages, drag/drop and keyboard/touch move menus with failure recovery and existing LWW hints.
+- Added a protected exact-table `record.get` and record detail drawer using existing field editors. Viewers and expressions are read-only; failed saves retain drafts; committed edits refresh detail, lanes, counts and Grid even after closing the drawer.
+- Kanban public shares continue the filtered Grid projection with hidden-field removal. Isolated PostgreSQL/component checks passed; controller board browser checks passed. Detail browser and same-origin multiplayer runtime acceptance remain pending, unpublished. See [Kanban guide](docs/KANBAN.md) and [evidence](docs/release/2026-10-10-p0-p2-evidence.md).
+
 ## Unreleased — public submission Forms (2026-10-10)
 
 - Added Form creation, field selection/order/required configuration, viewer previews, editor saves, and owner publication/rotation/revocation with a default 30-day expiry.

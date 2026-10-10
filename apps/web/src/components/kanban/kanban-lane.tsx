@@ -51,6 +51,7 @@ export function KanbanLane({
   targets,
   pending,
   onMove,
+  onOpen,
   onVisible,
   onDragStart,
   onDragEnd,
@@ -62,6 +63,7 @@ export function KanbanLane({
   targets: LaneSpec[];
   pending: Set<string>;
   onMove: (id: string, target: string | null) => void;
+  onOpen: (id: string, trigger: HTMLButtonElement) => void;
   onVisible: (ids: Set<string> | null) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
@@ -121,6 +123,7 @@ export function KanbanLane({
         {unique.map((record) => (
           <article
             key={record.id}
+            data-record-id={record.id}
             aria-label={`Record ${record.id}`}
             draggable={!scope.readOnly && !pending.has(record.id)}
             onDragStart={(event) => {
@@ -148,6 +151,15 @@ export function KanbanLane({
                 <span className="text-sm">{record.id}</span>
               )}
             </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="mt-2"
+              aria-label="Open record details"
+              onClick={(event) => onOpen(record.id, event.currentTarget)}
+            >
+              Open details
+            </Button>
             {pending.has(record.id) && (
               <p role="status" className="mt-2 text-xs text-muted-foreground">
                 Saving…

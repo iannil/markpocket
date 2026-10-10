@@ -31,12 +31,14 @@ vi.mock('@/lib/trpc/client', () => ({
   trpc: {
     useUtils: () => ({
       record: {
+        get: { invalidate: state.invalidate },
         kanbanPage: { invalidate: state.invalidate },
         groupCounts: { invalidate: state.invalidate },
         list: { invalidate: state.invalidate },
       },
       view: { list: { invalidate: state.invalidate } },
     }),
+    table: { get: { useQuery: () => ({ data: { baseId: 'b1' } }) } },
     field: { list: { useQuery: () => ({ data: state.fields }) } },
     view: {
       list: {
@@ -49,8 +51,18 @@ vi.mock('@/lib/trpc/client', () => ({
       },
       updateOptions: { useMutation: () => ({ mutateAsync: state.save, isPending: false }) },
     },
-    member: { list: { useQuery: () => ({ data: [{ userId: 'u1', name: 'Ann' }] }) } },
-    record: { groupCounts: { useQuery: () => ({ data: state.counts }) } },
+    member: {
+      me: { useQuery: () => ({ data: { role: 'editor' } }) },
+      list: { useQuery: () => ({ data: [{ userId: 'u1', name: 'Ann' }] }) },
+    },
+    record: {
+      get: {
+        useQuery: ({ id }: { id: string }) => ({
+          data: { id, cells: { title: 'Record 0', status: 'todo' } },
+        }),
+      },
+      groupCounts: { useQuery: () => ({ data: state.counts }) },
+    },
     cell: { upsert: { useMutation: () => ({ mutateAsync: state.write }) } },
     useQueries: (fn: (t: unknown) => unknown[]) => fn({ record: { kanbanPage: state.page } }),
   },
@@ -361,4 +373,45 @@ it('invalidates settings metadata after switching views without obsolete editor 
   expect(state.invalidate).toHaveBeenCalledExactlyOnceWith({ tableId: 't1' });
   expect(screen.getByLabelText('Status field')).toBeDefined();
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('opens viewer details by keyboard and restores the card button focus on Escape', async () => {
+  render(board(true));
+  const card = screen.getByRole('article', { name: 'Record r0' });
+  const trigger = within(card).getByRole('button', { name: 'Open record details' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole('dialog', { name: 'Record details' });
+  expect(within(dialog).getByText('Read-only record')).toBeDefined();
+  expect(within(dialog).queryByRole('button', { name: 'Edit Title' })).toBeNull();
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(document.activeElement).toBe(trigger);
+});
+
+it('restores focus to a moved card after detail status edits replace its DOM element', async () => {
+  const ui = render(board(true));
+  const original = within(screen.getByRole('article', { name: 'Record r0' })).getByRole('button', {
+    name: 'Open record details',
+  });
+  original.focus();
+  fireEvent.click(original);
+  await screen.findByRole('dialog', { name: 'Record details' });
+  state.page.mockImplementation((input: { choiceId: string | null }) => ({
+    data: {
+      total: input.choiceId === 'done' ? 1 : 0,
+      records:
+        input.choiceId === 'done'
+          ? [{ id: 'r0', cells: { title: 'Record 0', status: 'done' } }]
+          : [],
+    },
+  }));
+  ui.rerender(board(true));
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  const moved = within(screen.getByRole('region', { name: 'Done' })).getByRole('button', {
+    name: 'Open record details',
+  });
+  expect(moved).not.toBe(original);
+  expect(document.activeElement).toBe(moved);
 });
