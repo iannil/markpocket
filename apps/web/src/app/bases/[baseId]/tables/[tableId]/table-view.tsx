@@ -7,6 +7,7 @@ import { trpc } from '@/lib/trpc/client';
 import { FormBuilder } from '@/components/forms/form-builder';
 import type { FieldLike } from './cell-renderers';
 import { GridEditor } from './grid-editor';
+import { KanbanBoard } from '@/components/kanban/kanban-board';
 
 interface ViewLike {
   id: string;
@@ -82,6 +83,14 @@ export function TableView({ baseId, tableId }: { baseId: string; tableId: string
           fields={fields}
           viewName={activeView.name}
           options={activeView.options}
+          readOnly={readOnly}
+        />
+      ) : activeView?.type === 'kanban' ? (
+        <KanbanBoard
+          key={activeView.id}
+          baseId={baseId}
+          tableId={tableId}
+          viewId={activeView.id}
           readOnly={readOnly}
         />
       ) : activeView?.type === 'form' ? (

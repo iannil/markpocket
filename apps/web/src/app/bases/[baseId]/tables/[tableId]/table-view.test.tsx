@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   loading: false,
   error: false,
   grid: vi.fn(),
+  kanban: vi.fn(),
   invalidate: vi.fn(),
 }));
 vi.mock('@/lib/trpc/client', () => ({
@@ -30,6 +31,12 @@ vi.mock('@/lib/trpc/client', () => ({
   },
 }));
 vi.mock('@/components/forms/form-builder', () => ({ FormBuilder: () => <div>Form renderer</div> }));
+vi.mock('@/components/kanban/kanban-board', () => ({
+  KanbanBoard: (props: unknown) => {
+    state.kanban(props);
+    return <div>Kanban renderer</div>;
+  },
+}));
 vi.mock('./grid-editor', () => ({
   GridEditor: (props: unknown) => {
     state.grid(props);
@@ -65,6 +72,7 @@ beforeEach(() => {
   state.loading = false;
   state.error = false;
   state.grid.mockClear();
+  state.kanban.mockClear();
   state.invalidate.mockClear();
 });
 it('passes the resolved view and field projection before mounting Grid', () => {
@@ -87,7 +95,7 @@ it('never mounts Grid for Form drafts or unsupported view types', () => {
   const ui = render(<TableView baseId="b1" tableId="t1" />);
   expect(screen.getByText('Form renderer')).toBeDefined();
   expect(state.grid).not.toHaveBeenCalled();
-  state.views[0]!.type = 'kanban';
+  state.views[0]!.type = 'calendar';
   ui.rerender(<TableView baseId="b1" tableId="t1" />);
   expect(screen.getByText('This view type is not available yet.')).toBeDefined();
   expect(state.grid).not.toHaveBeenCalled();
@@ -108,4 +116,21 @@ it('does not mount Grid until metadata loads and supports retry', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
   expect(state.invalidate).toHaveBeenCalledTimes(2);
   expect(state.grid).not.toHaveBeenCalled();
+});
+
+it('mounts Kanban only for the controlled view and unmounts it for Grid or Form', () => {
+  state.views = [
+    { id: 'k1', name: 'Board', type: 'kanban', options: {} },
+    { id: 'v1', name: 'Grid', type: 'grid', options: {} },
+    { id: 'f1', name: 'Form', type: 'form', options: {} },
+  ];
+  render(<TableView baseId="b1" tableId="t1" />);
+  expect(state.kanban).toHaveBeenLastCalledWith(
+    expect.objectContaining({ baseId: 'b1', tableId: 't1', viewId: 'k1', readOnly: false }),
+  );
+  expect(state.grid).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Grid' }));
+  expect(screen.queryByText('Kanban renderer')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Form' }));
+  expect(screen.queryByText('Kanban renderer')).toBeNull();
 });

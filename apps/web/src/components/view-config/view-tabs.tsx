@@ -40,7 +40,7 @@ export function ViewTabs({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
     onError: (err) => toast.error(err.message),
   });
-  const [type, setType] = useState<'grid' | 'form'>('grid');
+  const [type, setType] = useState<'grid' | 'form' | 'kanban'>('grid');
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   // Inline rename (spec §7.2: inline over prompt/popover): the tab itself
@@ -132,10 +132,11 @@ export function ViewTabs({
             <select
               aria-label="View type"
               value={type}
-              onChange={(e) => setType(e.target.value as 'grid' | 'form')}
+              onChange={(e) => setType(e.target.value as 'grid' | 'form' | 'kanban')}
             >
               <option value="grid">Grid</option>
               <option value="form">Form</option>
+              <option value="kanban">Kanban</option>
             </select>
           </label>
           <Button size="sm" type="submit" disabled={create.isPending}>
