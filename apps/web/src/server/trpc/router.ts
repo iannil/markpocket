@@ -5,6 +5,7 @@ import { airtableImportRouter } from './routers/airtable-import';
 import { baseRouter } from './routers/base';
 import { cellRouter } from './routers/cell';
 import { exportRouter } from './routers/export';
+import { formRouter } from './routers/form';
 import { fieldRouter } from './routers/field';
 import { historyRouter } from './routers/history';
 import { inviteRouter } from './routers/invite';
@@ -25,6 +26,7 @@ export const appRouter = router({
   table: tableRouter,
   view: viewRouter,
   field: fieldRouter,
+  form: formRouter,
   record: recordRouter,
   cell: cellRouter,
   export: exportRouter,

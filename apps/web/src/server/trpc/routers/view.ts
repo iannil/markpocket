@@ -15,6 +15,7 @@ import {
   viewOptionsSchema,
   type ViewOptions,
 } from '@/lib/view-ast';
+import { revokeViewPublications, lockFormLifecycle } from '../../forms/publications';
 import { validateFormFields } from '@/lib/form-config';
 import { protectedProcedure, router } from '../init';
 
@@ -130,6 +131,8 @@ export const viewRouter = router({
           await tx.execute(
             sql`SELECT pg_advisory_xact_lock(hashtext('view-options:' || ${existing.tableId}))`,
           );
+          const [current] = await tx.select().from(view).where(eq(view.id, input.id));
+          if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'View not found' });
           // Defense chain against dead field references (review N4) — the
           // advisory lock above serializes ordering against field.delete, but a
           // client that read its field list before that delete can still submit
@@ -168,6 +171,15 @@ export const viewRouter = router({
               throw new TRPCError({ code: 'BAD_REQUEST', message: 'Form field is unavailable' });
             }
           }
+          if (current.type === 'form') {
+            const before = viewOptionsSchema.safeParse(current.options);
+            if (
+              JSON.stringify(before.success ? before.data.form?.fields : null) !==
+              JSON.stringify(parsed.data.form?.fields)
+            ) {
+              await revokeViewPublications(tx, current.id);
+            }
+          }
           const [updated] = await tx
             .update(view)
             .set({ options: parsed.data })
@@ -193,10 +205,13 @@ export const viewRouter = router({
       // cleanup), so without this a dead share lingers in share.list forever.
       // Same transaction as the view delete so a token can never outlive its
       // view by half a write.
-      await db.transaction(async (tx) => {
-        await tx.delete(baseShare).where(eq(baseShare.viewId, input.id));
-        await tx.delete(view).where(eq(view.id, input.id));
-      });
+      await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          await lockFormLifecycle(tx, existing.tableId);
+          await tx.delete(baseShare).where(eq(baseShare.viewId, input.id));
+          await tx.delete(view).where(eq(view.id, input.id));
+        }),
+      );
       if (existing) void publishTableChange(existing.tableId, ctx.session.user.id);
       return { ok: true };
     }),

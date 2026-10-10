@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
@@ -6,12 +7,7 @@ import { z } from 'zod';
 
 import { FIELD_TYPES, FieldType, type FieldOptions } from '@/lib/field-types';
 import { extractDependsOn } from '@/lib/expression-eval';
-import {
-  filterReferencesField,
-  parseViewOptions,
-  removeFieldReferences,
-  viewOptionsSchema,
-} from '@/lib/view-ast';
+import { filterReferencesField, parseViewOptions, removeFieldReferences } from '@/lib/view-ast';
 import { defaultOptions, parseOptions } from '@/server/plugins/field-value';
 import { backfillExpressionField } from '@/server/expression';
 import { baseShare, cell, field, table, view } from '../../db/schema';
@@ -19,6 +15,12 @@ import { db } from '../../db';
 import { mapBusyToConflict } from '../../db/pg-errors';
 import { publishTableChange } from '../../realtime/publish';
 import { assertRole, assertTableRole, baseIdFromTable } from '@/lib/roles';
+import {
+  lockFormLifecycle,
+  formReferencesField,
+  revokeFieldPublications,
+  revokeViewPublications,
+} from '../../forms/publications';
 import { protectedProcedure, router } from '../init';
 
 // Hard ceiling independent of type-specific schemas — future field types must
@@ -257,6 +259,12 @@ export const fieldRouter = router({
       }
       const row = await mapBusyToConflict(
         db.transaction(async (tx) => {
+          await lockFormLifecycle(tx, existing.tableId);
+          const [current] = await tx.select().from(field).where(eq(field.id, input.id));
+          if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Field not found' });
+          if (!isDeepStrictEqual(current.options, options)) {
+            await revokeFieldPublications(tx, existing.tableId, input.id);
+          }
           if (existing.type === FieldType.Link) {
             // In-transaction with the FOR UPDATE target-row lock — same
             // serialization against table.delete as field.create.
@@ -374,18 +382,33 @@ export const fieldRouter = router({
             .where(eq(view.tableId, existing.tableId));
           const filterHitViewIds: string[] = [];
           for (const v of views) {
-            const parsed = parseViewOptions(v.options);
+            // Parse known Grid keys separately: an invalid Form draft (including
+            // an emptied projection) must not hide Grid references or lose opaque
+            // extension keys. Cleanup preserves raw config; publication validates it.
+            const raw =
+              v.options && typeof v.options === 'object' && !Array.isArray(v.options)
+                ? (v.options as Record<string, unknown>)
+                : {};
+            const parsed = parseViewOptions({ ...raw, form: undefined });
             if (filterReferencesField(parsed.filter, input.id)) filterHitViewIds.push(v.id);
             const cleaned = removeFieldReferences(parsed, input.id);
-            // Identity means nothing referenced the field — skip the rewrite.
-            if (cleaned === parsed) continue;
-            // Cleanup only removes nodes from an already-valid tree, so this
-            // cannot fail in practice — revalidate anyway so a malformed write
-            // can never reach the options column.
-            const check = viewOptionsSchema.safeParse(cleaned);
-            if (check.success) {
-              await tx.update(view).set({ options: check.data }).where(eq(view.id, v.id));
+            const formHit = formReferencesField(raw, input.id);
+            if (formHit) await revokeViewPublications(tx, v.id);
+            if (cleaned === parsed && !formHit) continue;
+            const next = { ...raw };
+            for (const key of ['filter', 'sort', 'group', 'hiddenFields'] as const) {
+              if (parsed[key] === undefined) continue;
+              if (cleaned[key] === undefined) delete next[key];
+              else next[key] = cleaned[key];
             }
+            if (formHit) {
+              const form = raw.form as { fields: { fieldId?: string }[] };
+              next.form = {
+                ...form,
+                fields: form.fields.filter((entry) => entry?.fieldId !== input.id),
+              };
+            }
+            await tx.update(view).set({ options: next }).where(eq(view.id, v.id));
           }
           if (filterHitViewIds.length > 0) {
             // Fail-closed: revoke the share rows outright (same end state the

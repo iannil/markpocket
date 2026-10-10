@@ -25,3 +25,28 @@ P1 implements strict configuration validation, field-reference collection and cl
 ## Consequences
 
 Explicit projections and revocation make schema changes fail closed. Anonymous submissions do not impersonate a member or gain record-reading permissions. The configuration and capability lifecycle add validation and audit state, and single-process rate limits do not coordinate multiple instances. Those constraints match the self-hosted deployment scope.
+
+## P2 publication lifecycle
+
+`form_publication` stores an independent `mpf_` capability with 192 random bits,
+only its SHA-256 digest and 12-character display prefix. Rotation revokes active
+rows and creates a new publication id. Publication-scoped submission receipts
+have cascading foreign keys to both publication and record, and unique
+`(publication_id, request_id)`; P3 owns their seven-day retention during submission.
+
+Publish, revoke, Form projection/required changes, field semantic options changes,
+field deletion, and view deletion serialize on `view-options:<tableId>`. Text-only
+Form edits retain the link. All field option changes conservatively revoke selected
+forms when the parsed options differ; field creation never extends a projection.
+Deletion preserves opaque view extension keys and a deliberately invalid empty
+Form draft after revoking its publication. No field type mutation API is exposed;
+resolution checks current type eligibility on every request.
+
+`resolvePublication(token, tx)` obtains that same advisory transaction lock,
+re-reads current publication, view and fields, and locks the publishing owner's
+membership row `FOR SHARE`. The caller must keep that transaction open through
+receipt checks and anonymous writes; P3 may not resolve outside its write
+transaction. The overload without a transaction creates one for read-only access.
+Membership demotion/removal blocks until the transaction ends, or resolution sees
+the new role and rejects. If a caller also needs `field-order:<tableId>`, it must
+acquire it before `view-options:<tableId>`; never invert the order.

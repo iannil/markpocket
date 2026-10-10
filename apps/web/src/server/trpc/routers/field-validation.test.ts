@@ -110,6 +110,8 @@ describe('fieldRouter — link target validation', () => {
   it('updateOptions re-validates the link target', async () => {
     const queue = [
       [fieldRow({ id: 'f-link', type: 'link' })], // existing field lookup
+      [fieldRow({ id: 'f-link', type: 'link' })], // re-read under lifecycle lock
+      [], // affected Form view scan
       [{ baseId: 'b-other' }], // target table lookup
     ];
     let i = 0;
@@ -216,7 +218,7 @@ describe('fieldRouter — updateOptions concurrent delete (review L-1/N5)', () =
   it('rejects NOT_FOUND when the field vanished before the update committed', async () => {
     queueSelects([
       [fieldRow({ id: 'f-gone', type: 'text' })], // existing-field lookup (stale)
-      [], // update().returning(): a concurrent field.delete took the row
+      [], // locked re-read: a concurrent field.delete took the row
     ]);
     // Previously the empty returning fell through a non-null assertion and
     // row.tableId threw a TypeError after commit (500); now a clean NOT_FOUND.
@@ -229,7 +231,9 @@ describe('fieldRouter — updateOptions concurrent delete (review L-1/N5)', () =
 describe('fieldRouter — link retarget guard (review M3)', () => {
   it('rejects retargeting a link field that already stores values', async () => {
     queueSelects([
-      [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-old' } })], // existing
+      [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-old' } })],
+      [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-old' } })], // re-read under lifecycle lock
+      [], // affected Form view scan
       [{ baseId: 'b1' }], // new target table lives in the same base
       [{ id: 'c1' }], // …but a cell already stores a value for this field
     ]);
@@ -243,6 +247,8 @@ describe('fieldRouter — link retarget guard (review M3)', () => {
   it('allows retargeting a link field with no stored values', async () => {
     queueSelects([
       [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-old' } })],
+      [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-old' } })], // re-read under lifecycle lock
+      [], // affected Form view scan
       [{ baseId: 'b1' }], // new target in the same base
       [], // no cells for this field
       [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-new' } })], // update
@@ -256,6 +262,7 @@ describe('fieldRouter — link retarget guard (review M3)', () => {
   it('allows re-saving the same link target without a cell scan', async () => {
     queueSelects([
       [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-same' } })],
+      [fieldRow({ id: 'f-link', type: 'link', options: { targetTableId: 't-same' } })], // re-read under lifecycle lock
       [{ baseId: 'b1' }],
       // Poisoned slot: a buggy cell scan would read this as "values stored"
       // and reject; the correct path consumes it as update().returning().

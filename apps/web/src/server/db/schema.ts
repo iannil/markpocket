@@ -56,7 +56,7 @@ export const view = pgTable(
     tableId: text('table_id')
       .notNull()
       .references(() => table.id, { onDelete: 'cascade' }),
-    type: text('type').notNull(), // 'grid' (Form/Kanban/Gallery later)
+    type: text('type').notNull(), // grid | form (Kanban/Gallery later)
     name: text('name').notNull(),
     options: jsonb('options').notNull().default({}),
     orderIndex: integer('order_index').notNull().default(0),
@@ -281,5 +281,49 @@ export const writeReceipt = pgTable(
   (t) => ({
     pk: primaryKey({ columns: [t.actorKey, t.requestId] }),
     createdAtIdx: index('write_receipt_created_at_idx').on(t.createdAt),
+  }),
+);
+
+// Public submission capabilities are independent of read-only base shares.
+export const formPublication = pgTable(
+  'form_publication',
+  {
+    id: uuid('id').primaryKey(),
+    viewId: text('view_id')
+      .notNull()
+      .references(() => view.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    prefix: text('prefix').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('form_publication_token_hash_uq').on(t.tokenHash),
+    viewIdx: index('form_publication_view_id_idx').on(t.viewId),
+  }),
+);
+
+export const formSubmission = pgTable(
+  'form_submission',
+  {
+    id: uuid('id').primaryKey(),
+    publicationId: uuid('publication_id')
+      .notNull()
+      .references(() => formPublication.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id').notNull(),
+    recordId: text('record_id')
+      .notNull()
+      .references(() => record.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    requestIdx: uniqueIndex('form_submission_publication_request_uq').on(
+      t.publicationId,
+      t.requestId,
+    ),
+    recordIdx: index('form_submission_record_id_idx').on(t.recordId),
+    createdIdx: index('form_submission_created_at_idx').on(t.createdAt),
   }),
 );

@@ -135,6 +135,8 @@ describe('viewRouter', () => {
         },
       ],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -160,6 +162,8 @@ describe('viewRouter', () => {
       },
     ];
     const results = [viewRow, viewRow];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -202,6 +206,8 @@ describe('viewRouter', () => {
       ],
       [],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -240,6 +246,8 @@ describe('viewRouter', () => {
       ],
       [{ id: 'f1' }],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -273,6 +281,8 @@ describe('viewRouter', () => {
       ],
       [],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -319,6 +329,8 @@ describe('viewRouter', () => {
         },
       ],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
@@ -361,17 +373,19 @@ describe('viewRouter', () => {
         },
       ],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
     await viewRouter.createCaller(session()).updateOptions({ id: 'v1', options });
 
     // The check must run UNDER the advisory lock (so it sees the post-
-    // field.delete state) and BEFORE the options write. chain.select call #1
+    // field.delete state) and BEFORE the options write. chain.select call #2
     // is the in-tx liveness query — the pre-tx view lookup went through
     // db.select, a different mock.
     const lockOrder = (chain.execute as any).mock.invocationCallOrder[0];
-    const checkOrder = (chain.select as any).mock.invocationCallOrder[0];
+    const checkOrder = (chain.select as any).mock.invocationCallOrder[1];
     const writeOrder = (chain.set as any).mock.invocationCallOrder[0];
     expect(lockOrder).toBeLessThan(checkOrder);
     expect(checkOrder).toBeLessThan(writeOrder);
@@ -497,8 +511,11 @@ describe('typed Form configuration writes', () => {
       [{ id: 'v1', tableId: 't1', type, options: {} }],
       [{ id: 'f1' }],
       [{ id: 'f1', type: fieldType }],
+      [], // P2 revokes prior publications on projection changes.
       [{ id: 'v1', tableId: 't1', type, options: { form } }],
     ];
+    // P2 re-reads the view after acquiring the lifecycle lock.
+    results.splice(1, 0, results[0]);
     let call = 0;
     chain.then = (onfulfilled: any) =>
       Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);

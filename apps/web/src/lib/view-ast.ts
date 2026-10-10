@@ -22,9 +22,8 @@ export const FILTER_OPERATORS = [
   'notEmpty',
 ] as const;
 
-// View shapes the product can actually render today (ADR-0001 Phase 1; Form /
-// Kanban / Gallery join this list when they ship).
-export const VIEW_TYPES = ['grid'] as const;
+// Server-supported view types. Creation UI enables each renderer separately.
+export const VIEW_TYPES = ['grid', 'form'] as const;
 
 // DoS guards for untrusted view options (see review item 4b).
 const MAX_FILTER_DEPTH = 10;
