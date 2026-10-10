@@ -42,11 +42,19 @@ membership. The scope module only imports the Role type to avoid a runtime cycle
 
 ## Delivery boundary and consequences
 
-I1 supplies persistence, mint-time validation, resolution metadata and the pure
-scope gate. I2 wires the gate into shared authorization and REST/MCP request
-lifetimes, filters Base lists, restricts credential creation and other unsafe
-procedures, and supplies explicit UI defaults. The I1 scope gate alone does not
-claim to enforce restrictions on bearer requests until that wiring is delivered.
+REST and MCP now run their complete asynchronous handlers inside the resolved
+scope. The HTTP wrapper awaits the scoped handler so asynchronous authorization
+errors retain the existing JSON envelope. Shared role checks reject identity
+mixing, cross-Base access and writes through read tokens before checking current
+membership. Direct record reads use the same table-role gate.
+
+Protected procedures apply a closed read/write allowlist and reject unknown
+paths and unexpected procedure types. API tokens cannot mint tokens, shares or
+invites. Base lists filter to the bound Base; bound tokens cannot create Bases.
+Browser sessions have no token scope and retain their existing permissions.
+The settings UI explicitly supplies current Base/read/30 days by default and
+shows legacy tokens as all-Base/write/no-expiry. RSS and the public Skill document
+retain their separate read-only/public-document boundaries.
 
 No new runtime dependency or service is required. The generated migration is
 verified against a real legacy row in an isolated PostgreSQL schema; integration

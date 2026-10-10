@@ -27,7 +27,7 @@ export const SERVER_INFO = {
 } as const;
 
 export const SERVER_INSTRUCTIONS =
-  'Work with bases → tables → fields → records. Ids are opaque strings: discover them with list_bases / list_tables / list_fields before writing. Record cells are keyed by field id; call list_fields first. Mutations require the editor role on the base (delete base/table requires owner).';
+  'Work with bases → tables → fields → records. Ids are opaque strings: discover them with list_bases / list_tables / list_fields before writing. Record cells are keyed by field id; call list_fields first. Token base scope and read/write access limit every operation. Mutations require write access and the current editor role on the base (delete base/table requires owner). Only all-base write tokens can create bases.';
 
 // Escape hatch for protocol-level failures raised inside callTool: they must
 // surface as JSON-RPC errors, unlike tool execution failures (see below).

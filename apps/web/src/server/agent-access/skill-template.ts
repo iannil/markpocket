@@ -22,7 +22,7 @@ markpocket is a self-hosted database (an Airtable you own): **Base → Table →
 Two environment facts you need from the user (both come from their markpocket instance):
 
 - \`MARKPOCKET_URL\` — this instance's origin: \`${origin}\`
-- \`MARKPOCKET_TOKEN\` — a personal API token (created in the web UI: any base → Settings → Agents). The token carries its creator's permissions: viewer can read, editor can write, owner can delete bases/tables.
+- \`MARKPOCKET_TOKEN\` — a personal API token (created in the web UI: any base → Settings → Agents). Choose Current base or All accessible bases, Read or Read & write, and a 1–365 day lifetime or Never expires. Defaults are current base/read/30 days. A token is limited by both its scope and its creator's current role: viewer can read, editor can write, owner can delete bases/tables. Bound tokens cannot create bases; read tokens cannot write. Older tokens retain all-base/write/no-expiry access.
 
 Every request: \`Authorization: Bearer $MARKPOCKET_TOKEN\`. Rate limit: 120 requests/minute/token (HTTP 429 with a Retry-After).
 
@@ -61,7 +61,7 @@ curl -s -H "Authorization: Bearer $MARKPOCKET_TOKEN" \\
   "$MARKPOCKET_URL/api/v1/tables/$TABLE_ID/records?viewId=$VIEW_ID&limit=50"
 \`\`\`
 
-Errors are \`{ "error": { "code", "message" } }\`; 401 = bad token, 403 = missing role, 404 = wrong id.
+Errors are \`{ "error": { "code", "message" } }\`; 401 = invalid, expired or revoked token, 403 = missing role or token scope, 404 = wrong id.
 
 ### Write semantics
 
@@ -91,7 +91,7 @@ Client config (Claude Code / Cursor style):
 
 ## RSS feeds (read-only subscriptions)
 
-Every public share **pinned to a view** also exposes a feed: \`${origin}/feed/{shareToken}?limit=50\` (RSS 2.0, newest records first). Share tokens are created in the web UI (Settings → Members → Public share links) and expire with the share.
+Every public share **pinned to a view** also exposes a feed: \`${origin}/feed/{shareToken}?limit=50\` (RSS 2.0, newest records first). Share tokens are created in the web UI (Settings → Members → Public share links) and expire with the share. An API Bearer token cannot replace a share token. This skill document is public and grants no data access.
 
 ## Field types
 

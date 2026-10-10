@@ -10,7 +10,7 @@ type Params = { params: Promise<{ fieldId: string }> };
 // structure is validated by the field router.
 export async function PATCH(req: Request, { params }: Params) {
   const { fieldId } = await params;
-  return handleAgentRequest(req, async ({ caller }) => {
+  return handleAgentRequest(req, async ({ caller, req }) => {
     const body = await parseBody(
       req,
       z

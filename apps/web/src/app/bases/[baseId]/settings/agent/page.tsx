@@ -29,6 +29,10 @@ export default function AgentTab() {
   const shares = trpc.share.list.useQuery({ baseId });
 
   const [newName, setNewName] = useState('');
+  const [tokenScope, setTokenScope] = useState('current');
+  const [access, setAccess] = useState<'read' | 'write'>('read');
+  const [expiry, setExpiry] = useState('days');
+  const [expiryDays, setExpiryDays] = useState('30');
   const [creating, setCreating] = useState(false);
   // The plaintext token exists only in this piece of state until the dialog
   // closes — it is never persisted, listed, or logged.
@@ -73,27 +77,81 @@ export default function AgentTab() {
         <h2 className="mb-1 text-sm font-semibold">API tokens</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Bearer tokens for the REST API (<code>/api/v1</code>) and MCP server. A token acts as you
-          — it can reach every base you are a member of, with your role. Tokens never expire; revoke
-          anything you no longer use. The full value is shown once at creation and cannot be
-          recovered.
+          within the scope and access you choose, limited by your current membership role. New
+          tokens default to this base, read access and 30 days. The full value is shown once at
+          creation and cannot be recovered.
         </p>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             setCreating(true);
-            createToken.mutate({ name: newName });
+            createToken.mutate({
+              name: newName,
+              baseId: tokenScope === 'current' ? baseId : null,
+              access,
+              expiresInDays: expiry === 'never' ? null : Number(expiryDays),
+            });
           }}
-          className="flex items-center gap-2"
+          className="flex flex-wrap items-end gap-2"
         >
           <input
+            aria-label="Token name"
             required
             minLength={1}
             maxLength={64}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="token name (e.g. my-laptop)"
-            className="h-8 w-56 flex-1 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-8 min-w-0 w-full sm:w-56 sm:flex-1 rounded-md border border-input bg-background px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Scope
+            <select
+              value={tokenScope}
+              onChange={(e) => setTokenScope(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            >
+              <option value="current">Current base</option>
+              <option value="all">All accessible bases</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Access
+            <select
+              value={access}
+              onChange={(e) => setAccess(e.target.value as 'read' | 'write')}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            >
+              <option value="read">Read</option>
+              <option value="write">Read &amp; write</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Expiry
+            <select
+              value={expiry}
+              onChange={(e) => setExpiry(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            >
+              <option value="days">Expires after</option>
+              <option value="never">Never expires</option>
+            </select>
+          </label>
+          {expiry === 'days' && (
+            <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+              Days until expiry
+              <input
+                type="number"
+                min={1}
+                max={365}
+                step={1}
+                required
+                value={expiryDays}
+                onChange={(e) => setExpiryDays(e.target.value)}
+                className="h-8 w-28 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              />
+            </label>
+          )}
           <button
             type="submit"
             disabled={creating}
@@ -145,9 +203,22 @@ export default function AgentTab() {
               <li key={t.id} className="flex items-center gap-2 border-b border-border py-2.5">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{t.name}</div>
-                  <div className="flex items-baseline gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {t.baseId === null
+                      ? 'All bases'
+                      : t.baseId === baseId
+                        ? 'Current base'
+                        : `Base ${t.baseId}`}
+                    {' · '}
+                    {t.access === 'write' ? 'Read & write' : 'Read'}
+                    {' · '}
+                    {t.expiresAt
+                      ? `${new Date(t.expiresAt).getTime() <= Date.now() ? 'Expired' : 'Expires'} ${new Date(t.expiresAt).toLocaleDateString()}`
+                      : 'Never expires'}
+                  </p>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
                     <CodeLine text={`${t.tokenPrefix}…`} />
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                    <span className="text-[10px] text-muted-foreground">
                       created {new Date(t.createdAt).toLocaleDateString()}
                       {t.lastUsedAt
                         ? ` · last used ${new Date(t.lastUsedAt).toLocaleString()}`

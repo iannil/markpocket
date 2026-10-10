@@ -56,13 +56,14 @@ function tool<S extends z.ZodType>(def: McpToolDefinition<S>): RegisteredMcpTool
 export const MCP_TOOLS: RegisteredMcpTool[] = [
   tool({
     name: 'list_bases',
-    description: 'List every base the API token’s user can see. Start here to discover base ids.',
+    description:
+      'List bases allowed by both token scope and current membership. Start here to discover base ids.',
     input: z.object({}),
     execute: ({ caller }) => caller.base.list(),
   }),
   tool({
     name: 'create_base',
-    description: 'Create a new base owned by the token’s user.',
+    description: 'Create a new base owned by the token’s user. Requires an all-base write token.',
     input: z.object({ name: nameSchema }),
     execute: ({ caller }, a) => caller.base.create(a),
   }),

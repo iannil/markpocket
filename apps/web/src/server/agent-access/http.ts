@@ -9,6 +9,7 @@ import {
   readEnvNonNegativeInt,
 } from '@/lib/http-guards';
 import { resolveBearerToken } from './tokens';
+import { runWithTokenScope } from './scope';
 import { agentCaller, type AgentCaller } from './agent-caller';
 
 // One shared limiter instance across /api/v1 and /api/mcp so a client fanning
@@ -97,11 +98,9 @@ export async function handleAgentRequest(
   }
 
   try {
-    return await handler({
-      caller: agentCaller(resolved.userId),
-      userId: resolved.userId,
-      req,
-    });
+    return await runWithTokenScope(resolved, () =>
+      handler({ caller: agentCaller(resolved.userId), userId: resolved.userId, req }),
+    );
   } catch (err) {
     return errorResponse(err);
   }

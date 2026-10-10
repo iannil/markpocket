@@ -11,11 +11,14 @@ import { assertRole } from '@/lib/roles';
 import { publishBaseChange, publishKick } from '../../realtime/publish';
 import { protectedProcedure, router } from '../init';
 import { removeAttachmentFiles } from './table';
+import { currentTokenScope } from '../../agent-access/scope';
+import { assertAgentProcedure } from '../../agent-access/policy';
 
 export const baseRouter = router({
   // Only bases the user is a member of — membership is the isolation boundary.
   list: protectedProcedure.query(async ({ ctx }) => {
     const ws = await ensureDefaultWorkspace();
+    const scope = currentTokenScope();
     return db
       .select({
         id: base.id,
@@ -27,7 +30,13 @@ export const baseRouter = router({
       })
       .from(base)
       .innerJoin(baseMember, eq(baseMember.baseId, base.id))
-      .where(and(eq(base.workspaceId, ws.id), eq(baseMember.userId, ctx.session.user.id)))
+      .where(
+        and(
+          eq(base.workspaceId, ws.id),
+          eq(baseMember.userId, ctx.session.user.id),
+          scope?.baseId != null ? eq(base.id, scope.baseId) : undefined,
+        ),
+      )
       .orderBy(desc(base.createdAt));
   }),
 
@@ -40,6 +49,7 @@ export const baseRouter = router({
   create: protectedProcedure
     .input(z.object({ name: z.string().trim().min(1).max(64) }))
     .mutation(async ({ ctx, input }) => {
+      assertAgentProcedure('base.create', 'mutation');
       const ws = await ensureDefaultWorkspace();
       // base + owner membership atomically — no ownerless base can survive a failure.
       return db.transaction(async (tx) => {

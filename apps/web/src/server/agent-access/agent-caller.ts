@@ -12,8 +12,9 @@ export type AgentCaller = ReturnType<typeof appRouter.createCaller>;
  * no procedure or helper under server/ calls headers()/cookies() itself).
  *
  * Because the session synthesizes a real user id, ALL role checks
- * (assertRole / assertTableRole inside each procedure) run unchanged: a token
- * has exactly its creator's authority, no more.
+ * (assertRole / assertTableRole inside each procedure) intersect current
+ * membership with the AsyncLocalStorage token scope set by handleAgentRequest.
+ * The protected-procedure allowlist also rejects unpublished capabilities.
  */
 export function agentCaller(userId: string) {
   return appRouter.createCaller({ session: { user: { id: userId } } } as unknown as Context);

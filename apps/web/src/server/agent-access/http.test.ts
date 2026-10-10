@@ -11,13 +11,19 @@ vi.mock('@/server/agent-access/agent-caller', () => ({
 }));
 
 import { handleAgentRequest, jsonOk, readJsonObject } from './http';
+import { currentTokenScope } from './scope';
 
 let tokenIdSeq = 0;
 function authorize(userId = 'u1') {
   // Unique token id per call: the module-scope rate limiter is shared, and a
   // repeated id would let one test's hits bleed into the next.
   tokenIdSeq += 1;
-  tokensMock.resolveBearerToken.mockResolvedValue({ tokenId: `t${tokenIdSeq}`, userId });
+  tokensMock.resolveBearerToken.mockResolvedValue({
+    tokenId: `t${tokenIdSeq}`,
+    userId,
+    baseId: null,
+    access: 'write',
+  });
 }
 
 function req(url = 'http://app.local/api/v1/bases', init: RequestInit = {}) {
@@ -123,5 +129,25 @@ describe('readJsonObject', () => {
     await expect(
       readJsonObject(new Request('http://x', { body: '[1,2]', method: 'POST' })),
     ).rejects.toThrow(TRPCError);
+  });
+});
+
+describe('async token scope', () => {
+  it('keeps resolved scope across awaited work and catches async authorization errors', async () => {
+    const scope = { tokenId: 'async-scope', userId: 'u1', baseId: 'b1', access: 'read' };
+    tokensMock.resolveBearerToken.mockResolvedValue(scope);
+    const response = await handleAgentRequest(
+      req('http://app.local/api/mcp', { method: 'POST' }),
+      async () => {
+        await Promise.resolve();
+        expect(currentTokenScope()).toEqual(scope);
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Scope denied' });
+      },
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: { code: 'FORBIDDEN', message: 'Scope denied' },
+    });
+    expect(currentTokenScope()).toBeUndefined();
   });
 });

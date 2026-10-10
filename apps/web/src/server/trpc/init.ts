@@ -2,6 +2,8 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import { headers } from 'next/headers';
 
 import { auth } from '../auth';
+import { assertAgentProcedure } from '../agent-access/policy';
+import { currentTokenScope } from '../agent-access/scope';
 import { isPgBusyError, PG_BUSY_MESSAGE } from '../db/pg-errors';
 
 // Single context shared by the fetch-adapter route handler and the RSC caller.
@@ -52,9 +54,14 @@ const t = initTRPC.context<Context>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+export const protectedProcedure = t.procedure.use(({ ctx, next, path, type }) => {
   if (!ctx.session) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Not signed in' });
   }
+  const scope = currentTokenScope();
+  if (scope && scope.userId !== ctx.session.user.id) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Token identity mismatch' });
+  }
+  assertAgentProcedure(path, type);
   return next({ ctx: { session: ctx.session } });
 });

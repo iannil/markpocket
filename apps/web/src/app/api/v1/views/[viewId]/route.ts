@@ -10,7 +10,7 @@ type Params = { params: Promise<{ viewId: string }> };
 // is validated by the view router's viewOptionsSchema (structure/depth/size).
 export async function PATCH(req: Request, { params }: Params) {
   const { viewId } = await params;
-  return handleAgentRequest(req, async ({ caller }) => {
+  return handleAgentRequest(req, async ({ caller, req }) => {
     const body = await parseBody(
       req,
       z

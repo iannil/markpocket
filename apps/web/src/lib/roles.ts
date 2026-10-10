@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 
 import { baseMember, table } from '@/server/db/schema';
 import { db } from '@/server/db';
+import { assertTokenCapability, currentTokenScope } from '@/server/agent-access/scope';
 
 export type Role = 'owner' | 'editor' | 'viewer';
 
@@ -20,6 +21,11 @@ export async function getMembership(baseId: string, userId: string): Promise<Rol
 }
 
 export async function assertRole(baseId: string, userId: string, minRole: Role): Promise<void> {
+  const scope = currentTokenScope();
+  if (scope && scope.userId !== userId) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Token identity mismatch' });
+  }
+  assertTokenCapability(baseId, minRole);
   const role = await getMembership(baseId, userId);
   if (!role) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this base' });

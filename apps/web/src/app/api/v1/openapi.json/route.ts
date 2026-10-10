@@ -39,7 +39,7 @@ const spec = {
     title: 'markpocket agent API',
     version: '1.0.0',
     description:
-      'REST surface for AI agents and scripts. Auth: `Authorization: Bearer mpk_…` (personal API token, acts as its creator — every request re-checks base membership and role). Rate limit: 120 requests/minute/token (429 on breach). Errors: `{ "error": { "code", "message" } }`. Mutations are also available as MCP tools at /api/mcp.',
+      'REST surface for AI agents and scripts. Auth: `Authorization: Bearer mpk_…` (personal API token, acts as its creator — every request intersects current base membership and role with the token’s base and read/write scope; expired or revoked tokens return 401, scope violations return 403; base-bound tokens cannot create bases). Rate limit: 120 requests/minute/token (429 on breach). Errors: `{ "error": { "code", "message" } }`. Mutations are also available as MCP tools at /api/mcp.',
   },
   servers: [{ url: '/' }],
   components: {

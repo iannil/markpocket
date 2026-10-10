@@ -14,12 +14,16 @@ markpocket instances expose their data to AI agents and scripts through four cha
 Personal Bearer tokens are created in the web UI: any base → **Settings → Agents**. 
 
 - Format: `Authorization: Bearer mpk_<48 hex>` — the full value is shown **once** at creation.
-- **A token acts as its creator**: every request re-runs the same base-membership and role checks (`assertRole` / `assertTableRole`) as a signed-in user. Viewer can read; editor can write records/structure; owner can delete bases/tables. There is no narrower scope in v1 (see ADR-0010 alternatives).
+- **A token acts as its creator**: every request re-runs the same base-membership and role checks (`assertRole` / `assertTableRole`) as a signed-in user. Viewer can read; editor can write records/structure; owner can delete bases/tables. Token scope further restricts those current roles (see [ADR-0014](../adr/0014-scoped-agent-tokens.md)); it never grants membership or preserves a role after downgrade.
+- Choose **Current base** or **All accessible bases**, **Read** or **Read & write**, and a lifetime of **1–365 days** or explicitly **Never expires**. New UI tokens default to current base/read/30 days. Lists display each token's scope, access and expiry.
+- Migration preserves existing tokens as **All bases · Read & write · Never expires**. Legacy `token.create` calls that omit scope/expiry options retain that behavior; explicit callers use `baseId` (null for all), `access` (`read`/`write`) and `expiresInDays` (1–365 or null).
+- REST and MCP share request scope enforcement. `list_bases` only returns visible bases within scope; a bound token cannot create a base. Read tokens can use MCP read tools over POST but cannot mutate. Token callers can only use the published CRUD procedure allowlist; creating tokens, shares, invites and other credentials is unavailable even to all-base write tokens.
+- Expiry equal to or before the current time is rejected with 401, as are revoked tokens. Scope violations return REST 403 or an MCP tool result with `isError: true` and `FORBIDDEN`.
 - Revoke any time from the same settings page; revoked tokens fail immediately with 401.
 - Rate limit: **120 requests/minute/token** across all channels (`AGENT_RATE_LIMIT_PER_MIN`, `0` disables). Breaches return 429.
 - Request body cap: 1MB per request (413 beyond).
 
-Errors are always `{"error":{"code","message"}}` with standard HTTP statuses (401 bad token, 403 missing role, 404 unknown id, 400 validation).
+Errors are always `{"error":{"code","message"}}` with standard HTTP statuses (401 invalid/expired/revoked token, 403 missing role or scope, 404 unknown id, 400 validation).
 
 ## REST API
 
@@ -85,6 +89,7 @@ Every **public share link pinned to a view** also exposes a feed:
 GET /feed/{shareToken}?limit=50     # RSS 2.0, max 100, newest records first
 ```
 
+- API Bearer tokens cannot be used as share tokens. RSS keeps its existing public-share read boundary; the public Skill document grants no data access.
 - Shares are created in the web UI (Settings → Members → Public share links); the feed inherits the share's lifetime (expiry, view deleted → 404) and the view's filter and hidden-field projection. Shares not pinned to a view have no feed.
 - Item title = first text field (grid's display heuristic), description = visible field summary, guid = record id, link = the share page.
 
