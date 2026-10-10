@@ -255,7 +255,9 @@ export function FilterPanel({
               }}
             >
               <SelectTrigger className="h-7 w-32 rounded-md border-border text-sm">
-                <SelectValue />
+                <SelectValue>
+                  {ops.find((op) => op.value === cond.operator)?.label ?? cond.operator}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {ops.map((o) => (

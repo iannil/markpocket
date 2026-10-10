@@ -17,6 +17,10 @@ interface ViewLike {
 }
 
 export function TableView({ baseId, tableId }: { baseId: string; tableId: string }) {
+  return <TableViewSession key={`${baseId}:${tableId}`} baseId={baseId} tableId={tableId} />;
+}
+
+function TableViewSession({ baseId, tableId }: { baseId: string; tableId: string }) {
   const utils = trpc.useUtils();
   const fieldsQuery = trpc.field.list.useQuery({ tableId });
   const viewsQuery = trpc.view.list.useQuery({ tableId });
@@ -32,6 +36,11 @@ export function TableView({ baseId, tableId }: { baseId: string; tableId: string
       ? selectedViewId
       : (views[0]?.id ?? null);
   const activeView = views.find((view) => view.id === activeViewId);
+  // Remember the initial/fallback selection too: a refetch may reorder views
+  // with equal orderIndex, but must not unmount the current editor.
+  if (!viewsQuery.isLoading && !viewsQuery.isError && selectedViewId !== activeViewId) {
+    setSelectedViewId(activeViewId);
+  }
 
   if (fieldsQuery.isLoading || viewsQuery.isLoading) {
     return (

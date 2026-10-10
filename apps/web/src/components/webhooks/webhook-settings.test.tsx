@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   role: 'owner',
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   resume: vi.fn(),
   remove: vi.fn(),
   retry: vi.fn(),
+  create: vi.fn(),
 }));
 vi.mock('@/lib/trpc/client', () => ({
   trpc: {
@@ -61,7 +62,21 @@ vi.mock('@/lib/trpc/client', () => ({
           };
         },
       },
-      create: { useMutation: () => ({ mutate: vi.fn() }) },
+      create: {
+        useMutation: (options: { onSuccess: (value: { secret: string }) => void }) => {
+          const [isPending, setPending] = useState(false);
+          return {
+            isPending,
+            mutate: (input: unknown) => {
+              setPending(true);
+              void mocks.create(input).then((value: { secret: string }) => {
+                options.onSuccess(value);
+                setPending(false);
+              });
+            },
+          };
+        },
+      },
       pause: { useMutation: () => ({ mutate: vi.fn() }) },
       resume: { useMutation: () => ({ mutate: mocks.resume }) },
       remove: { useMutation: () => ({ mutate: mocks.remove, error: mocks.removeError }) },
@@ -76,6 +91,7 @@ vi.mock('@/lib/trpc/client', () => ({
   },
 }));
 import { WebhookSettings, WebhookStateNotice } from './webhook-settings';
+import { useState } from 'react';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.role = 'owner';
@@ -85,6 +101,32 @@ beforeEach(() => {
   mocks.slots = 1;
 });
 afterEach(cleanup);
+it('locks the creation draft until a deferred create completes', async () => {
+  let finish!: (value: { secret: string }) => void;
+  mocks.create.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(<WebhookSettings baseId="base" />);
+  const url = screen.getByLabelText('HTTPS endpoint') as HTMLInputElement;
+  fireEvent.change(url, { target: { value: 'https://example.com/first' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create endpoint' }));
+  expect(mocks.create).toHaveBeenCalledWith({
+    tableId: 'table',
+    url: 'https://example.com/first',
+    events: ['record.changed'],
+  });
+  expect(url.disabled).toBe(true);
+  expect((screen.getByLabelText('record.changed') as HTMLInputElement).disabled).toBe(true);
+  expect((screen.getByLabelText('record.deleted') as HTMLInputElement).disabled).toBe(true);
+  await act(async () => finish({ secret: 'created-secret' }));
+  expect(url.disabled).toBe(false);
+  expect(url.value).toBe('');
+  fireEvent.change(url, { target: { value: 'https://example.com/next' } });
+  expect(url.value).toBe('https://example.com/next');
+});
 it.each(['Remove', 'Rotate secret'])(
   'shows %s errors inside the active confirmation dialog',
   (action) => {

@@ -6,6 +6,7 @@ import type { getPublicForm } from '@/server/forms/submission';
 
 export type PublicFormConfig = Awaited<ReturnType<typeof getPublicForm>>;
 type Value = string | number | boolean | string[];
+const RETRY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function PublicForm({
   token,
@@ -19,7 +20,7 @@ export function PublicForm({
   const [values, setValues] = useState<Record<string, Value>>({});
   const [pending, setPending] = useState(false);
   const sending = useRef(false);
-  const [attempt, setAttempt] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState<{ body: string; startedAt: number } | null>(null);
   const [needsNew, setNeedsNew] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -33,6 +34,13 @@ export function PublicForm({
     if (sending.current || preview) return;
     const confirmed = (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'new';
     if (needsNew && !confirmed) return;
+    if (attempt && !confirmed && Date.now() - attempt.startedAt >= RETRY_WINDOW_MS) {
+      setNeedsNew(true);
+      setError(
+        'The seven-day retry window has expired. Your earlier response may already have been received.',
+      );
+      return;
+    }
     const cells: Record<string, Value> = {};
     for (const field of config.fields) {
       const value = values[field.id];
@@ -41,9 +49,15 @@ export function PublicForm({
         cells[field.id] = field.type === 'number' ? Number(value) : value;
       }
     }
-    const body =
-      attempt && !confirmed ? attempt : JSON.stringify({ requestId: crypto.randomUUID(), cells });
-    setAttempt(body);
+    const nextAttempt =
+      attempt && !confirmed
+        ? attempt
+        : {
+            body: JSON.stringify({ requestId: crypto.randomUUID(), cells }),
+            startedAt: Date.now(),
+          };
+    const { body } = nextAttempt;
+    setAttempt(nextAttempt);
     setNeedsNew(false);
     sending.current = true;
     setPending(true);

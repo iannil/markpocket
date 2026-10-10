@@ -6,6 +6,71 @@ import { withDbFixture } from '../../testing/pg-fixture';
 describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('webhook management', () => {
   beforeEach(() => vi.stubEnv('WEBHOOK_ENCRYPTION_KEY', randomBytes(32).toString('base64')));
   afterEach(() => vi.unstubAllEnvs());
+  it.each(
+    (['rotate', 'pause', 'resume'] as const).flatMap((action) =>
+      [0, 4].map((attempts) => ({ action, attempts })),
+    ),
+  )(
+    '$action invalidates attempt $attempts without stranding exhausted events',
+    async ({ action, attempts }) =>
+      withDbFixture(async (f) => {
+        const { db } = await import('../../db');
+        const { webhookDelivery } = await import('../../db/schema');
+        const worker = await import('../../webhooks/worker');
+        const { signWebhook } = await import('../../webhooks/crypto');
+        const sub = await f.caller.webhook.create({
+          tableId: f.tableId,
+          url: 'https://example.com/hook',
+          events: ['record.changed'],
+        });
+        await f.caller.record.create({ tableId: f.tableId });
+        await db
+          .update(webhookDelivery)
+          .set({ attempts })
+          .where(eq(webhookDelivery.subscriptionId, sub.id));
+        const [lease] = await worker.claimWebhookDeliveries(undefined, sub.id);
+        expect(lease.attempts).toBe(attempts + 1);
+        let secret = sub.secret;
+        if (action === 'rotate') secret = (await f.caller.webhook.rotate({ id: sub.id })).secret;
+        else if (action === 'pause') await f.caller.webhook.pause({ id: sub.id });
+        else await f.caller.webhook.resume({ id: sub.id, acknowledgeGap: false });
+        expect(await worker.acknowledgeWebhookDelivery(lease, { status: 200 })).toBe(false);
+        const [invalidated] = await db
+          .select()
+          .from(webhookDelivery)
+          .where(eq(webhookDelivery.id, lease.id));
+        expect(invalidated).toMatchObject({
+          state: attempts === 4 ? 'dead' : 'pending',
+          attempts: attempts + 1,
+          leaseUntil: null,
+        });
+        expect(invalidated.leaseToken).not.toBe(lease.leaseToken);
+        if (attempts === 4) {
+          expect(await worker.claimWebhookDeliveries(undefined, sub.id)).toEqual([]);
+          await f.caller.webhook.retry({ deliveryId: lease.id });
+          const [retried] = await db
+            .select()
+            .from(webhookDelivery)
+            .where(eq(webhookDelivery.id, lease.id));
+          expect(retried).toMatchObject({ id: lease.id, state: 'pending', attempts: 0 });
+        }
+        if (action === 'pause')
+          await f.caller.webhook.resume({ id: sub.id, acknowledgeGap: false });
+        const transport = vi.fn(
+          async (_url: string, body: string, headers: Record<string, string>) => {
+            expect(JSON.parse(body).eventId).toBe(lease.id);
+            expect(headers['X-MarkPocket-Signature']).toBe(
+              `sha256=${signWebhook(secret, headers['X-MarkPocket-Timestamp'], body)}`,
+            );
+            return { status: 200 };
+          },
+        );
+        expect(
+          (await worker.runWebhookBatch({ subscriptionId: sub.id, transport })).succeeded,
+        ).toBe(1);
+        expect(transport).toHaveBeenCalledOnce();
+      }),
+  );
   it('refuses dead retry when pending/leased queue is full', async () =>
     withDbFixture(async (f) => {
       const { db } = await import('../../db');

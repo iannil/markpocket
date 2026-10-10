@@ -90,6 +90,25 @@ it('owns view selection and falls back when the selected view disappears', () =>
   ui.rerender(<TableView baseId="b1" tableId="t1" />);
   expect(state.grid).toHaveBeenLastCalledWith(expect.objectContaining({ viewId: 'v1' }));
 });
+it('retains the initial Form through refetch reorder and pins the fallback after deletion', () => {
+  const form = { id: 'form1', name: 'Contact', type: 'form', options: {} };
+  const grid = state.views[0]!;
+  const board = { id: 'board1', name: 'Board', type: 'kanban', options: {} };
+  state.views = [form, grid, board];
+  const ui = render(<TableView baseId="b1" tableId="t1" />);
+  state.views = [board, grid, { ...form, options: { form: { title: 'Updated' } } }];
+  ui.rerender(<TableView baseId="b1" tableId="t1" />);
+  expect(screen.getByText('Form renderer')).toBeDefined();
+  expect(state.kanban).not.toHaveBeenCalled();
+  state.views = [grid, board];
+  ui.rerender(<TableView baseId="b1" tableId="t1" />);
+  state.views = [board, grid];
+  ui.rerender(<TableView baseId="b1" tableId="t1" />);
+  expect(state.grid).toHaveBeenLastCalledWith(expect.objectContaining({ viewId: grid.id }));
+  expect(screen.queryByText('Kanban renderer')).toBeNull();
+  ui.rerender(<TableView baseId="b1" tableId="t2" />);
+  expect(screen.getByText('Kanban renderer')).toBeDefined();
+});
 it('never mounts Grid for Form drafts or unsupported view types', () => {
   state.views = [{ id: 'form1', name: 'Contact', type: 'form', options: {} }];
   const ui = render(<TableView baseId="b1" tableId="t1" />);

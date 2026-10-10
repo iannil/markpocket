@@ -72,7 +72,7 @@ function DetailSession({ tableId, recordId, readOnly, onClose }: Props) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="top-0 right-0 left-auto h-dvh max-h-dvh w-full max-w-full translate-x-0 translate-y-0 rounded-none sm:max-w-lg">
+      <DialogContent className="top-0 right-0 left-auto h-dvh max-h-dvh w-full max-w-full translate-x-0 translate-y-0 content-start rounded-none sm:max-w-lg">
         <DialogTitle>Record details</DialogTitle>
         <DialogDescription>{locked ? 'Read-only record' : 'Edit record fields'}</DialogDescription>
         {(record.isLoading || fields.isLoading) && <p role="status">Loading record…</p>}

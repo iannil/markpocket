@@ -121,6 +121,7 @@ function TableWebhooks({ tableId }: { tableId: string }) {
             className="mt-1 w-full min-w-0 rounded-md border bg-background p-2"
             type="url"
             required
+            disabled={create.isPending}
             maxLength={2048}
             placeholder="https://receiver.example/webhook"
             value={url}
@@ -132,6 +133,7 @@ function TableWebhooks({ tableId }: { tableId: string }) {
             <label className="text-xs" key={event}>
               <input
                 type="checkbox"
+                disabled={create.isPending}
                 checked={events.includes(event)}
                 onChange={(e) =>
                   setEvents(
@@ -290,7 +292,7 @@ function EndpointCard({ endpoint, tableId }: { endpoint: Endpoint; tableId: stri
       {deliveries.error && <p role="alert">{deliveries.error.message}</p>}
       {deliveries.data?.length === 0 && (
         <p className="text-xs text-muted-foreground">
-          No deliveries on this page. Terminal logs are retained for 7 days.
+          No deliveries on this page. Terminal logs are retained for 7 days from event occurrence.
         </p>
       )}
       <ul className="space-y-2">

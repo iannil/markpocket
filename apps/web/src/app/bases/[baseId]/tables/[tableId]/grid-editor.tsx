@@ -30,7 +30,7 @@ import { expressionToDisplay } from '@/lib/expression-display';
 import { FieldType, type SelectOption } from '@/lib/field-types';
 import { toast } from '@/lib/toast';
 import { trpc } from '@/lib/trpc/client';
-import type { SortSpec, ViewOptions } from '@/lib/view-ast';
+import type { SortSpec } from '@/lib/view-ast';
 import type { FieldLike, RecordLike } from './cell-renderers';
 import { CellHistoryDock } from './cell-history-dock';
 import { formatClipboardValue } from './clipboard';
@@ -51,6 +51,7 @@ import {
 } from './grid-row';
 import { nextRowRequest } from './navigation';
 import { useGridPaste } from './use-grid-paste';
+import { useGridViewOptions } from './use-grid-view-options';
 import { LinkTablesProvider } from './link-cell';
 import {
   PAGE_SIZE,
@@ -154,9 +155,10 @@ export function GridEditor({
   const { data: usersData } = trpc.auth.listUsers.useQuery();
   const { data: tablesData } = trpc.table.list.useQuery({ baseId });
   const presence = usePresence(baseId);
+  const { viewOptions, patchOptions } = useGridViewOptions(tableId, viewId, options);
   const activeView = useMemo(
-    () => ({ id: viewId, name: viewName, options }),
-    [viewId, viewName, options],
+    () => ({ id: viewId, name: viewName, options: viewOptions }),
+    [viewId, viewName, viewOptions],
   );
   const users = useMemo(() => usersData ?? [], [usersData]);
   // Expression columns display `{Field Name}` tokens, never the stored UUIDs.
@@ -176,7 +178,6 @@ export function GridEditor({
   useBreadcrumbSetter([{ label: tableName ?? 'Table' }]);
 
   // Memoized: a fresh `{}`/array per render would break memoization downstream.
-  const viewOptions = useMemo(() => (activeView?.options ?? {}) as ViewOptions, [activeView]);
   const hiddenFields = useMemo(() => viewOptions.hiddenFields ?? [], [viewOptions]);
   const displayedFields = useMemo(
     () => fields.filter((f) => !hiddenFields.includes(f.id)),
@@ -419,32 +420,6 @@ export function GridEditor({
     onError: (err) => toast.error(err.message),
   });
   const deleteMutate = deleteRecord.mutate;
-  // Which option keys were requested since the last settled commit. View
-  // options are replaced wholesale by updateOptions, so onSuccess cannot
-  // tell a columnWidth-only commit from a filter change without this.
-  const pendingOptionKeysRef = useRef(new Set<string>());
-  const updateOptionsMut = trpc.view.updateOptions.useMutation({
-    onSuccess: () => {
-      utils.view.list.invalidate({ tableId });
-      // record.list reads filter/sort/group server-side, so those must
-      // refetch. Pure UI options (columnWidth, hiddenFields) must NOT: a
-      // 400ms-debounced column resize would otherwise refetch every loaded
-      // page of the table on each commit.
-      const rowAffecting = ['filter', 'sort', 'group'].some((k) =>
-        pendingOptionKeysRef.current.has(k),
-      );
-      pendingOptionKeysRef.current.clear();
-      if (rowAffecting) {
-        utils.record.list.invalidate({ tableId });
-        utils.record.groupCounts.invalidate({ tableId });
-      }
-    },
-    onError: (err) => {
-      pendingOptionKeysRef.current.clear();
-      toast.error(err.message);
-    },
-  });
-
   // Server-side columnWidth is authoritative ONLY at view switches (and the
   // initial resolve once views load). Within a view, remote columnWidth
   // updates — including the round-trip of our own debounced commit through
@@ -821,13 +796,6 @@ export function GridEditor({
         </div>
       </div>
     );
-  }
-
-  function patchOptions(patch: Partial<ViewOptions>) {
-    if (!activeView) return;
-    for (const k of Object.keys(patch)) pendingOptionKeysRef.current.add(k);
-    const next = { ...(activeView.options as ViewOptions), ...patch } as Record<string, unknown>;
-    updateOptionsMut.mutate({ id: activeView.id, options: next });
   }
 
   // Mutate the width ref OUTSIDE the state updater — updater functions must

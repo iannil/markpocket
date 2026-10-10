@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '../../db';
 import { webhookDelivery, webhookSubscription } from '../../db/schema';
@@ -56,7 +56,8 @@ async function invalidateLeases(tx: WebhookTx, id: string) {
   await tx
     .update(webhookDelivery)
     .set({
-      state: 'pending',
+      // Lifecycle changes invalidate the lease, not its automatic attempt budget.
+      state: sql`case when ${webhookDelivery.attempts} >= 5 then 'dead' else 'pending' end`,
       leaseUntil: null,
       leaseToken: randomUUID(),
       nextAttemptAt: new Date(),
