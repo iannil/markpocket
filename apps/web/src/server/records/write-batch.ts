@@ -13,7 +13,8 @@ import { writeCellInTransaction } from './write-cell';
 export const batchInputSchema = z
   .object({
     tableId: z.string().min(1),
-    requestId: z.string().uuid(),
+    // PostgreSQL UUID equality ignores hex casing; the advisory key must do so too.
+    requestId: z.string().uuid().toLowerCase(),
     rows: z
       .array(
         z.object({

@@ -29,6 +29,51 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('batch writes', () => {
       ).rejects.toMatchObject({ code: 'CONFLICT' });
     }));
 
+  it('serializes concurrent mixed-case request UUIDs into one receipt', async () =>
+    withDbFixture(async (f) => {
+      const { db } = await import('../db');
+      const { table, writeReceipt } = await import('../db/schema');
+      const input = {
+        tableId: f.tableId,
+        requestId: randomUUID(),
+        rows: [{ cells: { [f.textId]: 'one' } }],
+      };
+      let writes!: ReturnType<typeof Promise.allSettled>;
+      await db.transaction(async (tx) => {
+        await tx.select().from(table).where(eq(table.id, f.tableId)).for('update');
+        writes = Promise.allSettled([
+          f.caller.record.writeBatch(input),
+          f.caller.record.writeBatch({ ...input, requestId: input.requestId.toUpperCase() }),
+        ]);
+        for (let n = 0; n < 200; n++) {
+          await tx.execute(sql`select pg_stat_clear_snapshot()`);
+          const blocked = await tx.execute(
+            sql`WITH RECURSIVE blocked(pid) AS (SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND pg_backend_pid()=ANY(pg_blocking_pids(pid)) UNION SELECT a.pid FROM pg_stat_activity a JOIN blocked b ON b.pid=ANY(pg_blocking_pids(a.pid))) SELECT pid FROM blocked`,
+          );
+          if (blocked.length >= 2) return;
+          if (n === 199) throw Error('Expected both mixed-case requests to be blocked');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      });
+      const results = await writes;
+      expect(results.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
+      expect(results[0]).toEqual(results[1]);
+      expect((await f.caller.record.list({ tableId: f.tableId })).total).toBe(1);
+      expect(
+        await db
+          .select()
+          .from(writeReceipt)
+          .where(eq(writeReceipt.actorKey, `user:${f.userId}`)),
+      ).toHaveLength(1);
+      await expect(
+        f.caller.record.writeBatch({
+          ...input,
+          requestId: input.requestId.toUpperCase(),
+          rows: [{ cells: { [f.textId]: 'different' } }],
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+    }));
+
   it('enforces row, cell and UTF-8 byte budgets and viewer permissions', async () =>
     withDbFixture(async (f) => {
       const input = { tableId: f.tableId, requestId: randomUUID(), rows: [{ cells: {} }] };
