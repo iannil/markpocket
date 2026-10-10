@@ -15,6 +15,7 @@ import {
   viewOptionsSchema,
   type ViewOptions,
 } from '@/lib/view-ast';
+import { validateFormFields } from '@/lib/form-config';
 import { protectedProcedure, router } from '../init';
 
 // Field-liveness gate for view option configs (review N4). Returns the
@@ -109,6 +110,15 @@ export const viewRouter = router({
       const baseId = await baseIdFromTable(existing.tableId);
       if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
       await assertRole(baseId, ctx.session.user.id, 'editor');
+      if (existing.type !== 'form' && parsed.data.form !== undefined) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Form config requires a Form view' });
+      }
+      if (existing.type === 'form' && Object.keys(input.options).some((key) => key !== 'form')) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Form views only accept form configuration',
+        });
+      }
       const row = await mapBusyToConflict(
         db.transaction(async (tx) => {
           // Mirror of field.delete's lock (see field.ts): serializes this
@@ -146,6 +156,17 @@ export const viewRouter = router({
               code: 'BAD_REQUEST',
               message: `View config references unknown field(s): ${dead.join(', ')}`,
             });
+          }
+          if (existing.type === 'form' && parsed.data.form) {
+            const fields = await tx
+              .select({ id: field.id, type: field.type })
+              .from(field)
+              .where(eq(field.tableId, existing.tableId));
+            try {
+              validateFormFields(parsed.data.form, fields);
+            } catch {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: 'Form field is unavailable' });
+            }
           }
           const [updated] = await tx
             .update(view)

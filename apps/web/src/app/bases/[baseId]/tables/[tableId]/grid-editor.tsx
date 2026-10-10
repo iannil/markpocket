@@ -22,7 +22,6 @@ import {
 import { FilterPanel } from '@/components/view-config/filter-panel';
 import { SortMenu } from '@/components/view-config/sort-menu';
 import { ViewFieldsMenu } from '@/components/view-config/view-fields-menu';
-import { ViewTabs } from '@/components/view-config/view-tabs';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
@@ -60,11 +59,14 @@ import {
   type RecordListData,
 } from './use-paged-records';
 
-interface ViewLike {
-  id: string;
-  name: string;
-  type: string;
+interface GridEditorProps {
+  baseId: string;
+  tableId: string;
+  viewId: string;
+  viewName: string;
+  fields: FieldLike[];
   options: Record<string, unknown>;
+  readOnly: boolean;
 }
 
 // Field ids whose value decides WHICH rows the view returns (filter condition
@@ -138,30 +140,24 @@ function patchRecordCell(
   };
 }
 
-export function GridEditor({ baseId, tableId }: { baseId: string; tableId: string }) {
+export function GridEditor({
+  baseId,
+  tableId,
+  viewId,
+  viewName,
+  fields,
+  options,
+  readOnly: isViewer,
+}: GridEditorProps) {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
-  const {
-    data: fieldsData,
-    isLoading: fieldsLoading,
-    isError: fieldsError,
-  } = trpc.field.list.useQuery({ tableId });
-  const {
-    data: viewsData,
-    isLoading: viewsLoading,
-    isError: viewsError,
-  } = trpc.view.list.useQuery({ tableId });
   const { data: usersData } = trpc.auth.listUsers.useQuery();
-  const { data: myMembership } = trpc.member.me.useQuery({ baseId });
   const { data: tablesData } = trpc.table.list.useQuery({ baseId });
   const presence = usePresence(baseId);
-  // While membership is unresolved, render read-only: flashing the editable
-  // UI at a viewer invites type-to-edit mutations that the server must then
-  // reject. Editors see one extra frame of read-only — harmless.
-  const isViewer = myMembership?.role !== 'owner' && myMembership?.role !== 'editor';
-
-  const fields = useMemo(() => (fieldsData ?? []) as FieldLike[], [fieldsData]);
-  const views = useMemo(() => (viewsData ?? []) as ViewLike[], [viewsData]);
+  const activeView = useMemo(
+    () => ({ id: viewId, name: viewName, options }),
+    [viewId, viewName, options],
+  );
   const users = useMemo(() => usersData ?? [], [usersData]);
   // Expression columns display `{Field Name}` tokens, never the stored UUIDs.
   const expressionLabels = useMemo(() => {
@@ -179,20 +175,6 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const tableName = tablesData?.find((t) => t.id === tableId)?.name ?? null;
   useBreadcrumbSetter([{ label: tableName ?? 'Table' }]);
 
-  // --- All hooks above/below the loading/error early-returns (Rules of Hooks). ---
-  // activeViewId is DERIVED, not set in an effect: deriving makes it correct in
-  // the same render the views arrive, so the first record.list query fires with
-  // the final viewId. An effect would run one render later, leaving a
-  // viewId-less page-1 query in flight that the real query then duplicates.
-  // Stale selections (view deleted by someone else) fall back to the first view
-  // in the same render the views list updates.
-  const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
-  const activeViewId =
-    selectedViewId && views.some((v) => v.id === selectedViewId)
-      ? selectedViewId
-      : (views[0]?.id ?? null);
-
-  const activeView = views.find((v) => v.id === activeViewId) ?? null;
   // Memoized: a fresh `{}`/array per render would break memoization downstream.
   const viewOptions = useMemo(() => (activeView?.options ?? {}) as ViewOptions, [activeView]);
   const hiddenFields = useMemo(() => viewOptions.hiddenFields ?? [], [viewOptions]);
@@ -221,11 +203,8 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     retryRecords,
     anyFetching,
     showMore,
-  } = usePagedRecords(tableId, activeViewId ?? undefined, !viewsLoading && !viewsError);
-  const groupCounts = trpc.record.groupCounts.useQuery(
-    { tableId, viewId: activeViewId ?? '' },
-    { enabled: Boolean(activeViewId) && !viewsLoading && !viewsError },
-  );
+  } = usePagedRecords(tableId, viewId);
+  const groupCounts = trpc.record.groupCounts.useQuery({ tableId, viewId });
   const completeCounts = useMemo(
     () =>
       new Map(
@@ -246,7 +225,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
     null,
   );
-  const scopeKey = `${tableId}:${activeViewId ?? ''}:${JSON.stringify(viewOptions)}`;
+  const scopeKey = `${tableId}:${viewId ?? ''}:${JSON.stringify(viewOptions)}`;
   const paste = useGridPaste({
     tableId,
     scopeKey,
@@ -474,8 +453,8 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   // The ref remembers which view the current widths belong to.
   const lastWidthSyncViewIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (lastWidthSyncViewIdRef.current === activeViewId) return;
-    lastWidthSyncViewIdRef.current = activeViewId;
+    if (lastWidthSyncViewIdRef.current === viewId) return;
+    lastWidthSyncViewIdRef.current = viewId;
     const w = (viewOptions.columnWidth as Record<string, number> | undefined) ?? {};
     setWidths(w);
     widthsRef.current = w;
@@ -483,7 +462,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     // may run before the new view's options are populated (views query
     // refetch) — re-running on the options landing catches that. The ref
     // guard keeps every same-view re-run inert.
-  }, [activeViewId, viewOptions.columnWidth]);
+  }, [viewId, viewOptions.columnWidth]);
 
   const gridRef = useRef<HTMLDivElement>(null);
   const widthCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -590,7 +569,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   // meaningless and can land mid-table on the new one.
   useEffect(() => {
     gridRef.current?.scrollTo({ top: 0 });
-  }, [tableId, activeViewId]);
+  }, [tableId, viewId]);
 
   const linkTargetTableIds = useMemo(
     () => [
@@ -821,37 +800,6 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       cancelAnimationFrame(raf2);
     };
   }, [selectedCell]);
-
-  if (fieldsLoading || viewsLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="space-y-3">
-          <div className="h-8 w-96 animate-pulse rounded bg-muted" />
-          <div className="h-64 w-96 animate-pulse rounded bg-muted" />
-        </div>
-      </div>
-    );
-  }
-
-  if (fieldsError || viewsError) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-destructive">
-        <div>
-          {fieldsError ? 'Failed to load fields.' : 'Failed to load views.'} Please try again.
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            void utils.field.list.invalidate({ tableId });
-            void utils.view.list.invalidate({ tableId });
-          }}
-        >
-          Retry
-        </Button>
-      </div>
-    );
-  }
 
   if (recordsError) {
     return (
@@ -1153,14 +1101,6 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     // Toolbar fixed, table body is its own scroll region (no nested page scroll,
     // header stays sticky over the virtualized rows).
     <div className="flex h-full min-h-0 flex-col gap-2 p-4">
-      <ViewTabs
-        tableId={tableId}
-        views={views}
-        activeViewId={activeViewId}
-        onSelect={setSelectedViewId}
-        readOnly={isViewer}
-      />
-
       <div className="flex items-center justify-between">
         <h1 className="text-sm font-semibold">{activeView?.name ?? 'Grid'}</h1>
         {!isViewer && (

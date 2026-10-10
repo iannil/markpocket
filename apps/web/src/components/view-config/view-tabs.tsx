@@ -40,6 +40,7 @@ export function ViewTabs({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
     onError: (err) => toast.error(err.message),
   });
+  // Form/Kanban creation stays unavailable until their renderers ship.
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   // Inline rename (spec §7.2: inline over prompt/popover): the tab itself
@@ -110,7 +111,10 @@ export function ViewTabs({
           onSubmit={(e) => {
             e.preventDefault();
             if (!name.trim()) return;
-            create.mutate({ tableId, name: name.trim() }, { onSuccess: (nv) => onSelect(nv.id) });
+            create.mutate(
+              { tableId, name: name.trim(), type: 'grid' },
+              { onSuccess: (nv) => onSelect(nv.id) },
+            );
             setAdding(false);
             setName('');
           }}

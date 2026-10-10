@@ -2,6 +2,7 @@
 // mutation boundary (routers/view.updateOptions) and tolerate legacy rows.
 
 import { z } from 'zod';
+import { formConfigSchema, type FormConfig } from './form-config';
 
 // Operators compileFilter knows how to compile — anything else is rejected at
 // write time instead of being silently dropped at query time.
@@ -68,6 +69,7 @@ export interface GroupSpec {
 }
 
 export interface ViewOptions {
+  form?: FormConfig;
   // NOTE: the DECLARED type says group, but the write gate (checkFilterNode)
   // also accepts a bare condition as the filter root — at runtime this can be
   // either. Consumers that walk the tree must go through isFilterGroup /
@@ -157,6 +159,7 @@ function checkFilterNode(raw: unknown, ctx: z.RefinementCtx): void {
 // so depth attacks fail validation instead of the parser.
 export const viewOptionsSchema = z
   .object({
+    form: formConfigSchema.optional(),
     filter: z.unknown().optional(),
     sort: z
       .array(z.object({ fieldId: z.string().min(1), direction: z.enum(['asc', 'desc']) }))
@@ -246,6 +249,7 @@ export function collectReferencedFieldIds(options: ViewOptions): Set<string> {
   for (const entry of options.sort ?? []) ids.add(entry.fieldId);
   for (const entry of options.group ?? []) ids.add(entry.fieldId);
   for (const id of options.hiddenFields ?? []) ids.add(id);
+  for (const field of options.form?.fields ?? []) ids.add(field.fieldId);
   return ids;
 }
 
@@ -282,9 +286,12 @@ export function removeFieldReferences(options: ViewOptions, fieldId: string): Vi
   const sortHit = options.sort?.some((s) => s.fieldId === fieldId) ?? false;
   const groupHit = options.group?.some((g) => g.fieldId === fieldId) ?? false;
   const hiddenHit = options.hiddenFields?.includes(fieldId) ?? false;
-  if (!filterHit && !sortHit && !groupHit && !hiddenHit) return options;
+  const formHit = options.form?.fields.some((field) => field.fieldId === fieldId) ?? false;
+  if (!filterHit && !sortHit && !groupHit && !hiddenHit && !formHit) return options;
 
-  const next: ViewOptions = {};
+  // Preserve extensions (including future Kanban options) while explicitly
+  // updating the reference-bearing keys this walker understands.
+  const next: ViewOptions = { ...options };
   if (options.filter) {
     // The stored filter root may be a bare condition (the write gate accepts
     // one as root even though the declared type says group) — treating it as
@@ -292,19 +299,30 @@ export function removeFieldReferences(options: ViewOptions, fieldId: string): Vi
     // undeletable (500).
     const pruned = pruneFilterTree(options.filter, fieldId);
     if (pruned) next.filter = pruned as FilterGroup;
+    else delete next.filter;
   }
   if (options.sort) {
     const sort = options.sort.filter((s) => s.fieldId !== fieldId);
     if (sort.length > 0) next.sort = sort;
+    else delete next.sort;
   }
   if (options.group) {
     const group = options.group.filter((g) => g.fieldId !== fieldId);
     if (group.length > 0) next.group = group;
+    else delete next.group;
   }
   if (options.hiddenFields) {
     const hiddenFields = options.hiddenFields.filter((id) => id !== fieldId);
     if (hiddenFields.length > 0) next.hiddenFields = hiddenFields;
+    else delete next.hiddenFields;
   }
-  if (options.columnWidth) next.columnWidth = options.columnWidth;
+  if (formHit && options.form) {
+    // Empty projection is deliberately invalid for publication; do not
+    // silently expose newly added fields or erase configuration metadata.
+    next.form = {
+      ...options.form,
+      fields: options.form.fields.filter((field) => field.fieldId !== fieldId),
+    };
+  }
   return next;
 }

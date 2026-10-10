@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { baseName } from '@/lib/base-meta';
 import { api } from '@/server/trpc/caller';
 
-import { GridEditor } from './grid-editor';
+import { TableView } from './table-view';
 
 // The tables layout only knows the baseId (its params stop there), so it
 // titles the page "Base · table". This page has both ids and overrides with
@@ -33,6 +33,6 @@ export default async function TableGridPage({
 }) {
   const { baseId, tableId } = await params;
   // key={tableId}: navigating between tables reuses this page component, and
-  // GridEditor's selection/editing/widths state must not survive the switch.
-  return <GridEditor key={tableId} baseId={baseId} tableId={tableId} />;
+  // TableView's selection and the renderer state must not survive the switch.
+  return <TableView key={tableId} baseId={baseId} tableId={tableId} />;
 }

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { GridEditor } from './grid-editor';
+import { TableView } from './table-view';
 const state = vi.hoisted(() => ({
   role: 'editor',
   fieldType: 'text',
@@ -112,7 +112,7 @@ vi.mock('@/components/view-config/view-tabs', () => ({
 function mount() {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
 }
@@ -168,7 +168,7 @@ it('waits for existing rows and cancels preparation on view switch', async () =>
   ];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   await screen.findByRole('button', { name: 'Paste' });
@@ -241,7 +241,7 @@ it('waits at the page boundary then selects the loaded target', async () => {
   state.rows = [...state.rows, { id: 'r201', cells: {} }];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   await waitFor(() =>
@@ -308,7 +308,7 @@ it.each(['Tab', 'PageDown'])(
     state.rows = [...state.rows, { id: 'r201', cells: {} }];
     ui.rerender(
       <QueryClientProvider client={new QueryClient()}>
-        <GridEditor baseId="b1" tableId="t1" />
+        <TableView baseId="b1" tableId="t1" />
       </QueryClientProvider>,
     );
     await waitFor(() =>
@@ -336,7 +336,7 @@ it('freezes the ID rectangle after confirmation is prepared', async () => {
   ];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   fireEvent.click(screen.getByRole('button', { name: 'Paste' }));
@@ -375,7 +375,7 @@ it('does not prepare against rows still fetching', async () => {
   state.pageError = false;
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   await screen.findByRole('button', { name: 'Paste' });
@@ -395,7 +395,7 @@ it('keeps navigation pending on failure and resolves after retry data arrives', 
   state.rows = [...state.rows, { id: 'r2', cells: {} }];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   await waitFor(() =>
@@ -415,7 +415,7 @@ it('discards a waiting navigation target when switching views', async () => {
   ];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   expect(screen.getByRole('grid').getAttribute('aria-activedescendant')).not.toContain('r2');
@@ -433,7 +433,7 @@ it('cancels a waiting paste when switching views', async () => {
   ];
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b1" tableId="t1" />
+      <TableView baseId="b1" tableId="t1" />
     </QueryClientProvider>,
   );
   expect(screen.queryByRole('button', { name: 'Paste' })).toBeNull();
@@ -472,7 +472,7 @@ it('shows complete toolbar count and explicit count error', () => {
   state.countError = true;
   ui.rerender(
     <QueryClientProvider client={new QueryClient()}>
-      <GridEditor baseId="b" tableId="t" />
+      <TableView baseId="b" tableId="t" />
     </QueryClientProvider>,
   );
   expect(screen.getByText('Count unavailable')).toBeDefined();

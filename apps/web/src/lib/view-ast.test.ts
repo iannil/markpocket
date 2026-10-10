@@ -375,3 +375,36 @@ describe('removeFieldReferences — field.delete cleanup (review M-2)', () => {
     });
   });
 });
+
+describe('Form options and cleanup', () => {
+  const form = {
+    title: 'Contact',
+    description: '',
+    successMessage: 'Thanks',
+    fields: [
+      { fieldId: 'f1', required: true },
+      { fieldId: 'f2', required: false },
+    ],
+  };
+  it('parses valid form config without losing its projection', () => {
+    expect(viewOptionsSchema.parse({ form })).toEqual({ form });
+    expect(collectReferencedFieldIds({ form })).toEqual(new Set(['f1', 'f2']));
+  });
+  it('rejects empty saved form projections while allowing draft options', () => {
+    expect(viewOptionsSchema.safeParse({ form: { ...form, fields: [] } }).success).toBe(false);
+    expect(viewOptionsSchema.safeParse({}).success).toBe(true);
+  });
+  it('prunes form fields while preserving other config keys', () => {
+    const options = { form, hiddenFields: ['f1'], kanban: { groupFieldId: 'other' } };
+    expect(removeFieldReferences(options, 'f1')).toEqual({
+      form: { ...form, fields: [{ fieldId: 'f2', required: false }] },
+      kanban: options.kanban,
+    });
+  });
+  it('keeps an emptied form invalid until reconfigured', () => {
+    const options = { form: { ...form, fields: [{ fieldId: 'f1', required: true }] } };
+    const pruned = removeFieldReferences(options, 'f1');
+    expect(pruned.form?.fields).toEqual([]);
+    expect(viewOptionsSchema.safeParse(pruned).success).toBe(false);
+  });
+});

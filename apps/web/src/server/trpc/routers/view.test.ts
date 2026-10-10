@@ -480,3 +480,61 @@ describe('viewRouter — permission', () => {
     ).rejects.toThrow('FORBIDDEN');
   });
 });
+
+describe('typed Form configuration writes', () => {
+  const form = {
+    title: 'Contact',
+    description: '',
+    fields: [{ fieldId: 'f1', required: true }],
+    successMessage: 'Thanks',
+  };
+  async function setup(type: string, fieldType = 'text') {
+    vi.mocked(await import('@/lib/roles')).assertRole = vi.fn().mockResolvedValue(undefined);
+    const { db } = await import('@/server/db');
+    const chain = mockQuery([] as any[]);
+    chain.execute = vi.fn().mockResolvedValue([]);
+    const results = [
+      [{ id: 'v1', tableId: 't1', type, options: {} }],
+      [{ id: 'f1' }],
+      [{ id: 'f1', type: fieldType }],
+      [{ id: 'v1', tableId: 't1', type, options: { form } }],
+    ];
+    let call = 0;
+    chain.then = (onfulfilled: any) =>
+      Promise.resolve(results[Math.min(call++, results.length - 1)]).then(onfulfilled);
+    vi.mocked(db.select).mockReturnValue(chain as any);
+    vi.mocked(db.transaction).mockImplementation((cb: any) => cb(chain));
+    return { chain };
+  }
+  it('saves only validated public scalar projection on Form views', async () => {
+    const { chain } = await setup('form');
+    const result = await viewRouter
+      .createCaller(session())
+      .updateOptions({ id: 'v1', options: { form } });
+    expect(result.options).toEqual({ form });
+    expect(chain.set).toHaveBeenCalledWith({ options: { form } });
+  });
+  it('rejects non-public field types before writing', async () => {
+    const { chain } = await setup('form', 'user');
+    await expect(
+      viewRouter.createCaller(session()).updateOptions({ id: 'v1', options: { form } }),
+    ).rejects.toThrow('Form field is unavailable');
+    expect(chain.set).not.toHaveBeenCalled();
+  });
+  it('rejects Form config on Grid views', async () => {
+    const { chain } = await setup('grid');
+    await expect(
+      viewRouter.createCaller(session()).updateOptions({ id: 'v1', options: { form } }),
+    ).rejects.toThrow('Form config requires a Form view');
+    expect(chain.set).not.toHaveBeenCalled();
+  });
+  it('rejects Grid options on Form views', async () => {
+    const { chain } = await setup('form');
+    await expect(
+      viewRouter
+        .createCaller(session())
+        .updateOptions({ id: 'v1', options: { sort: [{ fieldId: 'f1', direction: 'asc' }] } }),
+    ).rejects.toThrow('Form views only accept form configuration');
+    expect(chain.set).not.toHaveBeenCalled();
+  });
+});
