@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { GridEditor } from './grid-editor';
@@ -93,7 +93,10 @@ vi.mock('@/components/view-config/sort-menu', () => ({ SortMenu: () => null }));
 vi.mock('@/components/view-config/view-fields-menu', () => ({ ViewFieldsMenu: () => null }));
 vi.mock('@/components/view-config/view-tabs', () => ({
   ViewTabs: ({ onSelect }: { onSelect: (id: string) => void }) => (
-    <button onClick={() => onSelect('v2')}>Other view</button>
+    <>
+      <button onClick={() => onSelect('v2')}>Other view</button>
+      <button onClick={() => onSelect('v1')}>Original view</button>
+    </>
   ),
 }));
 function mount() {
@@ -425,4 +428,29 @@ it('cancels a waiting paste when switching views', async () => {
   );
   expect(screen.queryByRole('button', { name: 'Paste' })).toBeNull();
   expect(state.write).not.toHaveBeenCalled();
+});
+
+it('does not resurrect a canceled paste after A to B to A and delayed rejection', async () => {
+  let reject!: (error: Error) => void;
+  state.write.mockImplementation(
+    () =>
+      new Promise((_resolve, rejectPromise) => {
+        reject = rejectPromise;
+      }),
+  );
+  mount();
+  select();
+  paste();
+  fireEvent.click(await screen.findByRole('button', { name: 'Paste' }));
+  await screen.findByRole('button', { name: 'Working…' });
+  fireEvent.click(screen.getByRole('button', { name: 'Other view', hidden: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Original view' }));
+  await act(async () => {
+    reject(new Error('Delayed timeout'));
+  });
+  expect(screen.queryByRole('button', { name: 'Retry paste' })).toBeNull();
+  expect(state.toast).not.toHaveBeenCalledWith('Delayed timeout');
+  expect(state.write).toHaveBeenCalledTimes(1);
+  paste('Carol\t14');
+  await screen.findByRole('button', { name: 'Paste' });
 });

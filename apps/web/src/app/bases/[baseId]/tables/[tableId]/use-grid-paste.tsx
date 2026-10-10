@@ -60,9 +60,13 @@ export function useGridPaste({
     observedFetching: boolean;
     pages: number;
   }>({ preparation: null, requestedAt: null, observedFetching: false, pages: 0 });
-  const currentScope = useRef(scopeKey);
-  currentScope.current = scopeKey;
   const invalid = readOnly || editing;
+  // Visiting the same scope again never restores ownership of canceled work.
+  // Update during render so a late promise cannot beat cancellation effects.
+  const ownership = useRef({ scopeKey, invalid, generation: 0 });
+  if (ownership.current.scopeKey !== scopeKey || ownership.current.invalid !== invalid) {
+    ownership.current = { scopeKey, invalid, generation: ownership.current.generation + 1 };
+  }
   // Scope is stored on every operation; stale requests can never be confirmed.
   const ready = pending?.scopeKey === scopeKey && !invalid ? pending : null;
   const preparing = preparation?.scopeKey === scopeKey && !invalid ? preparation : null;
@@ -183,18 +187,20 @@ export function useGridPaste({
       setPending(null);
       return;
     }
+    const generation = ownership.current.generation;
     const operation = { ...ready, firstAttemptAt: ready.firstAttemptAt ?? Date.now() };
     setPending(operation);
     inFlight.current = true;
     setBusy(true);
     try {
       await mutation.mutateAsync(operation.request);
-      if (currentScope.current === operation.scopeKey) setPending(null);
+      if (ownership.current.generation === generation) setPending(null);
       await utils.record.list.invalidate({ tableId: operation.request.tableId }).catch(() => {
-        toast.error('Paste saved, but records could not be refreshed. Reload the view.');
+        if (ownership.current.generation === generation)
+          toast.error('Paste saved, but records could not be refreshed. Reload the view.');
       });
     } catch (err) {
-      if (currentScope.current !== operation.scopeKey) return;
+      if (ownership.current.generation !== generation) return;
       const code = (err as { data?: { code?: string } })?.data?.code;
       if (code && code !== 'TIMEOUT' && code !== 'INTERNAL_SERVER_ERROR') setPending(null);
       else setPending({ ...operation, failed: true });
