@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-10-10（原子写入 foundation 隔离验证完成，未发布）
+> **最后更新**：2026-10-10（原子写入 foundation 与 Grid G1–G4 已实现，隔离验证及部分浏览器验证，未发布）
 > 本文档是项目的**现在时**：功能矩阵、质量基线、已知限制、迭代路线。给 LLM agent 的使用说明——执行任何迭代前先通读本文；改架构前先读对应 ADR（§3）；每完成一个迭代回来更新对应小节。
 > 逐版本变更见 `CHANGELOG.md`；术语定义见 `../../CONTEXT.md`；文档索引见 `README.md`。
 
@@ -14,7 +14,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 
 ## 2. 当前状态总览
 
-Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid、Form、Kanban、Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
+Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form、Kanban、Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
 
 | 维度 | 状态 |
 |---|---|

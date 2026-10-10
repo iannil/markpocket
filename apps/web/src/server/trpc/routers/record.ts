@@ -16,9 +16,17 @@ import { publishTableChange } from '../../realtime/publish';
 import { assertTableRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
+import { getGroupCounts } from '../../records/group-counts';
+
 import { batchInputSchema, writeBatch } from '../../records/write-batch';
 
 export const recordRouter = router({
+  groupCounts: protectedProcedure
+    .input(z.object({ tableId: z.string(), viewId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      await assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
+      return getGroupCounts(input.tableId, input.viewId);
+    }),
   writeBatch: protectedProcedure
     .input(batchInputSchema)
     .mutation(({ ctx, input }) => writeBatch(ctx.session.user.id, input)),

@@ -247,7 +247,7 @@ export const GroupHeaderRow = memo(function GroupHeaderRow({
   start,
 }: {
   label: string;
-  count: number;
+  count: number | undefined;
   rowIndex: number;
   colCount: number;
   start: number;
@@ -266,7 +266,7 @@ export const GroupHeaderRow = memo(function GroupHeaderRow({
         className="flex h-full items-center px-2 text-left text-xs font-medium"
       >
         <span className="truncate">
-          {label} <span className="text-muted-foreground">({count})</span>
+          {label} <span className="text-muted-foreground">({count ?? 'Count unavailable'})</span>
         </span>
       </div>
     </div>

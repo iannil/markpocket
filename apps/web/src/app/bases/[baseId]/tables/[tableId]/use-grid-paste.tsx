@@ -195,6 +195,7 @@ export function useGridPaste({
     try {
       await mutation.mutateAsync(operation.request);
       if (ownership.current.generation === generation) setPending(null);
+      await utils.record.groupCounts.invalidate({ tableId: operation.request.tableId });
       await utils.record.list.invalidate({ tableId: operation.request.tableId }).catch(() => {
         if (ownership.current.generation === generation)
           toast.error('Paste saved, but records could not be refreshed. Reload the view.');

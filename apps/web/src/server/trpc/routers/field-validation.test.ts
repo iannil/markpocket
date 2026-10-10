@@ -297,10 +297,12 @@ describe('fieldRouter — delete view-options lock (review L-2)', () => {
     (mockDb.chain.from as any).mockClear();
     await fieldRouter.createCaller(session()).delete({ id: 'f-del' });
 
-    // Exactly one lock statement, in the 'view-options:' namespace (disjoint
-    // from cell.ts's per-cell locks), parameterized by the field's tableId.
-    expect((mockDb.chain.execute as any).mock.calls).toHaveLength(1);
-    const { text, params } = flattenSql((mockDb.chain.execute as any).mock.calls[0][0]);
+    // G3 serializes field structure before acquiring the view-options lock.
+    expect((mockDb.chain.execute as any).mock.calls).toHaveLength(2);
+    const fieldLock = flattenSql((mockDb.chain.execute as any).mock.calls[0][0]);
+    expect(fieldLock.text).toContain("hashtext('field-order:'");
+    expect(fieldLock.params).toContain('t1');
+    const { text, params } = flattenSql((mockDb.chain.execute as any).mock.calls[1][0]);
     expect(text).toContain('pg_advisory_xact_lock');
     expect(text).toContain("hashtext('view-options:'");
     expect(params).toContain('t1');
@@ -309,7 +311,7 @@ describe('fieldRouter — delete view-options lock (review L-2)', () => {
       (c: any[]) => c[0] === viewTable,
     );
     expect(viewScan).toBeGreaterThanOrEqual(0);
-    expect((mockDb.chain.execute as any).mock.invocationCallOrder[0]).toBeLessThan(
+    expect((mockDb.chain.execute as any).mock.invocationCallOrder[1]).toBeLessThan(
       (mockDb.chain.from as any).mock.invocationCallOrder[viewScan],
     );
   });

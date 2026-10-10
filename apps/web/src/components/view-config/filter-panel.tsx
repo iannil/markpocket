@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { FieldType, type SelectOption } from '@/lib/field-types';
-import type { FilterCondition, FilterGroup } from '@/lib/view-ast';
+import { isFilterGroup, type FilterCondition, type FilterGroup } from '@/lib/view-ast';
 
 interface FieldLike {
   id: string;
@@ -31,12 +31,16 @@ const OPS: Record<string, OpDef[]> = {
   [FieldType.Text]: [
     { value: 'contains', label: 'contains', operand: true },
     { value: 'equals', label: 'is', operand: true },
+    { value: 'ne', label: 'is not', operand: true },
     { value: 'startsWith', label: 'starts with', operand: true },
     { value: 'empty', label: 'is empty', operand: false },
     { value: 'notEmpty', label: 'is not empty', operand: false },
   ],
   [FieldType.Number]: [
     { value: 'equals', label: '=', operand: true },
+    { value: 'ne', label: '≠', operand: true },
+    { value: 'gte', label: '≥', operand: true },
+    { value: 'lte', label: '≤', operand: true },
     { value: 'gt', label: '>', operand: true },
     { value: 'lt', label: '<', operand: true },
     { value: 'empty', label: 'is empty', operand: false },
@@ -48,6 +52,8 @@ const OPS: Record<string, OpDef[]> = {
     { value: 'notEmpty', label: 'is not empty', operand: false },
   ],
   [FieldType.Date]: [
+    { value: 'equals', label: 'is', operand: true },
+    { value: 'ne', label: 'is not', operand: true },
     { value: 'before', label: 'is before', operand: true },
     { value: 'after', label: 'is after', operand: true },
     { value: 'empty', label: 'is empty', operand: false },
@@ -55,11 +61,15 @@ const OPS: Record<string, OpDef[]> = {
   ],
   [FieldType.SingleSelect]: [
     { value: 'equals', label: 'is', operand: true },
+    { value: 'ne', label: 'is not', operand: true },
     { value: 'empty', label: 'is empty', operand: false },
     { value: 'notEmpty', label: 'is not empty', operand: false },
   ],
   [FieldType.Expression]: [
     { value: 'equals', label: '=', operand: true },
+    { value: 'ne', label: '≠', operand: true },
+    { value: 'gte', label: '≥', operand: true },
+    { value: 'lte', label: '≤', operand: true },
     { value: 'gt', label: '>', operand: true },
     { value: 'lt', label: '<', operand: true },
     { value: 'empty', label: 'is empty', operand: false },
@@ -89,6 +99,12 @@ export function FilterPanel({
   filter: FilterGroup | undefined;
   onChange: (f: FilterGroup | undefined) => void;
 }) {
+  if (
+    filter &&
+    (!isFilterGroup(filter) || filter.op !== 'and' || filter.conditions.some(isFilterGroup))
+  ) {
+    return <p role="status">This view uses an advanced filter. Edit it through the API.</p>;
+  }
   // flat-AND: every leaf is a FilterCondition (Q7b: AST supports nesting, UI defers it).
   const conditions = (filter?.conditions ?? []) as FilterCondition[];
   const fieldById = new Map(fields.map((f) => [f.id, f]));

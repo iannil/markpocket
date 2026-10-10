@@ -76,6 +76,7 @@ Auth column: **P** = protectedProcedure (requires session), **Pub** = publicProc
 
 | Procedure | Auth | Input | Output | Description |
 |-----------|------|-------|--------|-------------|
+| `groupCounts` | P | `{ tableId: string; viewId: string }` | `{ total: number; groups: { key: string or null; count: number }[] }` | Requires viewer membership. Counts the entire filtered view in SQL, using only its first grouping field; no pagination. No records yields an empty groups array. |
 | `list` | P | `{ tableId: string; viewId?: string; offset?: number (min 0) }` | `{ groups: RecordGroup[]; total: number }` | Lists records with pivoted cell values. Applies view filter/sort/group when `viewId` is provided. Paginated with 100-record page size. |
 | `create` | P | `{ tableId: string }` | `Record` | Creates a new empty record. Requires **editor** role. Sets `createdBy` to the current user. Publishes change. |
 | `writeBatch` | P | `{ tableId: string; requestId: UUID; rows: { recordId?: string; cells: Record<string, unknown> }[] }` | `{ recordIds: string[]; created: number; updated: number }` | Requires **editor**. Atomic create/update; same-table IDs, no duplicate record IDs or expression writes. At most 100 rows, 500 cells, 1 MiB UTF-8 JSON total and 256 KiB per cell; 30s statement timeout. IDs preserve input order. |
@@ -182,3 +183,10 @@ Injected by the `@markpocket/plugin-csv` plugin via `...pluginRouters` (ADR-0008
 `record.writeBatch` commits records, cell history, expressions and the retry receipt together. Any invalid cell rejects the whole batch. Reuse the same UUID and unchanged body after a lost response: the server returns the original result, including created record IDs. Cell-map key order is ignored; row order is significant. Reusing a UUID with a different body returns `CONFLICT`. Receipt scope is the authenticated user, and authorization is checked again on replay.
 
 Receipts are retained for seven days, with bounded cleanup on subsequent writes. Clients must stop replaying after that window and reconcile records before starting a new request; replay is no longer guaranteed. This foundation exposes the protected tRPC API; Grid paste and public Form interfaces are subsequent work. Existing REST create/update endpoints keep their partial-success `cellErrors` contract.
+
+
+### Grid editing and counts
+
+Paste tab-separated rows into an editable selected cell to preview updates and new rows before applying one atomic batch. Expression columns and viewer sessions cannot paste. If the target includes unloaded existing rows, load the next page first. ArrowDown, Tab and PageDown load the next page when needed; Ctrl+End moves to the last loaded row. Fields controls can reorder all fields, including hidden ones.
+
+Group headers count all matching records; the toolbar shows loaded / total records. `Count unavailable` means the count query failed. Multiple grouping fields use only the first field. Advanced filter trees (nested, bare or OR roots) are read-only in the flat filter panel and can be edited through the API.

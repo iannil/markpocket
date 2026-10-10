@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
     { id: 'r2', cells: {} },
   ],
   total: 2,
+  countError: false,
   fetching: false,
   pageError: false,
   views: [
@@ -28,7 +29,10 @@ vi.mock('@/lib/trpc/client', () => {
   return {
     trpc: {
       useUtils: () => ({
-        record: { list: { invalidate: state.invalidate } },
+        record: {
+          list: { invalidate: state.invalidate },
+          groupCounts: { invalidate: vi.fn().mockResolvedValue(undefined) },
+        },
         history: { list: { invalidate: vi.fn() } },
         field: { list: { invalidate: vi.fn() } },
         view: { list: { invalidate: vi.fn() } },
@@ -50,6 +54,12 @@ vi.mock('@/lib/trpc/client', () => {
       member: { me: { useQuery: () => query({ role: state.role }) } },
       table: { list: { useQuery: () => query([]) } },
       record: {
+        groupCounts: {
+          useQuery: () => ({
+            ...query({ total: state.total, groups: [{ key: null, count: state.total }] }),
+            isError: state.countError,
+          }),
+        },
         writeBatch: { useMutation: () => ({ mutateAsync: state.write }) },
         create: { useMutation: mutation },
         delete: { useMutation: mutation },
@@ -453,4 +463,18 @@ it('does not resurrect a canceled paste after A to B to A and delayed rejection'
   expect(state.write).toHaveBeenCalledTimes(1);
   paste('Carol\t14');
   await screen.findByRole('button', { name: 'Paste' });
+});
+
+it('shows complete toolbar count and explicit count error', () => {
+  state.total = 201;
+  const ui = mount();
+  expect(screen.getByText('2 / 201 records')).toBeDefined();
+  state.countError = true;
+  ui.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <GridEditor baseId="b" tableId="t" />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('Count unavailable')).toBeDefined();
+  state.countError = false;
 });

@@ -222,6 +222,17 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     anyFetching,
     showMore,
   } = usePagedRecords(tableId, activeViewId ?? undefined, !viewsLoading && !viewsError);
+  const groupCounts = trpc.record.groupCounts.useQuery(
+    { tableId, viewId: activeViewId ?? '' },
+    { enabled: Boolean(activeViewId) && !viewsLoading && !viewsError },
+  );
+  const completeCounts = useMemo(
+    () =>
+      new Map(
+        groupCounts.isError ? [] : (groupCounts.data?.groups.map((g) => [g.key, g.count]) ?? []),
+      ),
+    [groupCounts.data, groupCounts.isError],
+  );
   const flatRows = useMemo(() => groups.flatMap((g) => g.records), [groups]);
   const loadedCount = flatRows.length;
   const rowNumberById = useMemo(() => {
@@ -334,6 +345,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     },
     onSuccess: (res, vars) => {
       // Reconcile the server-normalized value into the same cell — no refetch.
+      void utils.record.groupCounts.invalidate({ tableId });
       // record.list is otherwise deliberately NOT invalidated here: the ws
       // broadcast of this write already excludes this session (server passes
       // exceptUserId), and other sessions invalidate via their own
@@ -366,6 +378,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       const affected = viewAffectingFieldIdsRef.current;
       if (affected.has(vars.fieldId) || (recomputed ?? []).some((rc) => affected.has(rc.fieldId))) {
         void utils.record.list.invalidate({ tableId });
+        void utils.record.groupCounts.invalidate({ tableId });
       }
       // The history dock (when open on this cell) shows a stale list otherwise.
       void utils.history.list.invalidate({
@@ -414,6 +427,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
     // No success toast: the record appearing in the grid IS the feedback.
     onSuccess: () => {
       void utils.record.list.invalidate({ tableId });
+      void utils.record.groupCounts.invalidate({ tableId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -421,6 +435,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const deleteRecord = trpc.record.delete.useMutation({
     onSuccess: () => {
       void utils.record.list.invalidate({ tableId });
+      void utils.record.groupCounts.invalidate({ tableId });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -442,6 +457,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       pendingOptionKeysRef.current.clear();
       if (rowAffecting) {
         utils.record.list.invalidate({ tableId });
+        utils.record.groupCounts.invalidate({ tableId });
       }
     },
     onError: (err) => {
@@ -512,7 +528,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   );
 
   type RowDesc =
-    | { kind: 'group'; key: string; label: string; count: number }
+    | { kind: 'group'; key: string; label: string; count: number | undefined }
     | { kind: 'record'; record: RecordLike; rowIndex: number };
   const rowDescs = useMemo(() => {
     const out: RowDesc[] = [];
@@ -526,13 +542,13 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
           // real "(empty)"-adjacent key and duplicate a React key.
           key: g.key ?? '\u0000null',
           label: groupLabel(g.key),
-          count: g.records.length,
+          count: completeCounts.get(g.key),
         });
       }
       for (const r of g.records) out.push({ kind: 'record', record: r, rowIndex: idx++ });
     }
     return out;
-  }, [groups, hasGroup, groupLabel]);
+  }, [groups, hasGroup, groupLabel, completeCounts]);
 
   // Pin the row being edited: scrolling while an editor is open must not
   // unmount it (that would silently drop the draft).
@@ -1154,6 +1170,16 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         )}
       </div>
 
+      <p role="status" className="text-xs text-muted-foreground">
+        {groupCounts.isError
+          ? 'Count unavailable'
+          : groupCounts.data
+            ? `${loadedCount} / ${groupCounts.data.total} records`
+            : 'Counting records…'}
+      </p>
+      {viewOptions.group && viewOptions.group.length > 1 && (
+        <p className="text-xs text-muted-foreground">Only the first grouping field is used.</p>
+      )}
       {!isViewer && (
         <div className="flex flex-wrap items-center gap-2">
           <Button

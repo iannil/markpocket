@@ -53,6 +53,7 @@ function invalidateTableData(utils: TrpcUtils, tableId: string): void {
   utils.field.list.invalidate({ tableId });
   utils.view.list.invalidate({ tableId });
   utils.record.list.invalidate({ tableId });
+  utils.record.groupCounts.invalidate({ tableId });
 }
 
 // Base-level structural change (table/base renamed, created, deleted).
@@ -168,6 +169,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         utils.field.list.invalidate();
         utils.view.list.invalidate();
         utils.record.list.invalidate();
+        utils.record.groupCounts.invalidate();
       }, CHANGE_INVALIDATE_DEBOUNCE_MS);
     });
 

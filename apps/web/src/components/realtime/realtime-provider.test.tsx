@@ -14,7 +14,7 @@ const mockUtils = vi.hoisted(() => {
     table: { list: { invalidate: vi.fn() } },
     field: { list: { invalidate: vi.fn() } },
     view: { list: { invalidate: vi.fn() } },
-    record: { list: { invalidate: vi.fn() } },
+    record: { list: { invalidate: vi.fn() }, groupCounts: { invalidate: vi.fn() } },
   });
   return { current: build(), build };
 });

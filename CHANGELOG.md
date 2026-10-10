@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Grid batch editing and complete counts (2026-10-10)
+
+- Added atomic TSV paste previews, cross-page keyboard navigation and complete field ordering including hidden fields.
+- Added SQL full-view group counts with viewer permissions, loaded/total toolbar, count errors, and mutation/realtime invalidation. Exposed supported ne/gte/lte/date comparisons and protected advanced filters from rewriting.
+- Isolated PostgreSQL and UI regressions pass; browser paste/reorder/201-row navigation/390px checks are partial live evidence. Native clipboard and G4 live counts remain pending. See [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md); not published.
+
 ## Unreleased — atomic write foundation (2026-10-10)
 
 - Added protected `record.writeBatch` for bounded atomic creates/updates, transactional expression/history writes and seven-day idempotent retry receipts (migration 0015). Existing REST partial-success `cellErrors` behavior remains supported.
