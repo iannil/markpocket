@@ -29,6 +29,7 @@ vi.mock('@/lib/trpc/client', () => ({
     member: { me: { useQuery: () => ({ data: { role: state.role } }) } },
   },
 }));
+vi.mock('@/components/forms/form-builder', () => ({ FormBuilder: () => <div>Form renderer</div> }));
 vi.mock('./grid-editor', () => ({
   GridEditor: (props: unknown) => {
     state.grid(props);
@@ -84,7 +85,7 @@ it('owns view selection and falls back when the selected view disappears', () =>
 it('never mounts Grid for Form drafts or unsupported view types', () => {
   state.views = [{ id: 'form1', name: 'Contact', type: 'form', options: {} }];
   const ui = render(<TableView baseId="b1" tableId="t1" />);
-  expect(screen.getByText('This form needs configuration.')).toBeDefined();
+  expect(screen.getByText('Form renderer')).toBeDefined();
   expect(state.grid).not.toHaveBeenCalled();
   state.views[0]!.type = 'kanban';
   ui.rerender(<TableView baseId="b1" tableId="t1" />);

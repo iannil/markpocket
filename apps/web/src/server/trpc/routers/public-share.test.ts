@@ -338,3 +338,28 @@ describe('publicShareRouter — expiry', () => {
     expect(result).toBeNull();
   });
 });
+
+it('rejects a legacy share pinned to a Form view on every read surface', async () => {
+  const caller = publicShareRouter.createCaller({ session: null });
+  const form = { id: 'v1', tableId: 't1', type: 'form', options: {} };
+  queueSelects([[SHARE({ viewId: 'v1' })], [{ id: 'b1', name: 'Base' }], [form]]);
+  expect(await caller.getBase({ token: 'tok' })).toBeNull();
+  queueSelects([[SHARE({ viewId: 'v1' })], [form]]);
+  expect(await caller.getTables({ token: 'tok' })).toEqual([]);
+  queueSelects([[SHARE({ viewId: 'v1' })], [TABLE_ROW], FIELDS, [form]]);
+  expect(await caller.getRecords({ token: 'tok', tableId: 't1' })).toBeNull();
+});
+
+it('RSS rejects a legacy Form share through the real shared-view resolver before reading records', async () => {
+  vi.mocked(listRecordsPivoted).mockClear();
+  queueSelects([
+    [SHARE({ viewId: 'v1' })],
+    [{ id: 'v1', tableId: 't1', type: 'form', options: {} }],
+  ]);
+  const { GET } = await import('../../../app/feed/[token]/route');
+  const response = await GET(new Request('http://app.local/feed/tok'), {
+    params: Promise.resolve({ token: 'tok' }),
+  });
+  expect(response.status).toBe(404);
+  expect(listRecordsPivoted).not.toHaveBeenCalled();
+});

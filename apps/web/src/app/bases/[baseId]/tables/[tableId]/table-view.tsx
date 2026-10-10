@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ViewTabs } from '@/components/view-config/view-tabs';
 import { trpc } from '@/lib/trpc/client';
-import { formConfigSchema } from '@/lib/form-config';
+import { FormBuilder } from '@/components/forms/form-builder';
 import type { FieldLike } from './cell-renderers';
 import { GridEditor } from './grid-editor';
 
@@ -84,15 +84,17 @@ export function TableView({ baseId, tableId }: { baseId: string; tableId: string
           options={activeView.options}
           readOnly={readOnly}
         />
+      ) : activeView?.type === 'form' ? (
+        <FormBuilder
+          key={activeView.id}
+          viewId={activeView.id}
+          tableId={tableId}
+          readOnly={readOnly}
+          isOwner={membership?.role === 'owner'}
+        />
       ) : (
         <div role="status" className="p-4 text-sm text-muted-foreground">
-          {activeView?.type === 'form'
-            ? formConfigSchema.safeParse(activeView.options.form).success
-              ? 'Form rendering is not available yet.'
-              : 'This form needs configuration.'
-            : activeView
-              ? 'This view type is not available yet.'
-              : 'No views.'}
+          {activeView ? 'This view type is not available yet.' : 'No views.'}
         </div>
       )}
     </div>

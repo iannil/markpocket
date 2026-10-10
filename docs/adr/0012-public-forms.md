@@ -92,3 +92,18 @@ returns `{ok:true}` after capability and body-hash validation without resurrecti
 the record or audit. Replay acknowledges historical acceptance, not current
 record existence. After both audit deletion and receipt expiry, the seven-day F
 contract supplies no permanent deduplication guarantee.
+
+## P4 UI and capability boundaries
+
+Form creation is now exposed with a dedicated renderer. Editors save the selected
+projection; viewers get a disabled preview; owners alone see publication controls.
+The public page consumes only the safe server projection, renders native labeled
+controls and plain text, and keeps request bodies/UUIDs frozen after uncertain
+responses. Editing a prior attempt or receiving an expired-receipt conflict requires
+explicit new-submission confirmation. The page has noindex/nofollow/no-referrer
+metadata and uses dynamic rendering.
+
+The shared read-only view resolver rejects Form types, including legacy shares,
+before metadata/records/RSS/attachment reads; creation rejects Form as well. The
+RSS formatter remains pure XML work and receives no Form data. This UI delivery
+has fixture verification; live browser acceptance and publication are separate gates.

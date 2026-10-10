@@ -14,7 +14,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 
 ## 2. 当前状态总览
 
-Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form、Kanban、Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
+Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form P1–P4 已实现：配置、发布生命周期、匿名原子提交与表单 UI，组件/API fixture 验证通过；P4 浏览器验收由 controller 在提交后执行。Kanban、Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
 
 | 维度 | 状态 |
 |---|---|
@@ -51,7 +51,8 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 |---|---|---|---|
 | Base/Table/Field/Record CRUD | ✅ | `server/trpc/routers/{base,table,field,record,cell}.ts` | 全部带角色校验 |
 | Grid 视图（filter/sort/group/列宽/隐藏列） | ✅ | `lib/view-query.ts`、`lib/view-ast.ts`、`components/view-config/` | 编译为 SQL 片段 |
-| Form / Kanban / Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
+| Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | 本地实现；fixture 验证；未发布，P4 live 浏览器验证待完成 |
+| Kanban / Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
 | 字段类型（10 种） | ✅ | `server/plugins/builtin-fields/` | 10 个 Contribution + parity 测试 |
 | Expression 字段（写时物化 + 回填） | ✅ | `lib/expression-eval.ts`、`server/expression.ts` | 手写求值器，无第三方公式库 |
 | 实时协作（WS + LISTEN/NOTIFY + presence + LWW） | ✅ | `server/realtime/`、`realtime-server.ts` | dev 拆进程，prod 单进程 |
@@ -128,7 +129,7 @@ UI/交互：
 - 手写 SQL 的真库回归测试（docker 起一次性 PG，修 §8.9）
 
 **v2 候选（大步，需先补 ADR）**
-- Form / Kanban / Gallery 视图（schema 已留位；需视图渲染层设计）
+- Form：完成发布前 live 浏览器验收；[使用说明](FORMS.md)。Kanban / Gallery：后续视图渲染层工作。
 - Lookup / Rollup 字段（依赖 Link 语义扩展；CONTEXT.md 术语已标注"v2 推迟"）
 - S3 storage adapter（扩展点就绪，`plugin-storage-local` 为参考实现）
 - Excel/JSON 导入导出（`plugin-csv` 为参考插件）

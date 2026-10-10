@@ -26,12 +26,12 @@ export async function findSharedView(share: {
 }): Promise<{ id: string; tableId: string; options: ViewOptions } | null> {
   if (!share.viewId) return null;
   const [v] = await db
-    .select({ id: view.id, tableId: view.tableId, options: view.options })
+    .select({ id: view.id, tableId: view.tableId, type: view.type, options: view.options })
     .from(view)
     .innerJoin(table, eq(view.tableId, table.id))
     .where(and(eq(view.id, share.viewId), eq(table.baseId, share.baseId)))
     .limit(1);
-  if (!v) return null;
+  if (!v || v.type === 'form') return null;
   // Strict parse on the public path: legacy option shapes the current schema
   // rejects invalidate the share (fail closed), same as a deleted view.
   const options = parseViewOptionsStrict(v.options);

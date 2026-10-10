@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — public submission Forms (2026-10-10)
+
+- Added Form creation, field selection/order/required configuration, viewer previews, editor saves, and owner publication/rotation/revocation with a default 30-day expiry.
+- Added anonymous public submission pages with native controls, required checkbox semantics, frozen retry bodies, and explicit confirmation before edited or expired-receipt submissions create a new request.
+- Rejected Form read-only share creation and legacy Form share reads, including RSS and attachment routes through their shared resolver. See [Forms guide](docs/FORMS.md) and [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md). Local implementation and fixture checks; P4 browser acceptance pending, unpublished.
+
 ## Unreleased — Grid batch editing and complete counts (2026-10-10)
 
 - Added atomic TSV paste previews, cross-page keyboard navigation and complete field ordering including hidden fields.

@@ -40,7 +40,7 @@ export function ViewTabs({
     onSuccess: () => utils.view.list.invalidate({ tableId }),
     onError: (err) => toast.error(err.message),
   });
-  // Form/Kanban creation stays unavailable until their renderers ship.
+  const [type, setType] = useState<'grid' | 'form'>('grid');
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   // Inline rename (spec §7.2: inline over prompt/popover): the tab itself
@@ -112,7 +112,7 @@ export function ViewTabs({
             e.preventDefault();
             if (!name.trim()) return;
             create.mutate(
-              { tableId, name: name.trim(), type: 'grid' },
+              { tableId, name: name.trim(), type },
               { onSuccess: (nv) => onSelect(nv.id) },
             );
             setAdding(false);
@@ -123,13 +123,27 @@ export function ViewTabs({
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onBlur={() => {
-              setAdding(false);
-              setName('');
-            }}
             className="h-7 w-32"
+            aria-label="New view name"
             placeholder="View name"
           />
+          <label>
+            View type
+            <select
+              aria-label="View type"
+              value={type}
+              onChange={(e) => setType(e.target.value as 'grid' | 'form')}
+            >
+              <option value="grid">Grid</option>
+              <option value="form">Form</option>
+            </select>
+          </label>
+          <Button size="sm" type="submit" disabled={create.isPending}>
+            Create view
+          </Button>
+          <Button size="sm" type="button" variant="ghost" onClick={() => setAdding(false)}>
+            Cancel
+          </Button>
         </form>
       ) : (
         <Button

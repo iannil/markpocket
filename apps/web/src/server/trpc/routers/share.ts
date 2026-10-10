@@ -35,7 +35,7 @@ export const shareRouter = router({
         // A share scoped to a view from another base would either leak that
         // base's config or go stale silently — reject at creation instead.
         const [v] = await db
-          .select({ id: view.id, tableId: view.tableId, options: view.options })
+          .select({ id: view.id, tableId: view.tableId, type: view.type, options: view.options })
           .from(view)
           .innerJoin(table, eq(view.tableId, table.id))
           .where(and(eq(view.id, input.viewId), eq(table.baseId, input.baseId)))
@@ -46,6 +46,11 @@ export const shareRouter = router({
             message: 'View not found in this base',
           });
         }
+        if (v.type === 'form')
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Form views use submission links, not read-only shares',
+          });
         // Defense chain, link 3 of 3 (review N4 — full picture in
         // view.ts updateOptions): updateOptions gates NEW option writes
         // (link 1) and field.delete cleans the EXISTING stock of references
