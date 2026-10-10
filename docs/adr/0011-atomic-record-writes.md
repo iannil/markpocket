@@ -12,7 +12,7 @@ Extract the existing cell writer into `writeCellInTransaction`, with an explicit
 
 Bound each batch to 100 rows, 500 cells, 1 MiB serialized input and 256 KiB per cell, with a transaction-local 30 second statement_timeout. These are server-enforced budgets, independent of client validation.
 
-Persist a unique `(actorKey, requestId)` receipt with bodyHash and result in the same transaction as data. The server derives actorKey as `user:<id>` or `form:<publicationId>`. An identical request replays the stored result; a different body with that key returns conflict (HTTP 409). Retain receipts seven days; after retention the UI must explain that replay is unavailable. Concurrent requests must serialize receipt claims so response loss can be retried safely.
+Persist a unique `(actorKey, requestId)` receipt with bodyHash and result in the same transaction as data. The server derives actorKey as `user:<id>` or `form:<publicationId>`. An identical request replays the stored result; a different body with that key returns conflict (HTTP 409). Retain receipts seven days; after retention the UI must explain that replay is unavailable. Concurrent requests must serialize receipt claims so response loss can be retried safely. Under that request lock, expire the requested key independently of the cleanup backlog; count its deletion against the actor-local maximum of 100 expired receipts removed per call, then sweep only the remaining budget.
 
 Anonymous form writes use actorId=null for record createdBy and history changedBy, including expression history; never impersonate the form owner. Form publication auditing remains separate, and a rotated publication has a new receipt scope.
 

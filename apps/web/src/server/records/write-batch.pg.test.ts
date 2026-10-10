@@ -237,6 +237,49 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('batch writes', () => {
       ).toHaveLength(1);
     }));
 
+  it('expires the requested receipt beyond the oldest 100 while keeping total cleanup bounded', async () =>
+    withDbFixture(async (f) => {
+      const { db } = await import('../db');
+      const { writeReceipt } = await import('../db/schema');
+      const actorKey = `user:${f.userId}`;
+      const input = {
+        tableId: f.tableId,
+        requestId: randomUUID(),
+        rows: [{ cells: { [f.numberId]: 1 } }],
+      };
+      const first = await f.caller.record.writeBatch(input);
+      await db
+        .update(writeReceipt)
+        .set({ createdAt: new Date(Date.now() - 8 * 86400000) })
+        .where(
+          and(eq(writeReceipt.actorKey, actorKey), eq(writeReceipt.requestId, input.requestId)),
+        );
+      await db.insert(writeReceipt).values(
+        Array.from({ length: 101 }, () => ({
+          actorKey,
+          requestId: randomUUID(),
+          bodyHash: 'older',
+          result: {},
+          createdAt: new Date(Date.now() - 9 * 86400000),
+        })),
+      );
+      const next = await f.caller.record.writeBatch({
+        ...input,
+        rows: [{ cells: { [f.numberId]: 2 } }],
+      });
+      expect(next.recordIds).not.toEqual(first.recordIds);
+      expect((await f.caller.record.list({ tableId: f.tableId })).total).toBe(2);
+      const remaining = await db
+        .select()
+        .from(writeReceipt)
+        .where(eq(writeReceipt.actorKey, actorKey));
+      expect(remaining.filter((r) => r.bodyHash === 'older')).toHaveLength(2);
+      expect(remaining).toHaveLength(3);
+      expect(
+        await f.caller.record.writeBatch({ ...input, rows: [{ cells: { [f.numberId]: 2 } }] }),
+      ).toEqual(next);
+    }));
+
   it('serializes the public batch API with a concurrent single-cell API writer', async () =>
     withDbFixture(async (f) => {
       const { db } = await import('../db');

@@ -73,9 +73,22 @@ export async function writeBatchInTransaction(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext(${`write-receipt:${actor.key}:${input.requestId}`}))`,
   );
+  // Expire the requested key under its advisory lock even when it is newer
+  // than a backlog of expired receipts. Count it against the 100-row budget.
+  const expiredRequest = await tx
+    .delete(writeReceipt)
+    .where(
+      and(
+        eq(writeReceipt.actorKey, actor.key),
+        eq(writeReceipt.requestId, input.requestId),
+        sql`${writeReceipt.createdAt} < now() - interval '7 days'`,
+      ),
+    )
+    .returning({ requestId: writeReceipt.requestId });
+  const cleanupBudget = 100 - expiredRequest.length;
   // Bounded actor-local cleanup never removes receipts inside the seven-day window.
   await tx.execute(
-    sql`with expired as materialized (select actor_key, request_id from write_receipt where actor_key = ${actor.key} and created_at < now() - interval '7 days' order by created_at limit 100 for update skip locked) delete from write_receipt r using expired e where r.actor_key = e.actor_key and r.request_id = e.request_id`,
+    sql`with expired as materialized (select actor_key, request_id from write_receipt where actor_key = ${actor.key} and created_at < now() - interval '7 days' order by created_at limit ${cleanupBudget} for update skip locked) delete from write_receipt r using expired e where r.actor_key = e.actor_key and r.request_id = e.request_id`,
   );
   const [receipt] = await tx
     .select()

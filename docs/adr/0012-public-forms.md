@@ -68,7 +68,7 @@ numeric zero is valid. The HTTP edge uses separate global GET (300/min) and POST
 (120/min) windows and a publication POST window (30/min). Invalid capabilities
 consume the global window. No Origin permits non-browser clients; an Origin must
 pass the shared same-origin guard. All responses, including errors, have no-store
-and no-referrer headers. Error responses mask unexpected failures.
+and no-referrer headers. Next.js path-specific header rules enforce no-referrer for both `/api/forms/:path*` and `/forms/:path*`, overriding the global default only on those paths. Error responses mask unexpected failures.
 
 The HTTP publication lookup only selects the rate-limit key. Submission resolves
 again inside its write transaction before any receipt access, keeping lifecycle,

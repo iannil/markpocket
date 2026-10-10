@@ -370,6 +370,51 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('public submission', () => {
       }
     }));
 
+  it('creates a tracked submission after deleted-record receipt expiry beyond the cleanup backlog', async () =>
+    fixture(async (f) => {
+      const { submitForm } = await import('./submission');
+      const { db } = await import('../db');
+      const { record, cellHistory, writeReceipt } = await import('../db/schema');
+      const p = await publish(f);
+      const input = { requestId: randomUUID(), cells: { [f.numberId]: 1 } };
+      await submitForm(p.token, input);
+      const before = await counts(f, p.publicationId);
+      try {
+        await db.delete(record).where(eq(record.id, before.records[0].id));
+        const actorKey = `form:${p.publicationId}`;
+        await db
+          .update(writeReceipt)
+          .set({ createdAt: new Date(Date.now() - 8 * 86400000) })
+          .where(eq(writeReceipt.actorKey, actorKey));
+        await db.insert(writeReceipt).values(
+          Array.from({ length: 101 }, () => ({
+            actorKey,
+            requestId: randomUUID(),
+            bodyHash: 'older',
+            result: {},
+            createdAt: new Date(Date.now() - 9 * 86400000),
+          })),
+        );
+        expect(await submitForm(p.token, input)).toEqual({ ok: true });
+        const after = await counts(f, p.publicationId);
+        expect(after.records).toHaveLength(1);
+        expect(after.records[0].id).not.toBe(before.records[0].id);
+        expect(after.audits).toHaveLength(1);
+        expect(after.audits[0].recordId).toBe(after.records[0].id);
+        expect(after.history).toHaveLength(1);
+        expect(after.history[0].changedBy).toBeNull();
+        expect(after.receipts.filter((r) => r.bodyHash === 'older')).toHaveLength(2);
+        expect(after.receipts).toHaveLength(3);
+      } finally {
+        await db.delete(cellHistory).where(
+          inArray(
+            cellHistory.cellId,
+            before.cells.map((c) => c.id),
+          ),
+        );
+      }
+    }));
+
   it('publishes after commit with no excluded user', async () =>
     fixture(async (f) => {
       const { submitForm } = await import('./submission');

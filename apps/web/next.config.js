@@ -40,6 +40,13 @@ const nextConfig = {
           },
         ],
       },
+      // Next's configured headers can overwrite route response headers. Public
+      // capability URLs must not leave the browser in Referer headers, including
+      // the public form page that submits to the API.
+      ...['/api/forms/:path*', '/forms/:path*'].map((source) => ({
+        source,
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
+      })),
     ];
   },
 };
