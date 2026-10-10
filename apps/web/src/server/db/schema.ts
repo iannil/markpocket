@@ -14,6 +14,29 @@ import {
 // `npx @better-auth/cli generate` — do not hand-edit.
 export * from './auth-schema';
 
+/** Credentials stay server-only; public projections must omit ciphertext. */
+export const webhookSubscription = pgTable(
+  'webhook_subscription',
+  {
+    id: uuid('id').primaryKey(),
+    tableId: text('table_id')
+      .notNull()
+      .references(() => table.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').notNull(),
+    url: text('url').notNull(),
+    events: jsonb('events').$type<('record.changed' | 'record.deleted')[]>().notNull(),
+    secretCiphertext: text('secret_ciphertext').notNull(),
+    state: text('state')
+      .$type<'active' | 'paused' | 'overflow' | 'disabled'>()
+      .notNull()
+      .default('active'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    overflowAt: timestamp('overflow_at', { withTimezone: true }),
+  },
+  (t) => ({ tableIdx: index('webhook_subscription_table_id_idx').on(t.tableId) }),
+);
+
 // --- domain tables (plan §5 Phase 1 subset, row-per-cell) ---
 
 export const workspace = pgTable('workspace', {
