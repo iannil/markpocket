@@ -1,0 +1,20 @@
+ ✓ apps/web/src/components/kanban/kanban-board.test.tsx (17 tests) 1076ms
+ ✓ apps/web/src/server/webhooks/outbox.pg.test.ts (15 tests) 7614ms
+   ✓ transactional webhook outbox (PostgreSQL) > maps trigger-backed record.create lock timeout to a retryable conflict and rolls back  5785ms
+   ✓ transactional webhook outbox (PostgreSQL) > coalesces at capacity and still normalizes deletion after overflowing in the same transaction  366ms
+   ✓ transactional webhook outbox (PostgreSQL) > serializes concurrent bulk SQL writers across five subscriptions without lost events  330ms
+ ✓ apps/web/src/app/bases/[baseId]/tables/[tableId]/grid-paste.test.tsx (23 tests) 1858ms
+   ✓ waits at the page boundary then selects the loaded target  309ms
+ ✓ apps/web/src/server/exports/csv.pg.test.ts (10 tests) 32714ms
+   ✓ exports 10001 rows with stable ties from PostgreSQL  2234ms
+   ✓ redacts a real statement timeout and releases the slot for the next export  30053ms
+ ✓ apps/web/src/server/agent-access/scoped-access.pg.test.ts (2541 tests) 65483ms
+   ✓ scoped access on PostgreSQL > blocks direct reads, credential escape, identity mixing and bound base creation  2241ms
+   ✓ REST/MCP scope and current-role matrix > REST GET bases list_bases combined/default > 'other'/'write'/'owner'/'revoked'  453ms
+
+ Test Files  110 passed | 1 skipped (111)
+      Tests  3556 passed | 1 skipped (3557)
+Type Errors  no errors
+   Start at  15:59:06
+   Duration  65.98s (transform 2.03s, setup 0ms, collect 20.93s, tests 162.03s, environment 9.92s, prepare 4.26s, typecheck 475ms)
+

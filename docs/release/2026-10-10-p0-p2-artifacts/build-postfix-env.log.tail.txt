@@ -1,0 +1,20 @@
+@markpocket/web:build: ├ ƒ /bases/import-airtable
+@markpocket/web:build: ├ ƒ /bases/new
+@markpocket/web:build: ├ ƒ /feed/[token]
+@markpocket/web:build: ├ ƒ /forms/[token]
+@markpocket/web:build: ├ ƒ /invite/[token]
+@markpocket/web:build: ├ ƒ /login
+@markpocket/web:build: ├ ƒ /register
+@markpocket/web:build: ├ ○ /robots.txt
+@markpocket/web:build: ├ ƒ /share/[token]
+@markpocket/web:build: └ ƒ /share/[token]/file/[id]
+@markpocket/web:build: 
+@markpocket/web:build: 
+@markpocket/web:build: ○  (Static)   prerendered as static content
+@markpocket/web:build: ƒ  (Dynamic)  server-rendered on demand
+@markpocket/web:build: 
+
+ Tasks:    1 successful, 1 total
+Cached:    0 cached, 1 total
+  Time:    10.595s 
+

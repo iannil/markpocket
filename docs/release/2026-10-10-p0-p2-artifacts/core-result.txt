@@ -1,0 +1,1 @@
+Fresh, upgrade and old snapshot restore assertions passed; missing-key acceptance still PENDING.

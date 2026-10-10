@@ -1,0 +1,11 @@
+ Container markpocket-final-browser-xriugf_5-web-1 Stopping 
+ Container markpocket-final-browser-xriugf_5-web-1 Stopped 
+exitCode=1 oomKilled=false finished=2026-10-10T07:54:39.901984711Z
+[markpocket] BETTER_AUTH_URL is set to "http://localhost:17461" (plain http) in production. Session cookies will be issued WITHOUT the Secure flag. If the app runs behind a reverse proxy that terminates HTTPS, set BETTER_AUTH_URL to the https:// origin browsers actually use (e.g. BETTER_AUTH_URL=https://markpocket.example.com). Only leave http:// if this instance is deliberately served over an isolated plain-http network.
+> realtime pg subscription ready
+> markpocket ready on http://localhost:3000 (dev=false)
+> realtime ws gateway ready
+2026-10-10T07:43:57.762Z WARN [Better Auth]: Invalid password
+2026-10-10T07:43:57.819Z WARN [Better Auth]: User not found
+> SIGTERM received — shutting down
+graceful shutdown timed out — forcing exit

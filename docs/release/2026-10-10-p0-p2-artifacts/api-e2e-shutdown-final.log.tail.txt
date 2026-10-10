@@ -1,0 +1,20 @@
+  REST 创建 Table 与 Field ... PASS
+  REST 创建带 cells 的 Record（fieldId 为键） ... PASS
+  REST 更新与读取单条 Record ... PASS
+  REST 分页列表与非法参数 ... PASS
+  REST 删除 Record ... PASS
+  OpenAPI 文档可达 ... PASS
+  MCP initialize 握手 ... PASS
+  MCP 未知协议版本回退到最新 ... PASS
+  MCP 无 token 应 401 ... PASS
+  MCP tools/list 暴露工具集 ... PASS
+  MCP tools/call 创建 Record 并经 REST 验证 ... PASS
+  MCP 未知工具报 -32601 ... PASS
+  RSS：分享视图后 feed 可达 ... PASS
+  RSS：未知 token 应 404 ... PASS
+  Skill 文档可达且含四通道 ... PASS
+  吊销 token 后 REST 立即 401 ... PASS
+
+---
+Result: 56 passed, 0 failed, 3 skipped
+

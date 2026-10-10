@@ -1,0 +1,20 @@
+@markpocket/plugin-sdk:lint: > @markpocket/plugin-sdk@0.0.0 lint /Users/rong.zhu/.codex/worktrees/airtable-release-foundation/markpocket/packages/plugin-sdk
+@markpocket/plugin-sdk:lint: > eslint "src/**/*.ts*"
+@markpocket/plugin-sdk:lint: 
+@markpocket/plugin-csv:lint: 
+@markpocket/plugin-csv:lint: > @markpocket/plugin-csv@0.0.0 lint /Users/rong.zhu/.codex/worktrees/airtable-release-foundation/markpocket/packages/plugin-csv
+@markpocket/plugin-csv:lint: > eslint "src/**/*.ts*"
+@markpocket/plugin-csv:lint: 
+@markpocket/plugin-storage-local:lint: 
+@markpocket/plugin-storage-local:lint: > @markpocket/plugin-storage-local@0.0.0 lint /Users/rong.zhu/Code/@saas/markpocket/packages/plugin-storage-local
+@markpocket/plugin-storage-local:lint: > eslint "src/**/*.ts*"
+@markpocket/plugin-storage-local:lint: 
+@markpocket/web:lint: 
+@markpocket/web:lint: > @markpocket/web@1.0.0-alpha.1 lint /Users/rong.zhu/.codex/worktrees/airtable-p0-p2/markpocket/apps/web
+@markpocket/web:lint: > eslint "src/**/*.{ts,tsx}" "*.config.js" "*.config.ts"
+@markpocket/web:lint: 
+
+ Tasks:    4 successful, 4 total
+Cached:    3 cached, 4 total
+  Time:    4.662s 
+

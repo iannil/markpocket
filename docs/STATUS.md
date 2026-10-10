@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-10-10（foundation、Grid、Form、Kanban、受限 Token 与 Webhook 已实现，未发布；最终候选验收待完成）
+> **最后更新**：2026-10-10（P0–P2 已实现并通过本地最终候选验收，未发布；真实 Airtable 源联调仍未验证）
 > 本文档是项目的**现在时**：功能矩阵、质量基线、已知限制、迭代路线。给 LLM agent 的使用说明——执行任何迭代前先通读本文；改架构前先读对应 ADR（§3）；每完成一个迭代回来更新对应小节。
 > 逐版本变更见 `CHANGELOG.md`；术语定义见 `../../CONTEXT.md`；文档索引见 `README.md`。
 
@@ -14,7 +14,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 
 ## 2. 当前状态总览
 
-Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴/跨页键盘/字段排序/SQL 全量分组计数、Form 发布与匿名提交、Kanban 独立列分页/移动/详情、Token 当前权限与 scope 交集、Webhook 加密配置/事务 outbox/签名 worker/owner 管理。隔离 PostgreSQL 与组件验证见[证据](release/2026-10-10-p0-p2-evidence.md)。controller 已完成实际浏览器 Grid/Form/Kanban/详情/Token 检查及受限 REST/MCP HTTP fixture；原生 OS clipboard 仍未确认。Webhook 仅用注入 transport，未联系外部接收器。最终同源多人/重连/Form 远端配置、最终候选 fresh/upgrade/restore/缺 key 运行验收仍待完成。真实 Airtable PAT 未提供，live-source 导入仍未验收。本次没有发布或部署。
+Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴/跨页键盘/字段排序/SQL 全量分组计数、Form 发布与匿名提交、Kanban 独立列分页/移动/详情、Token 当前权限与 scope 交集、Webhook 加密配置/事务 outbox/签名 worker/owner 管理。[最终验收](release/2026-10-10-p0-p2-final-acceptance.md)记录全量测试、实际浏览器/HTTP、同源多人/重连/Form 远端配置，以及固定镜像 fresh/upgrade/restore/缺失和错误密钥检查。Webhook 管理已验证，未联系外部接收器。原生 OS clipboard 与真实 Airtable PAT live-source 导入仍未验证。本次没有发布或部署。
 
 | 维度 | 状态 |
 |---|---|
@@ -24,7 +24,7 @@ Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴
 | 技术栈 | Next.js 16 (App Router) + tRPC v11 + Drizzle + Postgres 16 + ws；Dev 打包器 Rspack（Turbopack 内存泄漏） |
 | 部署 | 单 Docker Compose（web + postgres，多阶段镜像）；启动迁移内置于 `server.ts`（pg advisory lock）；dev 拆 `next dev` + 独立 realtime 网关 |
 | 插件系统 | plugin-sdk + plugin-csv + plugin-storage-local（ADR-0006..0009） |
-| 测试基线 | 旧 550/54 基线已过时；I3 阶段完整 PG-opt-in suite 为 3,457 passed / 13 separately gated skipped，非最终 I6 基线；最终全 gate 由 controller 运行并记录证据 |
+| 测试基线 | 最终全部本地 PG/import/export/slow gate：3,556 passed / 1 live-PAT skip；lint/typecheck/build 通过；固定镜像实际 HTTP API 56 passed / 0 failed / 3 可选注册配置 skips |
 | CI | `ci.yml`：format→lint→typecheck→test→build + **e2e job**（真实 Postgres + 生产构建 + API 场景）；`release.yml` 在 `v*` tag 先 verify 再发镜像并做启动冒烟；dependabot 周更 |
 | 许可证 | AGPL-3.0 |
 
@@ -56,8 +56,8 @@ Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴
 |---|---|---|---|
 | Base/Table/Field/Record CRUD | ✅ | `server/trpc/routers/{base,table,field,record,cell}.ts` | 全部带角色校验 |
 | Grid 视图（filter/sort/group/列宽/隐藏列） | ✅ | `lib/view-query.ts`、`lib/view-ast.ts`、`components/view-config/` | 编译为 SQL 片段 |
-| Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | 本地实现；fixture + controller 浏览器验证；未发布，同源远端配置验证待完成 |
-| Kanban 视图 | ✅ | `components/kanban/`、`components/records/` | 本地实现，独立列 50 卡分页；详情浏览器已验证；同源多人运行验收待完成，未发布；见 [说明](KANBAN.md) |
+| Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | fixture、浏览器与同源远端配置/草稿冲突验证通过；七天后重试需确认新提交；未发布 |
+| Kanban 视图 | ✅ | `components/kanban/`、`components/records/` | 独立列 50 卡分页；详情、同源多人和断线重连验收通过；未发布；见 [说明](KANBAN.md) |
 | Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
 | 字段类型（10 种） | ✅ | `server/plugins/builtin-fields/` | 10 个 Contribution + parity 测试 |
 | Expression 字段（写时物化 + 回填） | ✅ | `lib/expression-eval.ts`、`server/expression.ts` | 手写求值器，无第三方公式库 |
@@ -99,7 +99,7 @@ Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴
 
 | 层 | 数量 | 运行 |
 |---|---|---|
-| vitest 单元 + 集成 | 历史 550/54 已废弃；最终计数待 controller 全 gate | `pnpm test`；PG 需显式 opt-in 隔离数据库 |
+| vitest 单元 + 集成 | 3,556 passed / 1 live-PAT skip；110 文件通过 / 1 跳过 | `pnpm test`；PG 需显式 opt-in 隔离数据库 |
 | 类型测试 | 2 文件（`*.test-d.ts`） | 同上 |
 | API e2e（YAML） | 6 文件 / 56 用例 + 3 env-gated 跳过 | `pnpm test:e2e-api`（需实例运行） |
 | 浏览器 e2e（YAML 场景） | 7 场景 | 手动：agent-browser 技能驱动 `tests/e2e/browser/`（未进 CI） |
@@ -110,8 +110,8 @@ Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴
 
 UI/交互：
 1. OS clipboard 原生粘贴未由自动化验证；ClipboardEvent + 实际 HTTP 同体重试已验证。
-2. 最终同源多人实时、重连与 Form 远端配置验收待完成；不能用跨端口 dev Origin 拒绝代替通过。
-3. 待最终 review 分流：操作符标签显示原始 gte；快速切换操作符再编辑值可能使用旧 options；窄屏详情弹窗隐式 grid 行拉伸。未在 I6 顺带修改。
+2. 同源多人实时、重连与 Form 远端配置已通过固定镜像验收；跨端口 dev Origin 限制保留。
+3. 最终 review 的操作符标签、快速筛选保存竞态、窄屏详情行拉伸及初始视图跳转均已修复并复审通过。
 4. viewer 首帧布局等未单独重验的旧 UI 观察不宣称已修复；写操作仍有服务端门禁。
 
 数据语义：
@@ -120,14 +120,14 @@ UI/交互：
 7. Webhook 暂停/溢出/disabled 停止采集，存在真实缺口；需要 owner 全量对账后恢复。交付至少一次，接收方持久去重。
 
 测试/架构：
-8. 真实 Airtable PAT 未提供；导入 fixture 不等于 live-source 证明。最终镜像升级/恢复/缺 key 验收仍待执行，已有 M3 准备不是通过。
-9. 新增事务与 CSV outbox 路径有真库回归；未覆盖的旧 SQL 路径不宣称全面验收。CSV 故障注入日志及 Vitest experimental 提示仍待最终 review 分流。
+8. 真实 Airtable PAT 未提供；导入 fixture 不等于 live-source 证明。最终镜像新装、升级、恢复、缺失/错误 key 及实时连接下正常停机均已通过。
+9. 新增事务与 CSV outbox 路径有真库回归；未覆盖的旧 SQL 路径不宣称全面验收。CSV 故障注入日志及 Vitest experimental 提示为已记录的测试输出，未全局屏蔽。
 10. Agent 限流为进程内计数；单租户部署下不提供多副本共享计数。
 11. MCP 为无状态协议子集，无 SSE 推流/会话/批量。
 
 ## 9. 迭代路线（候选，按价值排序）
 
-本轮先完成最终同源浏览器、全 gate 与候选镜像 fresh/upgrade/restore/缺 key 验收，再决定发布。真实 Airtable 导入等待受授权测试 PAT。Grid 全量计数/粘贴/翻页/字段排序、Form、Kanban、Token scope 和 Webhook 已实现，不再列为未来功能。
+本轮功能、最终同源浏览器、全 gate 与候选镜像 fresh/upgrade/restore/缺失或错误 key/正常停机验收已完成；发布另行决定。真实 Airtable 导入等待受授权测试 PAT。Grid 全量计数/粘贴/翻页/字段排序、Form、Kanban、Token scope 和 Webhook 已实现，不再列为未来功能。
 
 后续候选：feed ETag/Last-Modified 缓存、剩余 UI/旧 SQL 回归、Gallery、S3 storage adapter、Excel/JSON 插件。Lookup/Rollup 若启动需先评估对当前单记录 Expression 边界的改变。
 

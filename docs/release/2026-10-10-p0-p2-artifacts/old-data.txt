@@ -1,0 +1,8 @@
+record|m3-record-001|m3-table
+record|m3-record-002|m3-table
+cell|m3-cell-001|m3-record-001|m3-text|"baseline one"
+cell|m3-cell-002|m3-record-002|m3-text|"baseline two"
+cell|m3-cell-003|m3-record-001|m3-file|["m3-attachment"]
+attachment|m3-attachment|m3-base|baseline.txt|text/plain|38|33333333-3333-4333-8333-333333333333.txt|m3-owner
+history|m3-history|m3-cell-001|"baseline one"|m3-owner
+member|m3-base|m3-owner|owner

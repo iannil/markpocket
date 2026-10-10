@@ -1,8 +1,8 @@
 # Upgrade Guide
 
-## P0–P2 candidate preparation (unreleased)
+## P0–P2 candidate (unreleased)
 
-The recovery baseline is prepared, but final candidate installation, upgrade, old-snapshot recovery and missing-Webhook-key acceptance remain pending. Run those checks once all F/P/I migrations and I6 are complete; see [the actual preparation evidence](release/2026-10-10-p0-p2-evidence.md#m4-recovery-preparation-final-candidate-acceptance-pending). No P0–P2 image or tag has been published.
+Final candidate installation, upgrade, matching old-image/snapshot recovery and missing/wrong Webhook-key acceptance passed on the exact image recorded in [final acceptance](release/2026-10-10-p0-p2-final-acceptance.md). No P0–P2 image or tag has been published. Repeat the rehearsal for your own deployment and recovery point before upgrading production.
 
 The currently generated migrations after 0013 are:
 
@@ -10,8 +10,12 @@ The currently generated migrations after 0013 are:
 | --- | --- |
 | `0014_clever_mantis.sql` | `airtable_import_receipt` stores the result for an imported request and references its created Base. |
 | `0015_adorable_virginia_dare.sql` | `write_receipt` stores atomic write results under `(actor_key, request_id)` and indexes receipt retention time. |
+| `0016_short_miek.sql` | Form publications and submission audit. |
+| `0017_groovy_blur.sql` | Token access, Base scope and expiry. |
+| `0018_aromatic_ultimo.sql` | Encrypted Webhook subscriptions. |
+| `0019_nebulous_jocasta.sql` | Transactional Webhook outbox and collection triggers. |
 
-Forms and integrations will add generated migrations later in this plan. Resolve their exact filenames from `apps/web/src/server/db/migrations/meta/_journal.json` after the final generation; do not guess migration numbers or treat the table above as the final release schema. Production Docker startup applies the image's pending migrations before serving traffic.
+These filenames match `apps/web/src/server/db/migrations/meta/_journal.json` at the tested candidate. Production Docker startup applies the image's pending migrations before serving traffic.
 
 Before upgrading, freeze application writes, direct SQL writers, importers and attachment writers, then use the exact two-argument [backup command](BACKUP.md#create-a-backup). Preserve the old image by immutable image ID, the checked database dump, matching `data/` archive and protected deployment configuration, including the Webhook encryption key when configured. Resume writes only after deciding the recovery point is acceptable.
 
@@ -19,7 +23,7 @@ Validate the final image against an empty isolated database, then upgrade the di
 
 For rollback, stop writes to the upgraded instance and recover the old image with its pre-upgrade schema snapshot and matching attachment archive in a new instance. There are no down migrations. Never run the old program against the upgraded database as a rollback. Records, anonymous Form submissions and other changes after the snapshot are outside that recovery point and will be lost if you return to it. Reconcile them separately before switching traffic.
 
-After Webhooks are implemented, also test an isolated final-image instance with an encrypted subscription and pending deliveries, then remove `WEBHOOK_ENCRYPTION_KEY` and restart its web service. Confirm delivery is explicitly disabled and pending deliveries remain intact without claims or attempt increments; keep the protected original key for recovery. This negative case is pending in the preparation evidence and must pass before final M4 acceptance.
+Also test an isolated instance with an encrypted subscription and pending deliveries, then remove or replace `WEBHOOK_ENCRYPTION_KEY` and restart its web service. Confirm delivery is explicitly disabled and pending deliveries remain intact without claims or attempt increments; keep the protected original key for recovery. Both negative cases passed in final acceptance. After restoring the correct key, a current owner must explicitly resume the disabled subscription.
 
 ## From v0.0.0 to v1.0.0-alpha.1
 

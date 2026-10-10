@@ -6,11 +6,11 @@ Save `.env` authentication settings and other deployment configuration separatel
 
 ## Form and Webhook recovery configuration
 
-For the forthcoming P0–P2 Form/Webhook features, the database snapshot must include Form publications, submission audits and write receipts together with encrypted Webhook subscriptions and delivery state. Preserve any distributed Form links separately in protected storage: publication tokens are stored as hashes and cannot be reconstructed from a database dump. A rollback to an earlier snapshot loses later Form submissions and publication changes.
+For P0–P2 Form/Webhook features, the database snapshot must include Form publications, submission audits and write receipts together with encrypted Webhook subscriptions and delivery state. Preserve any distributed Form links separately in protected storage: publication tokens are stored as hashes and cannot be reconstructed from a database dump. A rollback to an earlier snapshot loses later Form submissions and publication changes.
 
 When Webhooks are configured, separately back up the exact `WEBHOOK_ENCRYPTION_KEY` from the deployed environment, alongside the authentication settings. It is a canonical base64 encoding of 32 random bytes, independent of `BETTER_AUTH_SECRET`, and is required to decrypt stored endpoint signing secrets. Restore the same key with the matching database snapshot; generating a replacement key does not recover existing encrypted secrets. Keep the key offline or in access-controlled secret storage, never in Git, public evidence or command output. `backup-instance.sh` copies the database and `data/`; it does **not** copy `.env` or this key.
 
-The forthcoming final-image acceptance must verify that a missing key disables Webhook sending explicitly while retaining pending deliveries. That behavior is not yet runtime-verified by the [P0–P2 preparation evidence](release/2026-10-10-p0-p2-evidence.md#m4-recovery-preparation-final-candidate-acceptance-pending). Restore the protected key and restart the matching version before expecting pending deliveries to resume; validate the final implementation's reported status and queue first.
+The [final-image acceptance](release/2026-10-10-p0-p2-final-acceptance.md) verified that missing and wrong keys disable Webhook sending while preserving pending event IDs, attempts, leases and due times. Restore the protected key and restart the matching version, inspect the retained queue, then have a current owner explicitly resume the subscription. Restarting with the restored key does not automatically reactivate a disabled endpoint. If the original key is lost, rotate the signing secret, update the receiver and explicitly resume.
 
 ## Create a backup
 

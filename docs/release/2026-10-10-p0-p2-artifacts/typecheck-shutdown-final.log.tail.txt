@@ -1,0 +1,20 @@
+@markpocket/plugin-sdk:typecheck: > @markpocket/plugin-sdk@0.0.0 typecheck /Users/rong.zhu/.codex/worktrees/airtable-release-foundation/markpocket/packages/plugin-sdk
+@markpocket/plugin-sdk:typecheck: > tsc --noEmit
+@markpocket/plugin-sdk:typecheck: 
+@markpocket/plugin-csv:typecheck: cache hit, replaying logs 3c8d361c5325de32
+@markpocket/plugin-storage-local:typecheck: > @markpocket/plugin-storage-local@0.0.0 typecheck /Users/rong.zhu/Code/@saas/markpocket/packages/plugin-storage-local
+@markpocket/plugin-storage-local:typecheck: > tsc --noEmit
+@markpocket/plugin-storage-local:typecheck: 
+@markpocket/plugin-csv:typecheck: 
+@markpocket/plugin-csv:typecheck: > @markpocket/plugin-csv@0.0.0 typecheck /Users/rong.zhu/.codex/worktrees/airtable-release-foundation/markpocket/packages/plugin-csv
+@markpocket/plugin-csv:typecheck: > tsc --noEmit
+@markpocket/plugin-csv:typecheck: 
+@markpocket/web:typecheck: 
+@markpocket/web:typecheck: > @markpocket/web@1.0.0-alpha.1 typecheck /Users/rong.zhu/.codex/worktrees/airtable-p0-p2/markpocket/apps/web
+@markpocket/web:typecheck: > tsc --noEmit
+@markpocket/web:typecheck: 
+
+ Tasks:    4 successful, 4 total
+Cached:    3 cached, 4 total
+  Time:    1.201s 
+

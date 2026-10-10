@@ -1,0 +1,6 @@
+
+> markpocket@1.0.0-alpha.1 format:check /Users/rong.zhu/.codex/worktrees/airtable-p0-p2/markpocket
+> prettier --check "**/*.{ts,tsx,js,jsx,json,md,yml,yaml}" --ignore-path .gitignore --ignore-path .prettierignore
+
+Checking formatting...
+All matched files use Prettier code style!
