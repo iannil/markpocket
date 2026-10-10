@@ -101,19 +101,26 @@ export const recordRouter = router({
     .input(z.object({ tableId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertTableRole(input.tableId, ctx.session.user.id, 'editor');
-      const row = await db.transaction(async (tx) => {
-        const [created] = await tx
-          .insert(record)
-          .values({
-            id: randomUUID(),
-            tableId: input.tableId,
-            createdBy: ctx.session.user.id,
-          })
-          .returning();
-        // Materialize expression cells so the new record isn't blank until an edit.
-        await materializeExpressionsForRecord(tx, input.tableId, created!.id, ctx.session.user.id);
-        return created!;
-      });
+      const row = await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          const [created] = await tx
+            .insert(record)
+            .values({
+              id: randomUUID(),
+              tableId: input.tableId,
+              createdBy: ctx.session.user.id,
+            })
+            .returning();
+          // Materialize expression cells so the new record isn't blank until an edit.
+          await materializeExpressionsForRecord(
+            tx,
+            input.tableId,
+            created!.id,
+            ctx.session.user.id,
+          );
+          return created!;
+        }),
+      );
       void publishTableChange(input.tableId, ctx.session.user.id);
       return row;
     }),

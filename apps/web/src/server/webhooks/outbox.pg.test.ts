@@ -31,6 +31,39 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')(
     beforeEach(() => vi.stubEnv('WEBHOOK_ENCRYPTION_KEY', randomBytes(32).toString('base64')));
     afterEach(() => vi.unstubAllEnvs());
 
+    it(
+      'maps trigger-backed record.create lock timeout to a retryable conflict and rolls back',
+      async () =>
+        withDbFixture(async (f) => {
+          const { db } = await import('../db');
+          const { record, webhookSubscription } = await import('../db/schema');
+          const { PG_BUSY_MESSAGE } = await import('../db/pg-errors');
+          const sub = await subscribe(f);
+          await db.transaction(async (tx) => {
+            // The separate caller connection reaches the outbox trigger, which
+            // must wait for this subscription lock until its real 5s timeout.
+            await tx
+              .select()
+              .from(webhookSubscription)
+              .where(eq(webhookSubscription.id, sub.id))
+              .for('update');
+            await expect(f.caller.record.create({ tableId: f.tableId })).rejects.toMatchObject({
+              code: 'CONFLICT',
+              message: PG_BUSY_MESSAGE,
+            });
+          });
+          expect(await db.select().from(record).where(eq(record.tableId, f.tableId))).toHaveLength(
+            0,
+          );
+          expect(await deliveries(sub.id)).toHaveLength(0);
+          const created = await f.caller.record.create({ tableId: f.tableId });
+          expect(await deliveries(sub.id)).toEqual([
+            expect.objectContaining({ recordId: created.id }),
+          ]);
+        }),
+      15000,
+    );
+
     it('exposes events only after commit and rolls them back with business writes', async () =>
       withDbFixture(async (f) => {
         const { db } = await import('../db');
