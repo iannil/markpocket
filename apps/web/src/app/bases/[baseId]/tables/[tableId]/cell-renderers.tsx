@@ -417,7 +417,7 @@ export function EditingCell({
     if (e.key === 'Enter') {
       e.preventDefault();
       commitInline('down');
-    } else if (e.key === 'Tab') {
+    } else if (e.key === 'Tab' && commitOnBlur) {
       e.preventDefault();
       commitInline('right');
     } else if (e.key === 'Escape') {

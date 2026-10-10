@@ -43,6 +43,10 @@ export function RecordFieldEditor({
     };
   }, []);
   const locked = readOnly || field.type === FieldType.Expression;
+  const explicitInput =
+    field.type === FieldType.Text ||
+    field.type === FieldType.Number ||
+    field.type === FieldType.Date;
   const inline = new Set<FieldType>([
     FieldType.Text,
     FieldType.Number,
@@ -162,17 +166,19 @@ export function RecordFieldEditor({
       {error && (
         <div role="alert" className="text-sm text-destructive">
           {error}{' '}
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={saving}
-            onClick={() => {
-              const last = retry.current;
-              if (last) void save(last.value, last.close);
-            }}
-          >
-            Retry save
-          </Button>
+          {!explicitInput && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving}
+              onClick={() => {
+                const last = retry.current;
+                if (last) void save(last.value, last.close);
+              }}
+            >
+              Retry save
+            </Button>
+          )}
         </div>
       )}
     </div>

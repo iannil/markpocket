@@ -28,8 +28,10 @@ existing last-write-wins notification when a recent edit was overwritten.
 **Open details** opens the record drawer for editors and viewers. Fields follow
 the table field order. Editors use the same typed field editors as Grid; text,
 number and date use **Save** or Enter. Changing focus does not save those drafts.
-A failed save keeps the entered value and offers **Retry save**. Escape cancels an
-inline field edit; Escape from the drawer closes it and restores the card button
+A failed save keeps the entered value. Text, number and date keep their **Save**
+button, which submits the current draft after any corrections; other field types
+offer **Retry save**. Tab moves focus normally in detail inputs without saving.
+Escape cancels an inline field edit; Escape from the drawer closes it and restores the card button
 focus. Expressions are always read-only. Viewer and unresolved member permissions
 keep all fields read-only. The server separately checks current membership and
 the record's exact owning table for every read/write.

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { FieldLike } from '@/app/bases/[baseId]/tables/[tableId]/cell-renderers';
+import { EditingCell, type FieldLike } from '@/app/bases/[baseId]/tables/[tableId]/cell-renderers';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RecordDetail } from './record-detail';
 const state = vi.hoisted(() => ({
@@ -121,7 +121,7 @@ it('reuses text editing, preserves a failed draft and focus, then retries all pr
   fireEvent.blur(screen.getByRole('textbox', { name: 'Name' }));
   expect(state.write).toHaveBeenCalledTimes(1);
   expect(state.list).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Retry save' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save Name' }));
   await waitFor(() => expect(state.list).toHaveBeenCalledExactlyOnceWith({ tableId: 't1' }));
   expect(state.get).toHaveBeenCalledWith({ tableId: 't1', id: 'r1' });
   expect(state.page).toHaveBeenCalledWith({ tableId: 't1' });
@@ -314,4 +314,65 @@ it('keeps the final intended multi-select draft after a failed queued write unti
     fieldId: 'multi',
     value: ['a', 'b'],
   });
+});
+
+it('retries the visible corrected text draft after an earlier value failed', async () => {
+  state.write.mockRejectedValueOnce(new Error('Save failed'));
+  render(detail());
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Name' })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+    target: { value: 'Failed A' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Save Name' }));
+  await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Save failed'));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+    target: { value: 'Corrected B' },
+  });
+  const retry =
+    screen.queryByRole('button', { name: 'Retry save' }) ??
+    screen.getByRole('button', { name: 'Save Name' });
+  fireEvent.click(retry);
+  await waitFor(() => expect(state.write).toHaveBeenCalledTimes(2));
+  expect(state.write).toHaveBeenLastCalledWith({
+    recordId: 'r1',
+    fieldId: 'name',
+    value: 'Corrected B',
+  });
+});
+it('lets detail Tab move to Save without submitting or losing the typed draft', async () => {
+  render(detail());
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Name' })),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Name' }));
+  const input = screen.getByRole('textbox', { name: 'Name' }) as HTMLInputElement;
+  fireEvent.change(input, { target: { value: 'Unsubmitted draft' } });
+  expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(true);
+  // jsdom does not implement native Tab traversal. Verify the event permits
+  // it, then focus the next actual control and exercise the resulting blur.
+  const save = screen.getByRole('button', { name: 'Save Name' });
+  save.focus();
+  expect(document.activeElement).toBe(save);
+  expect(input.value).toBe('Unsubmitted draft');
+  expect(state.write).not.toHaveBeenCalled();
+});
+it('preserves default Grid Tab commit and prevents native traversal', () => {
+  const commit = vi.fn();
+  render(
+    <EditingCell
+      field={{ id: 'grid-name', name: 'Grid Name', type: 'text', options: {} }}
+      record={{ id: 'grid-record', cells: { 'grid-name': 'Initial' } }}
+      users={[]}
+      onCommit={commit}
+      onWrite={() => {}}
+      onCancel={() => {}}
+    />,
+  );
+  const input = screen.getByRole('textbox', { name: 'Grid Name' });
+  fireEvent.change(input, { target: { value: 'Grid draft' } });
+  expect(fireEvent.keyDown(input, { key: 'Tab' })).toBe(false);
+  expect(commit).toHaveBeenCalledExactlyOnceWith('Grid draft', 'right');
 });
