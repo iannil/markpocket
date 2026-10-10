@@ -4,6 +4,7 @@ import next from 'next';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { drainServer } from './server/drain-server';
 
 // Load .env from the app directory (Node 20.6+). No-op if absent.
 try {
@@ -112,11 +113,7 @@ function registerShutdown(
       let exitCode = 0;
       try {
         // Abort transports and stop claims immediately, before waiting on HTTP drain.
-        await Promise.all([
-          stopWebhooks(),
-          new Promise<void>((resolve) => server.close(() => resolve())),
-        ]);
-        closeAllClients();
+        await drainServer(server, closeAllClients, stopWebhooks);
         // Ends the pool AND postgres.js' dedicated LISTEN connection
         // (sql.end() cascades into listen.sql), so nothing is left mid-query.
         const { sql } = await import('./server/db');
