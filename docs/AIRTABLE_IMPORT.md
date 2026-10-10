@@ -50,3 +50,29 @@ pnpm --filter @markpocket/web exec tsx scripts/cleanup-airtable-imports.ts
 `AIRTABLE_IMPORT_JOURNAL_DIR` may be omitted when the app used its default `$UPLOAD_DIR/.airtable-import-journals`. Use the exact paths from the app; do not point the command at arbitrary upload directories. The command reports a recovered journal count. If it reports an error, retain the journal/files for inspection and retry once database access is restored. The command is local administration, not a public API.
 
 The [acceptance evidence](release/2026-10-10-airtable-import-evidence.md) distinguishes fixture verification from live Airtable verification. A real Airtable PAT was unavailable for that acceptance run, so real Airtable end-to-end migration remains unverified.
+
+## Opt-in live reconciliation (still unverified)
+
+`live.pg.test.ts` exercises the real read-only Airtable client, importer, isolated PostgreSQL database, and temporary local storage. It is skipped in normal test runs. Explicitly enabling it without credentials fails with a sanitized error; that failure is not live acceptance evidence. Preview status remains until a credentialed live run and the migration-readiness release gate both pass.
+
+Prepare a dedicated, static test Base; pause edits and automations for the entire run. Give its PAT only `schema.bases:read` and `data.records:read`, restricted to that Base. The test never writes to Airtable. Keep credentials in a protected environment, never command arguments, checked-in files, test snapshots, or reports.
+
+The Base must contain:
+
+- `People` with at least 101 records (forces pagination), and `Teams` with at least one record.
+- A populated link from People to Teams. All links, including reciprocal links, must resolve within the imported Base.
+- A People single-select field with at least two distinct options actually used by records.
+- A People checkbox field with both a checked record and an unchecked/omitted record.
+- A populated People formula field and a People unsupported button field, to exercise snapshot and skip reports.
+- A People attachment containing exactly the UTF-8 bytes `markpocket live acceptance fixture` followed by one LF newline. Additional attachments are allowed within the budget.
+
+Fields are discovered by source type and IDs, so their display names are unrestricted. The live harness additionally caps the Base at 1,000 records, 20 unique attachments, and 20 MiB of downloaded attachment bytes. The production client's stricter per-request, schema, cell, payload, attachment, and deadline limits continue to apply. Use an already migrated PostgreSQL database on localhost/loopback whose name begins `markpocket_p0p2_`, isolated from application data. Both live and PG opt-ins are required. `UPLOAD_DIR` is replaced only within the test process with a fresh temporary directory and restored afterward; cleanup removes only the unique fixture owner's DB data and this temporary directory.
+
+With `AIRTABLE_TEST_BASE_ID`, `AIRTABLE_TEST_PAT`, and the isolated `DATABASE_URL` already injected into the environment:
+
+```bash
+AIRTABLE_LIVE_TEST=1 P0_P2_PG_TEST=1 \
+pnpm exec vitest run apps/web/src/server/imports/airtable/live.pg.test.ts
+```
+
+The test reads schema/preflight and every source record before importing. It reconciles complete ID sets and duplicates, maps every link through source IDs, checks select names against stored option IDs and checkbox defaults, hashes source and stored attachment bytes, verifies formula snapshots/unsupported omissions and loss reports, then replays the same request ID with no PAT. A second source scan compares IDs and canonical field-value hashes. Expiring attachment URLs/thumbnails are excluded from drift hashes; attachment IDs, names, sizes, and MIME types are retained. Source drift invalidates the run rather than proving importer success. Errors expose only a fixed stage and safe code, never source values, identifiers, attachment URLs, or credentials. Network failures remain failures and must not be replaced with a mock run presented as live success.
