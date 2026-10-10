@@ -17,6 +17,7 @@ import {
 } from '@/lib/view-ast';
 import { revokeViewPublications, lockFormLifecycle } from '../../forms/publications';
 import { validateFormFields } from '@/lib/form-config';
+import { validateKanbanFields } from '@/lib/kanban-config';
 import { protectedProcedure, router } from '../init';
 
 // Field-liveness gate for view option configs (review N4). Returns the
@@ -111,6 +112,12 @@ export const viewRouter = router({
       const baseId = await baseIdFromTable(existing.tableId);
       if (!baseId) throw new TRPCError({ code: 'NOT_FOUND', message: 'Base not found' });
       await assertRole(baseId, ctx.session.user.id, 'editor');
+      if (existing.type !== 'kanban' && parsed.data.kanban !== undefined) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Kanban config requires a Kanban view',
+        });
+      }
       if (existing.type !== 'form' && parsed.data.form !== undefined) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Form config requires a Form view' });
       }
@@ -159,6 +166,14 @@ export const viewRouter = router({
               code: 'BAD_REQUEST',
               message: `View config references unknown field(s): ${dead.join(', ')}`,
             });
+          }
+          if (current.type === 'kanban' && parsed.data.kanban) {
+            const fields = await tx.select().from(field).where(eq(field.tableId, current.tableId));
+            try {
+              validateKanbanFields(parsed.data.kanban, fields);
+            } catch (cause) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: (cause as Error).message });
+            }
           }
           if (existing.type === 'form' && parsed.data.form) {
             const fields = await tx

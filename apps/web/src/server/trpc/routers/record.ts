@@ -17,10 +17,15 @@ import { assertTableRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
 import { getGroupCounts } from '../../records/group-counts';
+import { getKanbanPage, kanbanPageInputSchema } from '../../records/kanban-page';
 
 import { batchInputSchema, writeBatch } from '../../records/write-batch';
 
 export const recordRouter = router({
+  kanbanPage: protectedProcedure.input(kanbanPageInputSchema).query(async ({ ctx, input }) => {
+    await assertTableRole(input.tableId, ctx.session.user.id, 'viewer');
+    return getKanbanPage(input);
+  }),
   groupCounts: protectedProcedure
     .input(z.object({ tableId: z.string(), viewId: z.string() }))
     .query(async ({ ctx, input }) => {

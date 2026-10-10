@@ -382,14 +382,14 @@ export const fieldRouter = router({
             .where(eq(view.tableId, existing.tableId));
           const filterHitViewIds: string[] = [];
           for (const v of views) {
-            // Parse known Grid keys separately: an invalid Form draft (including
+            // Parse known Grid keys separately: an invalid Form/Kanban draft (including
             // an emptied projection) must not hide Grid references or lose opaque
             // extension keys. Cleanup preserves raw config; publication validates it.
             const raw =
               v.options && typeof v.options === 'object' && !Array.isArray(v.options)
                 ? (v.options as Record<string, unknown>)
                 : {};
-            const parsed = parseViewOptions({ ...raw, form: undefined });
+            const parsed = parseViewOptions({ ...raw, form: undefined, kanban: undefined });
             if (filterReferencesField(parsed.filter, input.id)) filterHitViewIds.push(v.id);
             const cleaned = removeFieldReferences(parsed, input.id);
             const formHit = formReferencesField(raw, input.id);

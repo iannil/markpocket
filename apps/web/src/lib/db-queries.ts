@@ -21,6 +21,7 @@ export async function listRecordsPivoted(
   opts: { where?: SQL | null; orderBy?: SQL | null },
   offset = 0,
   limit = 100,
+  executor: Pick<typeof db, 'select'> = db,
 ) {
   const conds: SQL[] = [eq(record.tableId, tableId)];
   if (opts.where) conds.push(opts.where);
@@ -31,7 +32,7 @@ export async function listRecordsPivoted(
   // overlap or skip rows between "Show more" fetches.
   orderBys.push(desc(record.id));
 
-  const records = await db
+  const records = await executor
     .select()
     .from(record)
     .where(and(...conds))
@@ -42,7 +43,7 @@ export async function listRecordsPivoted(
   const recordIds = records.map((r) => r.id);
   const cells =
     recordIds.length > 0
-      ? await db.select().from(cell).where(inArray(cell.recordId, recordIds))
+      ? await executor.select().from(cell).where(inArray(cell.recordId, recordIds))
       : [];
 
   const cellsByRecord = new Map<string, Record<string, unknown>>();
@@ -61,10 +62,14 @@ export async function listRecordsPivoted(
   }));
 }
 
-export async function countRecords(tableId: string, where?: SQL | null) {
+export async function countRecords(
+  tableId: string,
+  where?: SQL | null,
+  executor: Pick<typeof db, 'select'> = db,
+) {
   const conds: SQL[] = [eq(record.tableId, tableId)];
   if (where) conds.push(where);
-  const [row] = await db
+  const [row] = await executor
     .select({ value: count() })
     .from(record)
     .where(and(...conds));

@@ -3,6 +3,7 @@
 
 import { z } from 'zod';
 import { formConfigSchema, type FormConfig } from './form-config';
+import { kanbanConfigSchema, type KanbanConfig } from './kanban-config';
 
 // Operators compileFilter knows how to compile — anything else is rejected at
 // write time instead of being silently dropped at query time.
@@ -23,7 +24,7 @@ export const FILTER_OPERATORS = [
 ] as const;
 
 // Server-supported view types. Creation UI enables each renderer separately.
-export const VIEW_TYPES = ['grid', 'form'] as const;
+export const VIEW_TYPES = ['grid', 'form', 'kanban'] as const;
 
 // DoS guards for untrusted view options (see review item 4b).
 const MAX_FILTER_DEPTH = 10;
@@ -69,6 +70,7 @@ export interface GroupSpec {
 
 export interface ViewOptions {
   form?: FormConfig;
+  kanban?: KanbanConfig;
   // NOTE: the DECLARED type says group, but the write gate (checkFilterNode)
   // also accepts a bare condition as the filter root — at runtime this can be
   // either. Consumers that walk the tree must go through isFilterGroup /
@@ -159,6 +161,7 @@ function checkFilterNode(raw: unknown, ctx: z.RefinementCtx): void {
 export const viewOptionsSchema = z
   .object({
     form: formConfigSchema.optional(),
+    kanban: kanbanConfigSchema.optional(),
     filter: z.unknown().optional(),
     sort: z
       .array(z.object({ fieldId: z.string().min(1), direction: z.enum(['asc', 'desc']) }))
@@ -249,6 +252,10 @@ export function collectReferencedFieldIds(options: ViewOptions): Set<string> {
   for (const entry of options.group ?? []) ids.add(entry.fieldId);
   for (const id of options.hiddenFields ?? []) ids.add(id);
   for (const field of options.form?.fields ?? []) ids.add(field.fieldId);
+  if (options.kanban) {
+    ids.add(options.kanban.groupFieldId);
+    if (options.kanban.titleFieldId) ids.add(options.kanban.titleFieldId);
+  }
   return ids;
 }
 
@@ -273,13 +280,14 @@ function pruneFilterTree(filter: FilterNode, fieldId: string): FilterNode | null
   return conditions.length > 0 ? { op: filter.op, conditions } : null;
 }
 
-// Strip every reference to `fieldId` from stored view options — the cleanup
+// Strip Grid/Form references to `fieldId` from stored view options — the cleanup
 // half of field.delete (review M-2), so a deleted field can't linger as a
 // condition compileCondition would silently drop. Sort/group entries and
 // hiddenFields ids are filtered out; emptied arrays drop their key. Returns
 // the SAME object when nothing referenced the field, letting callers skip
 // pointless rewrites. columnWidth keys are left alone: pure UI metadata with
-// no row-set effect once the field is gone.
+// no row-set effect once the field is gone. Kanban references remain as repair
+// markers: its strict reader rejects the missing field rather than widening rows.
 export function removeFieldReferences(options: ViewOptions, fieldId: string): ViewOptions {
   const filterHit = filterReferencesField(options.filter, fieldId);
   const sortHit = options.sort?.some((s) => s.fieldId === fieldId) ?? false;
@@ -288,8 +296,8 @@ export function removeFieldReferences(options: ViewOptions, fieldId: string): Vi
   const formHit = options.form?.fields.some((field) => field.fieldId === fieldId) ?? false;
   if (!filterHit && !sortHit && !groupHit && !hiddenHit && !formHit) return options;
 
-  // Preserve extensions (including future Kanban options) while explicitly
-  // updating the reference-bearing keys this walker understands.
+  // Preserve extensions and stale Kanban references (board reads fail closed)
+  // while updating the Grid/Form reference-bearing keys.
   const next: ViewOptions = { ...options };
   if (options.filter) {
     // The stored filter root may be a bare condition (the write gate accepts

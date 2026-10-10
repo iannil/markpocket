@@ -408,3 +408,28 @@ describe('Form options and cleanup', () => {
     expect(viewOptionsSchema.safeParse(pruned).success).toBe(false);
   });
 });
+
+describe('Kanban options', () => {
+  it('supports Kanban and collects both references', () => {
+    const kanban = { groupFieldId: 'status', titleFieldId: 'title' };
+    expect(VIEW_TYPES).toContain('kanban');
+    expect(viewOptionsSchema.parse({ kanban })).toEqual({ kanban });
+    expect(collectReferencedFieldIds({ kanban })).toEqual(new Set(['status', 'title']));
+    expect(collectReferencedFieldIds({ kanban: { groupFieldId: 'status' } })).toEqual(
+      new Set(['status']),
+    );
+  });
+  it('rejects incomplete configuration and retains stale references for fail-closed reads', () => {
+    for (const kanban of [{}, { groupFieldId: '' }, { groupFieldId: 'status', titleFieldId: '' }])
+      expect(viewOptionsSchema.safeParse({ kanban }).success).toBe(false);
+    const options = {
+      kanban: { groupFieldId: 'status' },
+      hiddenFields: ['status'],
+      extension: { keep: true },
+    };
+    expect(removeFieldReferences(options, 'status')).toEqual({
+      kanban: options.kanban,
+      extension: options.extension,
+    });
+  });
+});
