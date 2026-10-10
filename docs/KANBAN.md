@@ -3,8 +3,9 @@
 Status: implemented locally on 2026-10-10; isolated PostgreSQL and component
 fixtures verified. Controller browser checks cover board creation, configuration,
 paging, failed move/retry, keyboard menus, 390px layout, viewer permissions and
-native drag/drop. Record detail browser acceptance and same-origin multiplayer
-runtime acceptance remain pending. This work is unpublished.
+native drag/drop. Record detail browser checks also verify current-draft retry,
+native Tab, Escape focus, read-only viewer/expression and expression refresh.
+Same-origin multiplayer runtime acceptance remains pending. This work is unpublished.
 
 Create a **Kanban** view from the table view tabs. Editors configure a status field
 from the same table with type **Single select** (up to 100 choices). The optional

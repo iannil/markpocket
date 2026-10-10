@@ -158,12 +158,12 @@ Auth column: **P** = protectedProcedure (requires session), **Pub** = publicProc
 
 ## token
 
-Personal API tokens for the agent access layer (ADR-0010). A token carries its creator's full authority — see [agent-access.md](agent-access.md).
+Personal API tokens for the agent access layer (ADR-0010/0014). Token Base/access/expiry constraints intersect with the creator's current membership — see [agent-access.md](agent-access.md).
 
 | Procedure | Auth | Input | Output | Description |
 |-----------|------|-------|--------|-------------|
-| `list` | P | — | `{ id, name, tokenPrefix, createdAt, lastUsedAt, expiresAt }[]` | Lists the caller's live (non-revoked) tokens, newest first. Never returns the secret — only the display prefix. |
-| `create` | P | `{ name: string }` | `{ token: string, row: { id, name, tokenPrefix, createdAt } }` | Mints a new Bearer token. The plaintext `token` crosses the wire exactly once, in this response; only the sha256 digest is stored. |
+| `list` | P | — | `{ id, name, tokenPrefix, createdAt, lastUsedAt, expiresAt, access, baseId }[]` | Lists non-revoked tokens, including expired rows, newest first. Never returns the secret. |
+| `create` | P | `{ name, baseId?:string\|null, access?:'read'\|'write', expiresInDays?:number\|null }` | `{ token, row }` | Mints a one-time Bearer value; stores only its digest. Omitted scope/access/expiry preserves legacy all/write/no-expiry; UI explicitly defaults current Base/read/30 days. |
 | `revoke` | P | `{ id: string }` | `{ ok: true }` | Soft-revokes a token (sets `revokedAt`). Only the creator's own token; unknown ids and other users' tokens both answer NOT_FOUND. |
 
 
@@ -182,7 +182,7 @@ Injected by the `@markpocket/plugin-csv` plugin via `...pluginRouters` (ADR-0008
 
 `record.writeBatch` commits records, cell history, expressions and the retry receipt together. Any invalid cell rejects the whole batch. Reuse the same UUID and unchanged body after a lost response: the server returns the original result, including created record IDs. Cell-map key order is ignored; row order is significant. Reusing a UUID with a different body returns `CONFLICT`. Receipt scope is the authenticated user, and authorization is checked again on replay.
 
-Receipts are retained for seven days, with bounded cleanup on subsequent writes. Clients must stop replaying after that window and reconcile records before starting a new request; replay is no longer guaranteed. This foundation exposes the protected tRPC API; Grid paste and public Form interfaces are subsequent work. Existing REST create/update endpoints keep their partial-success `cellErrors` contract.
+Receipts are retained for seven days, with bounded cleanup on subsequent writes. Clients must stop replaying after that window and reconcile records before starting a new request; replay is no longer guaranteed. Grid paste now consumes this protected batch API; public Form submission uses the shared transaction writer with anonymous attribution and capability checks. Existing REST create/update endpoints keep their partial-success `cellErrors` contract.
 
 
 ### Grid editing and counts
@@ -190,3 +190,26 @@ Receipts are retained for seven days, with bounded cleanup on subsequent writes.
 Paste tab-separated rows into an editable selected cell to preview updates and new rows before applying one atomic batch. Expression columns and viewer sessions cannot paste. If the target includes unloaded existing rows, load the next page first. ArrowDown, Tab and PageDown load the next page when needed; Ctrl+End moves to the last loaded row. Fields controls can reorder all fields, including hidden ones.
 
 Group headers count all matching records; the toolbar shows loaded / total records. `Count unavailable` means the count query failed. Multiple grouping fields use only the first field. Advanced filter trees (nested, bare or OR roots) are read-only in the flat filter panel and can be edited through the API.
+
+## P0–P2 view and integration contracts (implemented, unreleased)
+
+Form configuration is stored in validated Form view options. Editors may configure, viewers preview only; owners use `form.publish({viewId,expiresInDays:1..365})`, `form.list({viewId})` and `form.revoke({publicationId})`. Publication returns the capability once; listing never recovers it. Public submissions use the dedicated Form HTTP surface, not read-only share tokens. See [Forms](../FORMS.md).
+
+Kanban uses `record.kanbanPage` for independent lane pages, `record.groupCounts` for SQL full-view counts and protected `record.get({tableId,id})` for exact-table detail. Writes use existing cell/batch APIs and current editor membership; shared Kanban remains the filtered, hidden-field-redacted Grid projection. See [Kanban](../KANBAN.md).
+
+Token creation accepts Base scope, read/write access and 1–365-day/null expiry; omitted fields retain legacy all/write/no-expiry compatibility. The UI explicitly chooses current Base/read/30 days. REST and MCP request scopes intersect with current membership, default-deny unknown procedures, and cannot mint wider credentials through token/share management. See [agent access](agent-access.md).
+
+### webhook (owner-only browser management)
+
+| Procedure | Input | Result |
+| --- | --- | --- |
+| list | `{tableId}` | `{id,url,events,state,overflowAt,createdAt}[]`; no secrets/ciphertext |
+| create | `{tableId,url,events}` | `{id,secret}` once; at most five endpoints across all states |
+| pause | `{id}` | `{ok:true}`; retains queue, invalidates leases |
+| resume | `{id,acknowledgeGap:boolean}` | `{ok:true}`; overflow needs acknowledgement, valid key required; current owner adopts responsibility |
+| rotate | `{id}` | `{secret}` once; invalidates leases without activation |
+| remove | `{id}` | `{ok:true}`; cascades queue/log deletion |
+| deliveries | `{id,offset=0,limit=20}` | newest-first `{id,type,state,attempts,lastStatus,lastError,time}[]`; limit 1–50 |
+| retry | `{deliveryId}` | `{ok:true}`; dead only, original ID, attempts=0; queue capacity enforced |
+
+Every operation resolves the endpoint's table and checks current owner membership. Lifecycle transactions take table advisory lock → membership share lock → subscription row → delivery row. Missing/external IDs return a generic owner denial without URL/secret disclosure. URLs cannot be edited. See [receiver/recovery documentation](../WEBHOOKS.md) and [ADR-0015](../adr/0015-webhook-outbox.md).

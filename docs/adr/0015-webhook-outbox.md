@@ -1,12 +1,12 @@
 # ADR-0015: Webhook subscriptions and PostgreSQL outbox
 
-Status: Accepted (credentials, transport, subscription model, transactional outbox and worker implemented; management UI follows in I6).
+Status: Accepted (credentials, transport, transactional outbox, worker and owner management UI implemented; unreleased).
 
 ## Decision
 
 Keep webhooks inside the application and PostgreSQL; add no queue service or runtime dependency. A Base owner may create up to five subscriptions per table, including active, paused, overflow and disabled subscriptions. Creation serializes on the transaction advisory lock `webhook-subscriptions:<tableId>` and holds the current owner membership row FOR SHARE through commit. Explicit removal frees capacity. A URL is immutable: an owner explicitly disables/removes the old subscription and creates a new subscription, so queued deliveries cannot silently change targets.
 
-Only `record.changed` and `record.deleted` are supported. Subscription secrets contain 32 random bytes, encoded as hex for HMAC use, and are returned only by creation or future rotation. AES-256-GCM encrypts them under the independent canonical base64 32-byte `WEBHOOK_ENCRYPTION_KEY`; the format is `v1.<iv base64>.<tag base64>.<ciphertext base64>`, with a random 12-byte nonce and 16-byte authentication tag. Missing/invalid keys disable creation and sending, without discarding pending deliveries; there is no fallback to the session secret. UI projections must never expose stored ciphertext. Logs and errors must never contain secrets or complete URL queries.
+Only `record.changed` and `record.deleted` are supported. Subscription secrets contain 32 random bytes, encoded as hex for HMAC use, and are returned only by creation or rotation. AES-256-GCM encrypts them under the independent canonical base64 32-byte `WEBHOOK_ENCRYPTION_KEY`; the format is `v1.<iv base64>.<tag base64>.<ciphertext base64>`, with a random 12-byte nonce and 16-byte authentication tag. Missing/invalid keys disable creation and sending, without discarding pending deliveries; there is no fallback to the session secret. UI projections must never expose stored ciphertext. Logs and errors must never contain secrets or complete URL queries.
 
 Each POST validates HTTPS on port 443, no userinfo or fragment, and a maximum URL length of 2048. Query parameters are allowed. Every send resolves all DNS answers, rejects the whole set if any address is nonpublic, and pins the approved address into Node HTTPS lookup. TLS and Host retain the original hostname. Connection pooling is disabled to avoid reusing an unvalidated connection. The existing Airtable public-address predicate is reused without modifying its attachment-host allowlist. A five-second total deadline includes DNS and response reading; responses above 64 KiB are destroyed. Redirects return their status and are never followed. Server-only resolver/request injection permits tests without external sends.
 
@@ -26,7 +26,7 @@ At 10,000 pending/leased deliveries, mark the subscription overflow, record over
 
 The first new event beyond capacity changes the subscription to overflow in the same business transaction, without enqueueing that event. Coalescing an existing transaction/record delivery still works at capacity. Succeeded/dead rows do not consume capacity; leased rows do. Rollback restores both the delivery changes and any overflow transition. Overflow remains explicit even if a later same-transaction deletion frees a slot, because an intervening record event may already have been skipped. Paused, overflow and disabled subscriptions collect no new events.
 
-Rotation must clear in-flight leases and pending sends must use the new secret; an already dispatched request can still complete under the old secret. Rotation and other lifecycle APIs follow in I6 and must clear leases atomically. Production worker shutdown follows server.ts: stop claims, drain or abort requests, then close PostgreSQL. Development uses an explicit one-shot worker command, not another service.
+Rotation must clear in-flight leases and pending sends must use the new secret; an already dispatched request can still complete under the old secret. Rotation and pause invalidate leases atomically through owner management APIs. Production worker shutdown follows server.ts: stop claims, drain or abort requests, then close PostgreSQL. Development uses an explicit one-shot worker command, not another service.
 
 ## Worker and lifecycle coordination
 
@@ -46,8 +46,14 @@ Development intentionally has no resident sender. An operator may run `cd apps/w
 
 `transport.ts`: postWebhook(url, body, headers, signal) returns only `{ status }`; parseWebhookUrl validates syntax and literal-address safety; createWebhookTransport provides server-side test injection.
 
-`subscriptions.ts`: createSubscription(userId, input) returns `{ id, secret }` once; lockWebhookSubscriptions and assertWebhookOwner are shared transaction primitives. Later mutations must acquire the same table lock before re-reading subscription state and checking owner membership. No list or rotation endpoint exists yet.
+`subscriptions.ts`: createSubscription(userId, input) returns `{ id, secret }` once; lockWebhookSubscriptions and assertWebhookOwner are shared transaction primitives. Later mutations must acquire the same table lock before re-reading subscription state and checking owner membership. `webhook` management now exposes list/create/pause/resume/rotate/remove/deliveries/retry, owner-only. Lists omit ciphertext; logs are limited to 50 rows/page and contain metadata/status only.
 
 `schema.ts`: webhookDelivery exposes id, subscriptionId, transactionId (`bigint` in TypeScript), baseId, tableId, recordId, eventType, occurredAt, state (`pending | leased | succeeded | dead`), attempts, nextAttemptAt, leaseUntil, leaseToken, lastStatus and lastError. New rows default to pending, zero attempts and nextAttemptAt=now. The worker projects only the six public event fields, excluding internal transactionId and bookkeeping.
 
 `worker.ts`: retryDelayMs(attempt), runWebhookBatch() returning claimed/succeeded/failed, startWebhookWorker() returning an async stop(). Claim, send, token-guarded acknowledgement and bounded cleanup helpers are exported for deterministic crash/lifecycle tests. No lifecycle mutation endpoint calls those helpers; I6 invalidates leases atomically under the ordering above. The public payload contains only the six event fields and uses timestamped HMAC headers over its exact JSON bytes.
+
+## Explicit owner recovery
+
+`createdBy` records the configuring owner responsible for future delivery, not immutable original-creator history. The worker pauses on that owner's membership loss. Any current owner may explicitly resume; after key validation and any required overflow acknowledgement, the same lifecycle transaction sets createdBy to that owner. Rotation alone changes neither state nor responsibility. A lost encryption key can be recovered by configuring a valid replacement, rotating the signing secret, updating the receiver and explicitly resuming. Restoring a key never activates automatically.
+
+Pause/rotation retain overflowAt; only acknowledged resume clears the marker. Dead-only retry serializes under the subscription row, preserves event ID, resets attempts/lease/status and refuses a full 10,000 pending/leased queue. Rotation/pause turn leased work into pending with replacement tokens so old acknowledgements fail; subsequent claims always issue fresh tokens. No lifecycle API calls the network. UI mounts management queries only after owner membership resolves, shows one-time secrets in memory, and confirms deletion of queue/logs with ConfirmDialog.

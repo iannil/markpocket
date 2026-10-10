@@ -17,6 +17,7 @@ import { tableRouter } from './routers/table';
 import { tokenRouter } from './routers/token';
 import { viewRouter } from './routers/view';
 import { workspaceRouter } from './routers/workspace';
+import { webhookRouter } from './routers/webhook';
 
 export const appRouter = router({
   auth: authRouter,
@@ -36,6 +37,7 @@ export const appRouter = router({
   member: memberRouter,
   publicShare: publicShareRouter,
   token: tokenRouter,
+  webhook: webhookRouter,
   ...pluginRouters,
 });
 

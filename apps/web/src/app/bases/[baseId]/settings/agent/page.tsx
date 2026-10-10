@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { WebhookSettings } from '@/components/webhooks/webhook-settings';
 import {
   Dialog,
   DialogContent,
@@ -73,6 +74,7 @@ export default function AgentTab() {
 
   return (
     <div className="space-y-8">
+      <WebhookSettings baseId={baseId} />
       <section>
         <h2 className="mb-1 text-sm font-semibold">API tokens</h2>
         <p className="mb-3 text-xs text-muted-foreground">

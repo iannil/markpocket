@@ -3,7 +3,7 @@
 ## 快速开始
 
 ```bash
-pnpm test                       # 全部测试（550 个用例 / 54 个文件，~3s，无需 DB）
+pnpm test                       # 普通测试（PG 默认跳过；最终候选计数见 release evidence）
 pnpm test -- --run src/foo.test.ts   # 单文件
 pnpm --filter @markpocket/web typecheck  # 类型检查
 pnpm test:e2e-api               # API E2E（需实例运行，见 tests/e2e/README.md）
@@ -90,3 +90,8 @@ rolesMock.assertRole = vi.fn().mockResolvedValue(undefined);
 - 每次 commit 前跑 `pnpm test`
 - 新 router 必须带集成测试
 - permission 测试前后显式恢复 mock
+## P0–P2 isolation and acceptance
+
+Real PostgreSQL suites require `P0_P2_PG_TEST=1` and an explicitly supplied dedicated `DATABASE_URL` whose database name starts `markpocket_p0p2_`. Never target an existing instance. Run the relevant `*.pg.test.ts` with `pnpm exec vitest run`; a skipped suite is not acceptance evidence. Webhook tests scope worker/cleanup to their owned subscription and inject transport; they never start a production sender or contact a receiver. Management tests cover actual locks, current owner roles, lease invalidation, retry, overflow recovery and redacted projections.
+
+The former 550-test baseline is historical. Subsystem test results and actual controller browser/HTTP checks are recorded in [P0–P2 evidence](release/2026-10-10-p0-p2-evidence.md); final full-suite, production build, same-origin realtime and image recovery checks remain pending until the controller records their results. Expected CSV fault-injection logs and the Vitest experimental typecheck notice are not evidence of a new application failure, nor have they been silently removed. Live Airtable source verification needs an authorized PAT.

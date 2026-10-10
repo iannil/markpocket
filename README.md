@@ -15,7 +15,7 @@
 <p>
   Bases, tables, fields, records, and Grid views (filter / sort / group / hide),<br/>
   real-time collaboration, cell-level history, and CSV in/out — in a single Docker container.<br/>
-  <em>Form / Kanban / Gallery views are planned, not shipped yet.</em>
+  <em>Form and Kanban are implemented on the unreleased P0–P2 branch; Gallery remains planned.</em>
 </p>
 
 ## Quick Start
@@ -81,7 +81,7 @@ Sorted by what you'll touch first, not by what was hardest to build.
 
 - **Bases & tables** — the familiar Airtable hierarchy: Workspace → Base → Table → Field / Record / View.
 - **Field types** — text, long-text, number, boolean, date, single/multi-select, attachment, user, link, and expression.
-- **Views** — Grid today (filter / sort / group / column width / hidden fields). Form / Kanban / Gallery are planned. Per-view config is persisted; views never mutate underlying data.
+- **Views** — Grid (filter / sort / group / column width / hidden fields), public submission Forms and Kanban are implemented; the P0–P2 additions are unreleased. Gallery remains planned. Per-view config is persisted; views never mutate underlying data.
 - **Real-time** — soft real-time broadcast per Base; online members shown inline.
 - **Expression fields** — `unit_price * quantity` style columns, written as token chips anchored to field IDs, evaluated on write and materialized into `cells.value`.
 - **Cell-level history** — append-only timeline of who changed what, when, with old/new values.

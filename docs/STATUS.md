@@ -1,6 +1,6 @@
 # markpocket 项目状态
 
-> **最后更新**：2026-10-10（foundation、Grid G1–G4、Form P1–P4、Kanban K1–K3 已实现，隔离验证及部分浏览器验证，未发布）
+> **最后更新**：2026-10-10（foundation、Grid、Form、Kanban、受限 Token 与 Webhook 已实现，未发布；最终候选验收待完成）
 > 本文档是项目的**现在时**：功能矩阵、质量基线、已知限制、迭代路线。给 LLM agent 的使用说明——执行任何迭代前先通读本文；改架构前先读对应 ADR（§3）；每完成一个迭代回来更新对应小节。
 > 逐版本变更见 `CHANGELOG.md`；术语定义见 `../../CONTEXT.md`；文档索引见 `README.md`。
 
@@ -14,7 +14,7 @@ markpocket 是**单租户自托管**的小团队数据库（Airtable 替代品�
 
 ## 2. 当前状态总览
 
-Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 `record.writeBatch` 与七天幂等收据（migration 0015）。真实隔离 PostgreSQL 验证覆盖回滚、匿名审计、表达式与公开批量/单格 API 并发；[证据](release/2026-10-10-p0-p2-evidence.md)。Grid G1–G4 已实现：原子粘贴、跨页键盘导航、完整字段排序、SQL 全量分组计数和筛选操作符。隔离 PostgreSQL/UI 验证通过，实际浏览器验证粘贴、排序、201 行跨页与 390px 窄屏；native clipboard、G4 live count/filter/viewer 验证仍待完成。Form P1–P4 已实现：配置、发布生命周期、匿名原子提交与表单 UI，组件/API fixture 验证通过；P4 浏览器验收由 controller 在提交后执行。Kanban K1–K3 已实现：服务端独立列分页/计数、拖动与菜单移动、受权限保护的记录详情；隔离 PostgreSQL/组件验证通过，controller 已验收看板创建/分页/失败重试/键盘/390px/viewer/native drag。详情浏览器与同源多人实时运行验收待完成。Token/Webhook 扩展及 live Airtable 验收仍属后续工作；本次没有发布或部署。
+Airtable P0–P2 已实现：原子 cell writer/七天幂等收据、Grid 粘贴/跨页键盘/字段排序/SQL 全量分组计数、Form 发布与匿名提交、Kanban 独立列分页/移动/详情、Token 当前权限与 scope 交集、Webhook 加密配置/事务 outbox/签名 worker/owner 管理。隔离 PostgreSQL 与组件验证见[证据](release/2026-10-10-p0-p2-evidence.md)。controller 已完成实际浏览器 Grid/Form/Kanban/详情/Token 检查及受限 REST/MCP HTTP fixture；原生 OS clipboard 仍未确认。Webhook 仅用注入 transport，未联系外部接收器。最终同源多人/重连/Form 远端配置、最终候选 fresh/upgrade/restore/缺 key 运行验收仍待完成。真实 Airtable PAT 未提供，live-source 导入仍未验收。本次没有发布或部署。
 
 | 维度 | 状态 |
 |---|---|
@@ -24,7 +24,7 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 | 技术栈 | Next.js 16 (App Router) + tRPC v11 + Drizzle + Postgres 16 + ws；Dev 打包器 Rspack（Turbopack 内存泄漏） |
 | 部署 | 单 Docker Compose（web + postgres，多阶段镜像）；启动迁移内置于 `server.ts`（pg advisory lock）；dev 拆 `next dev` + 独立 realtime 网关 |
 | 插件系统 | plugin-sdk + plugin-csv + plugin-storage-local（ADR-0006..0009） |
-| 测试基线 | vitest **550 用例 / 54 文件**全绿；e2e YAML **56 过 / 0 挂**（3 例 env-gated 跳过）；lint / typecheck / format 全绿 |
+| 测试基线 | 旧 550/54 基线已过时；I3 阶段完整 PG-opt-in suite 为 3,457 passed / 13 separately gated skipped，非最终 I6 基线；最终全 gate 由 controller 运行并记录证据 |
 | CI | `ci.yml`：format→lint→typecheck→test→build + **e2e job**（真实 Postgres + 生产构建 + API 场景）；`release.yml` 在 `v*` tag 先 verify 再发镜像并做启动冒烟；dependabot 周更 |
 | 许可证 | AGPL-3.0 |
 
@@ -41,7 +41,12 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 | [0007](adr/0007-plugin-loader-and-registries.md) | 插件加载器 + 注册表 | 低 |
 | [0008](adr/0008-plugin-server-router-injection.md) | 插件可注入 tRPC 路由（走 CoreServerApi + 角色校验） | 低 |
 | [0009](adr/0009-field-type-registry.md) | 字段类型注册表（服务端语义在 Contribution，客户端只有 UI 元数据） | 中 |
-| [0010](adr/0010-agent-access-layer.md) | Agent 接入层：API Token 与用户同权 + REST/MCP/RSS/Skill 四通道复用 tRPC caller | 低（通道各自独立可拆） |
+| [0010](adr/0010-agent-access-layer.md) | Agent 接入层：REST/MCP/RSS/Skill 四通道复用 tRPC caller；Token 现受 0014 scope 约束 | 低（通道各自独立可拆） |
+| [0011](adr/0011-atomic-record-writes.md) | 原子写入与七天幂等收据 | 中 |
+| [0012](adr/0012-public-forms.md) | 公开提交 capability、配置绑定与匿名审计 | 中 |
+| [0013](adr/0013-kanban-views.md) | Kanban 独立列分页/计数、复用 cell writer | 低 |
+| [0014](adr/0014-scoped-agent-tokens.md) | Token Base/access/expiry 与当前角色取交集 | 中 |
+| [0015](adr/0015-webhook-outbox.md) | PostgreSQL outbox、加密签名与 owner 恢复 | 中 |
 
 ## 4. 功能矩阵（含代码锚点）
 
@@ -51,8 +56,8 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 |---|---|---|---|
 | Base/Table/Field/Record CRUD | ✅ | `server/trpc/routers/{base,table,field,record,cell}.ts` | 全部带角色校验 |
 | Grid 视图（filter/sort/group/列宽/隐藏列） | ✅ | `lib/view-query.ts`、`lib/view-ast.ts`、`components/view-config/` | 编译为 SQL 片段 |
-| Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | 本地实现；fixture 验证；未发布，P4 live 浏览器验证待完成 |
-| Kanban 视图 | ✅ | `components/kanban/`、`components/records/` | 本地实现，独立列 50 卡分页；详情/多人运行验收待完成，未发布；见 [说明](KANBAN.md) |
+| Form 视图 | ✅ | `components/forms/`、`app/forms/[token]/`、`server/forms/` | 本地实现；fixture + controller 浏览器验证；未发布，同源远端配置验证待完成 |
+| Kanban 视图 | ✅ | `components/kanban/`、`components/records/` | 本地实现，独立列 50 卡分页；详情浏览器已验证；同源多人运行验收待完成，未发布；见 [说明](KANBAN.md) |
 | Gallery 视图 | ⬜ | schema `view.type` 留位 | v2 候选（§9） |
 | 字段类型（10 种） | ✅ | `server/plugins/builtin-fields/` | 10 个 Contribution + parity 测试 |
 | Expression 字段（写时物化 + 回填） | ✅ | `lib/expression-eval.ts`、`server/expression.ts` | 手写求值器，无第三方公式库 |
@@ -68,11 +73,12 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 | 大表分页 + 虚拟滚动 | ✅ | `use-paged-records.ts`、`@tanstack/react-virtual` | 行高 32px |
 | **Agent 接入层** | ✅ | `server/agent-access/`、`app/api/{v1,mcp,skill}/`、`app/feed/` | 见 §5 |
 | API Token 管理 UI | ✅ | `settings/agent/page.tsx`、`routers/token.ts` | 一次性展示 + 吊销确认 |
-| 分组统计 | 🔶 | `lib/view-query.ts` `applyGroup` | 只统计已加载页（§8.1） |
+| 分组统计 | ✅ | `record.groupCounts`、`lib/view-query.ts` | SQL 全量计数，已加载/总数分开显示 |
+| Webhook | ✅ | `routers/webhook.ts`、`server/webhooks/` | owner 管理、加密/签名、事务 outbox；注入 transport 验证，未发布 |
 
 ## 5. Agent 接入层（2026-10-03 合入，ADR-0010）
 
-四条机器通道共享一套 Bearer token（`api_token` 表，sha256 摘要存储，**与创建者同权**——所有角色校验经合成会话原样生效）：
+四条机器通道共享一套 Bearer token（`api_token` 表，sha256 摘要存储，**scope 与创建者当前权限的交集**——新 UI 默认当前 Base/read/30 天，旧 token 保留 all/write，降级或移除立即约束后续请求）：
 
 | 通道 | 端点 | 入口代码 |
 |---|---|---|
@@ -93,7 +99,7 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 
 | 层 | 数量 | 运行 |
 |---|---|---|
-| vitest 单元 + 集成 | **550 用例 / 54 文件** | `pnpm test`（~3s，无需 DB） |
+| vitest 单元 + 集成 | 历史 550/54 已废弃；最终计数待 controller 全 gate | `pnpm test`；PG 需显式 opt-in 隔离数据库 |
 | 类型测试 | 2 文件（`*.test-d.ts`） | 同上 |
 | API e2e（YAML） | 6 文件 / 56 用例 + 3 env-gated 跳过 | `pnpm test:e2e-api`（需实例运行） |
 | 浏览器 e2e（YAML 场景） | 7 场景 | 手动：agent-browser 技能驱动 `tests/e2e/browser/`（未进 CI） |
@@ -103,39 +109,29 @@ Airtable P0–P2 foundation 已实现：共享事务内 cell writer、受保护 
 ## 8. 已知限制（精确清单）
 
 UI/交互：
-1. **分组跨页失真**：`applyGroup` 只统计当前已加载页，分页 + group 叠加时数字会变。
-2. **粘贴多行不展开**：向 cell 粘贴含换行的多行文本不会展开为多行/多格。
-3. **键盘导航不自动翻页**：方向键移出已加载边界不触发加载下一页。
-4. **筛选 UI 未暴露全部操作符**：`ne/gte/lte` 等服务端已支持的操作符 UI 没有入口。
-5. **viewer 首帧布局跳变**：`member.me` 返回前 viewer 先按编辑者布局渲染一帧（纯视觉，写操作有服务端门禁兜底）。
+1. OS clipboard 原生粘贴未由自动化验证；ClipboardEvent + 实际 HTTP 同体重试已验证。
+2. 最终同源多人实时、重连与 Form 远端配置验收待完成；不能用跨端口 dev Origin 拒绝代替通过。
+3. 待最终 review 分流：操作符标签显示原始 gte；快速切换操作符再编辑值可能使用旧 options；窄屏详情弹窗隐式 grid 行拉伸。未在 I6 顺带修改。
+4. viewer 首帧布局等未单独重验的旧 UI 观察不宣称已修复；写操作仍有服务端门禁。
 
 数据语义：
-6. **混排日期排序按字符串**：TZ-aware instant 与 naive `YYYY-MM-DD` 混列时排序退化为字符串比较。
-7. **附件 cell 无跨 base 归属校验**：手工塞入其它 base 的附件 id 不被拦截（触发面极低）；被引用 base 删除后留死引用。
-8. **field.orderIndex 无人写入**：字段实际按插入序显示（reorder 未实现，默认 0）。
+5. 混排 TZ-aware instant 与 naive 日期仍可能按字符串排序。
+6. 附件 cell 的跨 Base 引用归属限制未在本轮扩展。
+7. Webhook 暂停/溢出/disabled 停止采集，存在真实缺口；需要 owner 全量对账后恢复。交付至少一次，接收方持久去重。
 
 测试/架构：
-9. **部分手写 SQL 缺少真库回归**：死引用清理、CSV 导入等逻辑仍缺少针对真实库的回归测试（CI e2e 只覆盖 HTTP 层）；Airtable 导入已有独立 PG16 fixture 验收，但真实 Airtable PAT 端到端尚未验证。
-10. **Agent 限流为进程内计数**：多副本部署各副本独立计数（单容器部署无影响）。
-11. **MCP 为无状态协议子集**：无 SSE 推流/会话/批量；协议演进需跟进手写实现。
+8. 真实 Airtable PAT 未提供；导入 fixture 不等于 live-source 证明。最终镜像升级/恢复/缺 key 验收仍待执行，已有 M3 准备不是通过。
+9. 新增事务与 CSV outbox 路径有真库回归；未覆盖的旧 SQL 路径不宣称全面验收。CSV 故障注入日志及 Vitest experimental 提示仍待最终 review 分流。
+10. Agent 限流为进程内计数；单租户部署下不提供多副本共享计数。
+11. MCP 为无状态协议子集，无 SSE 推流/会话/批量。
 
 ## 9. 迭代路线（候选，按价值排序）
 
-**v1.1 候选（小步，均有明确扩展位）**
-- 分组统计改为服务端聚合或全量计数（修 §8.1）
-- 修 UI 小项：粘贴多行展开、键盘翻页、筛选操作符补全、viewer 首帧（§8.2–5）
-- token 只读开关 / 按 Base 绑定（`api_token` 加列 + `resolveBearerToken` 检查，ADR-0010 已留位）
-- feed ETag/Last-Modified 缓存
-- 字段 reorder（写 `orderIndex`）
-- 手写 SQL 的真库回归测试（docker 起一次性 PG，修 §8.9）
+本轮先完成最终同源浏览器、全 gate 与候选镜像 fresh/upgrade/restore/缺 key 验收，再决定发布。真实 Airtable 导入等待受授权测试 PAT。Grid 全量计数/粘贴/翻页/字段排序、Form、Kanban、Token scope 和 Webhook 已实现，不再列为未来功能。
 
-**v2 候选（大步，需先补 ADR）**
-- Form：完成发布前 live 浏览器验收；[使用说明](FORMS.md)。Kanban：详情浏览器与同源多人运行验收待完成；[说明](KANBAN.md)。Gallery：后续视图渲染层工作。
-- Lookup / Rollup 字段（依赖 Link 语义扩展；CONTEXT.md 术语已标注"v2 推迟"）
-- S3 storage adapter（扩展点就绪，`plugin-storage-local` 为参考实现）
-- Excel/JSON 导入导出（`plugin-csv` 为参考插件）
+后续候选：feed ETag/Last-Modified 缓存、剩余 UI/旧 SQL 回归、Gallery、S3 storage adapter、Excel/JSON 插件。Lookup/Rollup 若启动需先评估对当前单记录 Expression 边界的改变。
 
-**明确不做**（改主意需先推翻对应 ADR）：多租户（0004）、OT/CRDT（0002）、公式依赖图（0003）、百万行（0001）。
+明确不做：多租户（0004）、OT/CRDT（0002）、公式依赖图（0003）、百万行（0001）。
 
 ## 10. 文档地图
 

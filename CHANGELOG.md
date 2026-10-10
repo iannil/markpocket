@@ -1,28 +1,34 @@
 # Changelog
 
+## Unreleased — scoped tokens and Webhooks (2026-10-10)
+
+- Added Base-bound/read-write/expiring tokens, safe UI defaults, and shared REST/MCP enforcement against current membership; legacy all/write tokens remain compatible.
+- Added owner-only Webhook configuration and recovery UI, encrypted one-time signing secrets, PostgreSQL transactional outbox, bounded signed worker retries, lease protection, explicit overflow gaps and single-dead-event retry. See [receiver guide](docs/WEBHOOKS.md).
+- Dedicated PG and injected-transport fixtures verify delivery without external sends. Controller Grid/Form/Kanban/detail/Token browser checks and REST/MCP HTTP fixtures are recorded in [evidence](docs/release/2026-10-10-p0-p2-evidence.md). Final full gate, same-origin realtime and candidate image fresh/upgrade/restore/key-removal checks remain pending; no release, push, tag or deployment. Real Airtable source acceptance still requires an authorized PAT.
+
 ## Unreleased — Kanban records and protected details (2026-10-10)
 
 - Added Kanban status/title configuration, SQL counts, independent 50-card lane pages, drag/drop and keyboard/touch move menus with failure recovery and existing LWW hints.
 - Added a protected exact-table `record.get` and record detail drawer using existing field editors. Viewers and expressions are read-only; failed saves retain drafts; committed edits refresh detail, lanes, counts and Grid even after closing the drawer.
-- Kanban public shares continue the filtered Grid projection with hidden-field removal. Isolated PostgreSQL/component checks passed; controller board browser checks passed. Detail browser and same-origin multiplayer runtime acceptance remain pending, unpublished. See [Kanban guide](docs/KANBAN.md) and [evidence](docs/release/2026-10-10-p0-p2-evidence.md).
+- Kanban public shares continue the filtered Grid projection with hidden-field removal. Isolated PostgreSQL/component checks passed; controller board browser checks passed. Detail browser acceptance passed; same-origin multiplayer runtime acceptance remains pending, unpublished. See [Kanban guide](docs/KANBAN.md) and [evidence](docs/release/2026-10-10-p0-p2-evidence.md).
 
 ## Unreleased — public submission Forms (2026-10-10)
 
 - Added Form creation, field selection/order/required configuration, viewer previews, editor saves, and owner publication/rotation/revocation with a default 30-day expiry.
 - Added anonymous public submission pages with native controls, required checkbox semantics, frozen retry bodies, and explicit confirmation before edited or expired-receipt submissions create a new request.
-- Rejected Form read-only share creation and legacy Form share reads, including RSS and attachment routes through their shared resolver. See [Forms guide](docs/FORMS.md) and [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md). Local implementation and fixture checks; P4 browser acceptance pending, unpublished.
+- Rejected Form read-only share creation and legacy Form share reads, including RSS and attachment routes through their shared resolver. See [Forms guide](docs/FORMS.md) and [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md). Local implementation, fixture checks and controller browser acceptance passed; same-origin remote configuration remains pending, unpublished.
 
 ## Unreleased — Grid batch editing and complete counts (2026-10-10)
 
 - Added atomic TSV paste previews, cross-page keyboard navigation and complete field ordering including hidden fields.
 - Added SQL full-view group counts with viewer permissions, loaded/total toolbar, count errors, and mutation/realtime invalidation. Exposed supported ne/gte/lte/date comparisons and protected advanced filters from rewriting.
-- Isolated PostgreSQL and UI regressions pass; browser paste/reorder/201-row navigation/390px checks are partial live evidence. Native clipboard and G4 live counts remain pending. See [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md); not published.
+- Isolated PostgreSQL and UI regressions pass; browser paste/reorder/201-row navigation/390px checks are partial live evidence. Controller live counts/filter/viewer checks passed; native OS clipboard remains unverified. See [acceptance evidence](docs/release/2026-10-10-p0-p2-evidence.md); not published.
 
 ## Unreleased — atomic write foundation (2026-10-10)
 
 - Added protected `record.writeBatch` for bounded atomic creates/updates, transactional expression/history writes and seven-day idempotent retry receipts (migration 0015). Existing REST partial-success `cellErrors` behavior remains supported.
 - Shared the cell transaction writer with nullable actor attribution for future anonymous submissions. Added isolated PostgreSQL tests for rollback, permissions, limits, receipt collisions/cleanup and concurrent public batch/single-cell APIs.
-- See [API contract](docs/api/routers.md#atomic-batch-retries) and [foundation evidence](docs/release/2026-10-10-p0-p2-evidence.md). This is local implementation and fixture verification, not a release; later P0–P2 features and live Airtable acceptance remain outstanding.
+- See [API contract](docs/api/routers.md#atomic-batch-retries) and [foundation evidence](docs/release/2026-10-10-p0-p2-evidence.md). This is local implementation and fixture verification, not a release; P0–P2 features are now implemented; final candidate and live Airtable acceptance remain outstanding.
 
 ## Unreleased — Airtable import preview
 

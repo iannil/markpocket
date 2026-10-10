@@ -15,7 +15,7 @@
 <p>
   Base、Table、Field、Record、Grid 视图（filter / sort / group / 隐藏列），<br/>
   实时协作、cell 级历史、CSV 导入导出 —— 全部装在一个 Docker 容器里。<br/>
-  <em>Form / Kanban / Gallery 视图为规划中，尚未实现。</em>
+  <em>Form / Kanban 已在 P0–P2 分支实现，尚未发布；Gallery 仍在规划中。</em>
 </p>
 
 ## 快速开始
@@ -77,7 +77,7 @@ docker compose up -d --build
 
 - **Base 与 Table** —— Airtable 式层级：Workspace → Base → Table → Field / Record / View。
 - **字段类型** —— text、long-text、number、boolean、date、single/multi-select、attachment、user、link、expression。
-- **视图** —— 当前为 Grid（filter / sort / group / 列宽 / 隐藏列）；Form / Kanban / Gallery 规划中。配置 per-view 持久化；视图永不改变底层数据。
+- **视图** —— Grid（filter / sort / group / 列宽 / 隐藏列）、公开提交 Form 与 Kanban 已实现；P0–P2 新增功能未发布，Gallery 仍在规划中。配置 per-view 持久化；视图永不改变底层数据。
 - **实时** —— per-Base 软实时广播；在线成员实时显示。
 - **Expression 字段** —— `{单价} * {数量}` 式计算列，token 以 field ID 为锚、写时求值、物化到 `cells.value`。
 - **cell 级历史** —— 谁、何时、旧值→新值，append-only 时间轴。

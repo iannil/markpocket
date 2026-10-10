@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ create: vi.fn(), tokens: [] as Record<string, unknown>[] }));
 vi.mock('next/navigation', () => ({ useParams: () => ({ baseId: 'current-base' }) }));
 vi.mock('@/lib/breadcrumb-context', () => ({ useBreadcrumbSetter: () => {} }));
+vi.mock('@/components/webhooks/webhook-settings', () => ({ WebhookSettings: () => null }));
 vi.mock('@/lib/trpc/client', () => ({
   trpc: {
     useUtils: () => ({ token: { list: { invalidate: vi.fn() } } }),

@@ -1,5 +1,22 @@
 # Agent Access — REST / MCP / RSS / Skill
 
+## Webhook consumer with a scoped token
+
+Webhook management is owner-only in the browser Agents settings; it is not exposed through a token-authenticated management API. Verify signatures and persist eventId deduplication before side effects ([receiver guide](../WEBHOOKS.md)). Notifications contain metadata only. Fetch current values with a separate current-Base/read token; use a Base-bound/write token only when the automation must update cells. Both remain limited by the creator's current membership. A deleted record, or a changed record now returning 404, is handled by ID.
+
+```bash
+curl --fail-with-body "$MARKPOCKET_URL/api/v1/records/$RECORD_ID" \
+  -H "Authorization: Bearer $MARKPOCKET_TOKEN"
+
+# Requires a token with write access and current editor/owner membership.
+curl --fail-with-body -X PATCH "$MARKPOCKET_URL/api/v1/records/$RECORD_ID" \
+  -H "Authorization: Bearer $MARKPOCKET_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"cells":{"<fieldId>":"processed"}}'
+```
+
+Inspect `cellErrors` even after HTTP success: these existing REST cell writes permit partial success and are not the atomic `record.writeBatch` API. Keep the token out of source control and receiver logs.
+
 markpocket instances expose their data to AI agents and scripts through four channels, all documented here. Architecture and rationale: [ADR-0010](../adr/0010-agent-access-layer.md).
 
 | Channel | Endpoint | Auth | Use for |
