@@ -191,6 +191,43 @@ describe.skipIf(process.env.P0_P2_PG_TEST !== '1')('kanban pages', () => {
       expect(counts.groups).toContainEqual({ key: 'removed', count: 1 });
     }));
 
+  it('counts nonstring legacy statuses as unavailable without colliding with valid choice IDs', async () =>
+    withDbFixture(async (f) => {
+      const { status, v } = await board(f);
+      await f.caller.field.updateOptions({
+        id: status.id,
+        options: {
+          choices: [
+            { id: '42', name: 'Number text', color: 'blue' },
+            { id: 'todo', name: 'Todo', color: 'green' },
+          ],
+        },
+      });
+      const { db } = await import('../db');
+      const { record, cell } = await import('../db/schema');
+      for (const value of ['42', 42, 'todo', ['todo'], false, [], {}]) {
+        const id = randomUUID();
+        await db.insert(record).values({ id, tableId: f.tableId, createdBy: f.userId });
+        await db.insert(cell).values({ id: randomUUID(), recordId: id, fieldId: status.id, value });
+      }
+      const input = { tableId: f.tableId, viewId: v.id };
+      const counts = await f.viewer.record.groupCounts(input);
+      expect(counts).toEqual({
+        total: 7,
+        groups: [
+          { key: '42', count: 1 },
+          { key: '__unavailable__', count: 5 },
+          { key: 'todo', count: 1 },
+        ],
+      });
+      for (const group of counts.groups) {
+        const page = await f.viewer.record.kanbanPage({ ...input, choiceId: group.key });
+        expect(page.total).toBe(group.count);
+        expect(page.records).toHaveLength(group.count);
+      }
+      expect((await f.viewer.record.kanbanPage({ ...input, choiceId: null })).total).toBe(0);
+    }));
+
   it('cleans Grid references despite invalid Kanban/Form drafts while preserving raw extensions', async () =>
     withDbFixture(async (f) => {
       const { db } = await import('../db');

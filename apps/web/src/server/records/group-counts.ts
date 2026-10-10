@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { groupKey } from '@/lib/group-key';
+import { KANBAN_UNAVAILABLE_CHOICE_ID } from '@/lib/kanban-config';
 import type { FieldOptions } from '@/lib/field-types';
 import { parseViewOptions } from '@/lib/view-ast';
 import { compileFilter } from '@/lib/view-query';
@@ -28,9 +29,16 @@ export async function getGroupCounts(
       );
       const groupFieldId =
         v.type === 'kanban' ? options.kanban!.groupFieldId : options.group?.[0]?.fieldId;
+      // A legacy JSON number/array can stringify to a real choice ID. Classify
+      // nonstring statuses before aggregation so counts match kanbanPage lanes.
+      // JSON/SQL null and empty strings retain the shared empty-key semantics.
+      const groupValue =
+        v.type === 'kanban'
+          ? sql`case when jsonb_typeof(c.value) not in ('string', 'null') then ${JSON.stringify(KANBAN_UNAVAILABLE_CHOICE_ID)}::jsonb else c.value end`
+          : sql`c.value`;
       const rows = groupFieldId
         ? await tx.execute(
-            sql`select c.value as value, count(*)::int as count from record left join cell c on c.record_id = record.id and c.field_id = ${groupFieldId} where record.table_id = ${tableId} ${where ? sql`and (${where})` : sql``} group by c.value`,
+            sql`select ${groupValue} as value, count(*)::int as count from record left join cell c on c.record_id = record.id and c.field_id = ${groupFieldId} where record.table_id = ${tableId} ${where ? sql`and (${where})` : sql``} group by 1`,
           )
         : await tx.execute(
             sql`select null as value, count(*)::int as count from record where record.table_id = ${tableId} ${where ? sql`and (${where})` : sql``}`,
