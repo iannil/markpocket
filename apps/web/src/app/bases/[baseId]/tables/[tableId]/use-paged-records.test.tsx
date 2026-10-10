@@ -82,39 +82,25 @@ describe('usePagedRecords', () => {
     expect(flatIds(result.current.groups)).toEqual(['r1']);
   });
 
-  it('pages 2 AND 3 failing → banner shows the first (page 2) error, both retried', async () => {
-    let page2Failures = 0;
-    let page3Failures = 0;
+  it('does not advance past a failed trailing page; retry stays on that page', async () => {
+    const offsets: number[] = [];
     const wrapper = makeWrapper(
       recordListLink((input) => {
-        const offset = input.offset ?? 0;
-        if (offset === 0) return { data: page(['r1'], 450) };
-        if (offset === 200) {
-          page2Failures += 1;
-          return { error: 'boom page 2' };
-        }
-        page3Failures += 1;
-        return { error: 'boom page 3' };
+        offsets.push(input.offset ?? 0);
+        return input.offset ? { error: 'page 2 failed' } : { data: page(['r1'], 450) };
       }),
     );
     const { result } = renderHook(() => usePagedRecords('t1', undefined), { wrapper });
-
     await waitFor(() => expect(result.current.recordsLoading).toBe(false));
-    act(() => result.current.showMore());
-    await waitFor(() => expect(result.current.trailingPageError?.message).toBe('boom page 2'));
-    act(() => result.current.showMore());
-    await waitFor(() => expect(result.current.trailingPageError?.message).toBe('boom page 2'));
-    expect(result.current.recordsError).toBeNull();
-    expect(page2Failures).toBe(1);
-    expect(page3Failures).toBe(1);
-
-    // Retry re-fetches every failed trailing page.
-    act(() => result.current.trailingPageError?.retry());
+    act(() => {
+      result.current.showMore();
+      result.current.showMore();
+    });
     await waitFor(() => expect(result.current.trailingPageError).not.toBeNull());
-    expect(page2Failures).toBe(2);
-    expect(page3Failures).toBe(2);
-    // The message still reports the FIRST failing page, not just the last.
-    expect(result.current.trailingPageError?.message).toBe('boom page 2');
+    act(() => result.current.showMore());
+    expect(offsets).toEqual([0, 200]);
+    act(() => result.current.trailingPageError?.retry());
+    await waitFor(() => expect(offsets).toEqual([0, 200, 200]));
   });
 
   it('page 1 failing → recordsError set, no trailing banner', async () => {
@@ -191,4 +177,30 @@ describe('usePagedRecords', () => {
     expect(calls).toBe(1);
     expect(flatIds(result.current.groups)).toEqual(['r1']);
   });
+});
+
+it('stops at the actual end and resets pages on view switch', async () => {
+  const calls: string[] = [];
+  const wrapper = makeWrapper(
+    recordListLink((input) => {
+      calls.push(`${input.viewId}:${input.offset}`);
+      return { data: page([`${input.viewId}:${input.offset}`], input.viewId === 'v1' ? 2 : 1) };
+    }),
+  );
+  const { result, rerender } = renderHook(({ viewId }) => usePagedRecords('t1', viewId), {
+    wrapper,
+    initialProps: { viewId: 'v1' },
+  });
+  await waitFor(() => expect(result.current.recordsLoading).toBe(false));
+  act(() => {
+    result.current.showMore();
+    result.current.showMore();
+  });
+  await waitFor(() => expect(result.current.hasMore).toBe(false));
+  expect(calls).toEqual(['v1:0', 'v1:200']);
+  act(() => result.current.showMore());
+  expect(calls).toHaveLength(2);
+  rerender({ viewId: 'v2' });
+  await waitFor(() => expect(flatIds(result.current.groups)).toEqual(['v2:0']));
+  expect(calls).toEqual(['v1:0', 'v1:200', 'v2:0']);
 });

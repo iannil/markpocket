@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import { trpc } from '@/lib/trpc/client';
@@ -60,6 +60,7 @@ export function usePagedRecords(
   enabled = true,
 ) {
   const [pages, setPages] = useState(1);
+  const requestedPage = useRef<number | null>(null);
   // A new view/table means a new ordering — the offset window starts over.
   // Adjusting during render (instead of an effect) avoids one render where the
   // new view is fetched with the old page count.
@@ -68,6 +69,7 @@ export function usePagedRecords(
   if (lastScopeKey !== scopeKey) {
     setLastScopeKey(scopeKey);
     setPages(1);
+    requestedPage.current = null;
   }
 
   const offsets = useMemo(() => Array.from({ length: pages }, (_, i) => i * PAGE_SIZE), [pages]);
@@ -111,6 +113,23 @@ export function usePagedRecords(
   const laterErrorPages = results.slice(1).filter((r) => r.isError);
   const firstPageError = results[0]?.isError ? (results[0].error ?? null) : null;
 
+  const anyFetching = results.some((r) => r.isFetching);
+  const loadedCount = groups.reduce((n, g) => n + g.records.length, 0);
+  const hasMore = loadedCount < total;
+  const showMore = useCallback(() => {
+    if (
+      !enabled ||
+      anyFetching ||
+      !hasMore ||
+      firstPageError ||
+      laterErrorPages.length ||
+      requestedPage.current === pages
+    )
+      return;
+    requestedPage.current = pages;
+    setPages((p) => p + 1);
+  }, [enabled, anyFetching, hasMore, firstPageError, laterErrorPages.length, pages]);
+
   return {
     groups,
     total,
@@ -130,7 +149,9 @@ export function usePagedRecords(
         if (r.isError) void r.refetch();
       });
     },
-    anyFetching: results.some((r) => r.isFetching),
-    showMore: () => setPages((p) => p + 1),
+    anyFetching,
+    hasMore,
+    loadingMore: results.slice(1).some((r) => r.isFetching),
+    showMore,
   };
 }

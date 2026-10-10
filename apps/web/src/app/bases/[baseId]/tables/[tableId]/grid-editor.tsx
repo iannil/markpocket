@@ -34,7 +34,7 @@ import { trpc } from '@/lib/trpc/client';
 import type { SortSpec, ViewOptions } from '@/lib/view-ast';
 import type { FieldLike, RecordLike } from './cell-renderers';
 import { CellHistoryDock } from './cell-history-dock';
-import { formatClipboardValue, parseClipboardValue } from './clipboard';
+import { formatClipboardValue } from './clipboard';
 import {
   DEFAULT_COL_WIDTH,
   EDITABLE_TYPES,
@@ -50,6 +50,8 @@ import {
   cellDomId,
   type CellHandlers,
 } from './grid-row';
+import { nextRowRequest } from './navigation';
+import { useGridPaste } from './use-grid-paste';
 import { LinkTablesProvider } from './link-cell';
 import {
   PAGE_SIZE,
@@ -233,6 +235,28 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
   const [selectedCell, setSelectedCell] = useState<{ recordId: string; fieldId: string } | null>(
     null,
   );
+  const scopeKey = `${tableId}:${activeViewId ?? ''}:${JSON.stringify(viewOptions)}`;
+  const paste = useGridPaste({
+    tableId,
+    scopeKey,
+    rows: flatRows,
+    fields: displayedFields,
+    users,
+    selectedCell,
+    readOnly: isViewer,
+    editing: Boolean(editing),
+    total,
+    fetching: anyFetching,
+    pageError: Boolean(recordsError || trailingPageError),
+    showMore,
+    allowAppend:
+      !viewOptions.filter && !viewOptions.sort?.length && !hasGroup && loadedCount === total,
+  });
+  const [pendingNavigation, setPendingNavigation] = useState<{
+    scopeKey: string;
+    targetRow: number;
+    fieldId: string;
+  } | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<FieldEditorTarget | undefined>(undefined);
@@ -591,11 +615,60 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       if (!rec || !f) return;
       // Bring the row into the virtual window first; the selectedCell effect
       // below then aligns the exact cell (mainly horizontal).
-      rowVirtualizer.scrollToIndex(r, { align: 'auto' });
+      const virtualIndex = rowDescs.findIndex((d) => d.kind === 'record' && d.record.id === rec.id);
+      rowVirtualizer.scrollToIndex(virtualIndex, { align: 'auto' });
       setSelectedCell({ recordId: rec.id, fieldId: f.id });
     },
-    [rowVirtualizer],
+    [rowVirtualizer, rowDescs],
   );
+  function navigate(targetRow: number, column: number) {
+    const fieldId = displayedFields[column]?.id;
+    if (!fieldId) return;
+    const request = nextRowRequest({
+      targetRow,
+      loaded: loadedCount,
+      total,
+      fetching: anyFetching,
+    });
+    if (request.kind === 'select') {
+      setPendingNavigation(null);
+      moveTo(request.row, column);
+    } else {
+      setPendingNavigation({ scopeKey, targetRow: Math.min(targetRow, total - 1), fieldId });
+      if (request.kind === 'load' && !trailingPageError) showMore();
+    }
+  }
+  useEffect(() => {
+    if (!pendingNavigation) return;
+    if (pendingNavigation.scopeKey !== scopeKey || editing) {
+      setPendingNavigation(null);
+      return;
+    }
+    const request = nextRowRequest({
+      targetRow: pendingNavigation.targetRow,
+      loaded: loadedCount,
+      total,
+      fetching: anyFetching,
+    });
+    if (request.kind === 'select') {
+      moveTo(
+        request.row,
+        displayedFields.findIndex((f) => f.id === pendingNavigation.fieldId),
+      );
+      setPendingNavigation(null);
+    } else if (request.kind === 'load' && !trailingPageError) showMore();
+  }, [
+    pendingNavigation,
+    scopeKey,
+    editing,
+    loadedCount,
+    total,
+    anyFetching,
+    trailingPageError,
+    showMore,
+    displayedFields,
+    moveTo,
+  ]);
   const commitCell = useCallback(
     (recordId: string, fieldId: string, value: unknown, move: 'down' | 'right' | null) => {
       setEditing(null);
@@ -917,28 +990,6 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
       });
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'v' || e.key === 'V')) {
-      if (isViewer) return;
-      e.preventDefault();
-      navigator.clipboard
-        .readText()
-        .then((text) => {
-          const parsed = parseClipboardValue(field, users, text);
-          if (!parsed.ok) {
-            toast.error(`Paste rejected: ${parsed.reason}`);
-            return;
-          }
-          upsertMutate({
-            recordId: selectedCell.recordId,
-            fieldId: selectedCell.fieldId,
-            value: parsed.value,
-          });
-        })
-        .catch(() => {
-          // Clipboard permission denied / unavailable — nothing to paste.
-        });
-      return;
-    }
 
     switch (e.key) {
       case 'ArrowUp':
@@ -947,7 +998,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         break;
       case 'ArrowDown':
         e.preventDefault();
-        moveTo(e.ctrlKey ? lastR : Math.min(r + 1, lastR), c);
+        navigate(e.ctrlKey ? lastR : r + 1, c);
         break;
       case 'ArrowLeft':
         e.preventDefault();
@@ -971,7 +1022,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         break;
       case 'PageDown':
         e.preventDefault();
-        moveTo(Math.min(r + PAGE_JUMP_ROWS, lastR), c);
+        navigate(r + PAGE_JUMP_ROWS, c);
         break;
       case 'Enter':
         e.preventDefault();
@@ -1004,12 +1055,14 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         e.preventDefault();
         const nc = c + (e.shiftKey ? -1 : 1);
         if (nc < 0) moveTo(Math.max(r - 1, 0), lastC);
-        else if (nc > lastC) moveTo(Math.min(r + 1, lastR), 0);
+        else if (nc > lastC) navigate(r + 1, 0);
         else moveTo(r, nc);
         break;
       }
       case 'Escape':
         e.preventDefault();
+        paste.cancel();
+        setPendingNavigation(null);
         setSelectedCell(null);
         setSelectedRows(new Set());
         break;
@@ -1189,6 +1242,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
             }
             tabIndex={0}
             onKeyDown={onGridKeyDown}
+            onPaste={paste.onPaste}
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setSelectedCell(null);
@@ -1483,6 +1537,7 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
         <div className="pt-1 text-xs text-muted-foreground">Showing all {total} records.</div>
       )}
 
+      {paste.dialog}
       <FieldEditorDialog
         open={dialogOpen && !isViewer}
         onOpenChange={setDialogOpen}
