@@ -2,6 +2,9 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 
 import { eq } from 'drizzle-orm';
 
+import { assertRole } from '@/lib/roles';
+import type { TokenScope } from './scope';
+
 import { apiToken } from '../db/schema';
 import { db } from '../db';
 
@@ -13,7 +16,15 @@ export const TOKEN_DISPLAY_PREFIX_LEN = TOKEN_PREFIX_HEADER.length + 8;
 export interface MintedToken {
   /** Full plaintext token — returned exactly once, never stored. */
   token: string;
-  row: { id: string; name: string; tokenPrefix: string; createdAt: Date };
+  row: {
+    id: string;
+    name: string;
+    tokenPrefix: string;
+    createdAt: Date;
+    access: 'read' | 'write';
+    baseId: string | null;
+    expiresAt: Date | null;
+  };
 }
 
 export function sha256Hex(input: string): string {
@@ -24,8 +35,7 @@ export function sha256Hex(input: string): string {
  * Mint a new token for a user. The plaintext is assembled here and returned to
  * the caller; persistence stores only the sha256 digest. 24 random bytes
  * (192-bit) — stronger than the 122-bit dashless-UUID scheme used for share
- * tokens, because API tokens are long-lived and full-power (same authority as
- * the user, ADR-0010).
+ * tokens, because API tokens authenticate unattended clients (ADR-0010/0014).
  */
 export function mintTokenSecret(): string {
   return TOKEN_PREFIX_HEADER + randomBytes(24).toString('hex');
@@ -42,7 +52,20 @@ export function hashesMatch(a: string, b: string): boolean {
   return ba.length === bb.length && timingSafeEqual(ba, bb);
 }
 
-export async function createApiToken(userId: string, name: string): Promise<MintedToken> {
+export interface TokenOptions {
+  baseId: string | null;
+  access: 'read' | 'write';
+  expiresAt: Date | null;
+}
+
+export async function createApiToken(
+  userId: string,
+  name: string,
+  options: TokenOptions = { baseId: null, access: 'write', expiresAt: null },
+): Promise<MintedToken> {
+  if (options.baseId !== null) {
+    await assertRole(options.baseId, userId, options.access === 'write' ? 'editor' : 'viewer');
+  }
   const token = mintTokenSecret();
   const [row] = await db
     .insert(apiToken)
@@ -50,6 +73,9 @@ export async function createApiToken(userId: string, name: string): Promise<Mint
       id: randomUUID(),
       userId,
       name,
+      baseId: options.baseId,
+      access: options.access,
+      expiresAt: options.expiresAt,
       tokenHash: sha256Hex(token),
       tokenPrefix: displayPrefix(token),
     })
@@ -58,14 +84,14 @@ export async function createApiToken(userId: string, name: string): Promise<Mint
       name: apiToken.name,
       tokenPrefix: apiToken.tokenPrefix,
       createdAt: apiToken.createdAt,
+      baseId: apiToken.baseId,
+      access: apiToken.access,
+      expiresAt: apiToken.expiresAt,
     });
   return { token, row };
 }
 
-export interface ResolvedToken {
-  tokenId: string;
-  userId: string;
-}
+export type ResolvedToken = TokenScope;
 
 /**
  * Resolve an `Authorization: Bearer mpk_…` header to its owning user.
@@ -88,6 +114,8 @@ export async function resolveBearerToken(
     .select({
       id: apiToken.id,
       userId: apiToken.userId,
+      baseId: apiToken.baseId,
+      access: apiToken.access,
       tokenHash: apiToken.tokenHash,
       expiresAt: apiToken.expiresAt,
       revokedAt: apiToken.revokedAt,
@@ -99,7 +127,7 @@ export async function resolveBearerToken(
   if (!row) return null;
   if (!hashesMatch(row.tokenHash, sha256Hex(token))) return null;
   if (row.revokedAt) return null;
-  if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
 
   const THROTTLE_MS = 60_000;
   if (!row.lastUsedAt || Date.now() - new Date(row.lastUsedAt).getTime() > THROTTLE_MS) {
@@ -110,5 +138,5 @@ export async function resolveBearerToken(
       .where(eq(apiToken.id, row.id))
       .catch(() => undefined);
   }
-  return { tokenId: row.id, userId: row.userId };
+  return { tokenId: row.id, userId: row.userId, baseId: row.baseId, access: row.access };
 }

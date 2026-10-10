@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockQuery } from '../trpc/routers/__test-utils';
 
 vi.mock('@/server/db', () => {
@@ -29,6 +29,8 @@ function tokenRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 't1',
     userId: 'u1',
+    access: 'write',
+    baseId: null,
     tokenHash: sha256Hex(secret),
     expiresAt: null,
     revokedAt: null,
@@ -48,6 +50,8 @@ const { db } = await import('@/server/db');
 beforeEach(() => {
   vi.clearAllMocks();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('token shape', () => {
   it('mints mpk_-prefixed 192-bit hex secrets', () => {
@@ -90,6 +94,9 @@ describe('createApiToken', () => {
     expect(inserted.tokenHash).toBe(sha256Hex(minted.token));
     expect(inserted.tokenHash).not.toContain(minted.token);
     expect(inserted.userId).toBe('u1');
+    expect(inserted.access).toBe('write');
+    expect(inserted.baseId).toBeNull();
+    expect(inserted.expiresAt).toBeNull();
     expect(inserted.tokenPrefix).toBe(minted.token.slice(0, 12));
   });
 });
@@ -100,7 +107,7 @@ describe('resolveBearerToken', () => {
     const chain = mockQuery([row]);
     (db.select as any).mockReturnValue(chain);
     const resolved = await resolveBearerToken(header(row._secret));
-    expect(resolved).toEqual({ tokenId: 't1', userId: 'u1' });
+    expect(resolved).toEqual({ tokenId: 't1', userId: 'u1', access: 'write', baseId: null });
   });
 
   it('rejects missing header, non-Bearer schemes, and foreign prefixes', async () => {
@@ -125,6 +132,27 @@ describe('resolveBearerToken', () => {
     const row = tokenRow({ expiresAt: new Date(Date.now() - 1000) });
     (db.select as any).mockReturnValue(mockQuery([row]));
     expect(await resolveBearerToken(header(row._secret))).toBeNull();
+  });
+
+  it('rejects expiry exactly at now and accepts the next millisecond with scope metadata', async () => {
+    const now = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(now);
+    const row = tokenRow({
+      expiresAt: new Date(now),
+      baseId: 'a',
+      access: 'read',
+      lastUsedAt: new Date(now),
+    });
+    (db.select as any).mockReturnValue(mockQuery([row]));
+    expect(await resolveBearerToken(header(row._secret))).toBeNull();
+    expect(db.update).not.toHaveBeenCalled();
+    (db.select as any).mockReturnValue(mockQuery([{ ...row, expiresAt: new Date(now + 1) }]));
+    expect(await resolveBearerToken(header(row._secret))).toEqual({
+      tokenId: 't1',
+      userId: 'u1',
+      baseId: 'a',
+      access: 'read',
+    });
   });
 
   it('throttles lastUsedAt writes to one per minute', async () => {

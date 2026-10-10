@@ -35,6 +35,9 @@ describe('tokenRouter.list', () => {
     // The digest column is not part of the projection.
     const selectArgs = (db.select as any).mock.calls[0][0];
     expect(Object.keys(selectArgs)).not.toContain('tokenHash');
+    expect(Object.keys(selectArgs)).toEqual(
+      expect.arrayContaining(['access', 'baseId', 'expiresAt']),
+    );
   });
 });
 
@@ -57,6 +60,14 @@ describe('tokenRouter.create', () => {
     expect(result.token).toMatch(/^mpk_[0-9a-f]{48}$/);
     expect(result.row.tokenPrefix).toBe(result.token.slice(0, 12));
     expect(inserted.tokenHash).not.toBe(result.token);
+  });
+
+  it.each([0, 366, 1.5])('rejects invalid expiry %s', async (expiresInDays) => {
+    await expect(
+      tokenRouter
+        .createCaller(session())
+        .create({ name: 'ci', baseId: null, access: 'read', expiresInDays } as any),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('rejects empty names', async () => {

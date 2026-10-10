@@ -7,14 +7,11 @@ import { db } from '../../db';
 import { createApiToken } from '@/server/agent-access/tokens';
 import { protectedProcedure, router } from '../init';
 
-// Each token is a full-power credential (it acts as its creator); an
-// open-ended mint lets one user accumulate an unbounded set of valid secrets.
+// Bound the number of active credentials a user can accumulate.
 const MAX_ACTIVE_TOKENS = 20;
 
-// Personal API tokens for the agent access layer (ADR-0010). A token carries
-// its creator's full authority — every downstream call re-runs the same
-// assertRole/assertTableRole checks as a signed-in user, so there is no
-// separate scope model here.
+// Personal API tokens (ADR-0010/0014). Scope only narrows the creator's
+// authority; downstream operations must still check current membership.
 export const tokenRouter = router({
   // Never returns the secret: only the display prefix + metadata.
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -26,6 +23,8 @@ export const tokenRouter = router({
         createdAt: apiToken.createdAt,
         lastUsedAt: apiToken.lastUsedAt,
         expiresAt: apiToken.expiresAt,
+        access: apiToken.access,
+        baseId: apiToken.baseId,
       })
       .from(apiToken)
       .where(and(eq(apiToken.userId, ctx.session.user.id), isNull(apiToken.revokedAt)))
@@ -33,7 +32,15 @@ export const tokenRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().trim().min(1).max(64) }))
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(64),
+        // Legacy API callers may omit fields. New UI callers supply all three.
+        baseId: z.string().nullable().default(null),
+        access: z.enum(['read', 'write']).default('write'),
+        expiresInDays: z.number().int().min(1).max(365).nullable().default(null),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const [cnt] = await db
         .select({ value: count() })
@@ -46,7 +53,14 @@ export const tokenRouter = router({
         });
       }
       // The plaintext token crosses the wire exactly once, in this response.
-      return createApiToken(ctx.session.user.id, input.name);
+      return createApiToken(ctx.session.user.id, input.name, {
+        baseId: input.baseId,
+        access: input.access,
+        expiresAt:
+          input.expiresInDays === null
+            ? null
+            : new Date(Date.now() + input.expiresInDays * 86_400_000),
+      });
     }),
 
   revoke: protectedProcedure

@@ -219,6 +219,11 @@ export const apiToken = pgTable(
     userId: text('user_id').notNull(),
     name: text('name').notNull(),
     tokenHash: text('token_hash').notNull(),
+    access: text('access', { enum: ['read', 'write'] })
+      .notNull()
+      .default('write'),
+    // Cascade: SET NULL would widen a bound credential into an all-base token.
+    baseId: text('base_id').references(() => base.id, { onDelete: 'cascade' }),
     tokenPrefix: text('token_prefix').notNull(), // first 12 chars of `mpk_…`, display-only
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
