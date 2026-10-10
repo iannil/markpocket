@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, or } from 'drizzle-orm';
 import type { appRouter } from '../trpc/router';
 import type { Context } from '../trpc/init';
 
@@ -68,10 +68,24 @@ export async function withDbFixture<T>(run: (fixture: DbFixture) => Promise<T>):
       viewer: caller(viewerId),
     });
   } finally {
-    // History has no FK: remove only entries attributed to our random users.
+    // History has no FK: remove our users’ history and anonymous history of owned cells.
+    // Tests that clear anonymous cells must retain their IDs and clean history explicitly.
     // F3 must also remove its no-FK receipts by these users' actorKey values.
     await db.transaction(async (tx) => {
-      await tx.delete(s.cellHistory).where(inArray(s.cellHistory.changedBy, [userId, viewerId]));
+      const ownedCells = tx
+        .select({ id: s.cell.id })
+        .from(s.cell)
+        .innerJoin(s.record, eq(s.record.id, s.cell.recordId))
+        .innerJoin(s.table, eq(s.table.id, s.record.tableId))
+        .where(eq(s.table.baseId, baseId));
+      await tx
+        .delete(s.cellHistory)
+        .where(
+          or(
+            inArray(s.cellHistory.changedBy, [userId, viewerId]),
+            inArray(s.cellHistory.cellId, ownedCells),
+          ),
+        );
       await tx.delete(s.base).where(eq(s.base.id, baseId));
       await tx.delete(s.user).where(inArray(s.user.id, [userId, viewerId]));
     });

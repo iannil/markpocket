@@ -26,7 +26,7 @@ async function writeExpressionCell(
   recordId: string,
   expressionFieldId: string,
   result: ReturnType<typeof evaluateExpression>,
-  userId: string,
+  userId: string | null,
 ): Promise<RecomputedCell> {
   const [existing] = await tx
     .select()
@@ -104,7 +104,7 @@ export async function materializeExpressionsForRecord(
   tx: DbTx,
   tableId: string,
   recordId: string,
-  userId: string,
+  userId: string | null,
   changedFieldId?: string,
 ): Promise<RecomputedCell[]> {
   const exprFields = await tx
@@ -144,7 +144,7 @@ export async function backfillExpressionField(
   tableId: string,
   expressionFieldId: string,
   expression: string,
-  userId: string,
+  userId: string | null,
 ): Promise<void> {
   // Keyset pagination on id — stable while the table receives concurrent writes.
   let lastId = '';
@@ -176,7 +176,7 @@ export async function backfillExpressionField(
         // the expression cell, not against the source-field writes that make
         // the snapshot stale). The record row lock is the one chokepoint every
         // cell.upsert passes before touching any cell of the record (its own
-        // lock order is advisory → record row → cells), so locking it
+        // lock order is record row → advisory → cells), so locking it
         // serializes the backfill against all of them at once:
         //   - backfill locks first → the upsert blocks at its record-row
         //     UPDATE until the batch commits, then writes the new source value
@@ -188,9 +188,9 @@ export async function backfillExpressionField(
         // Either interleaving lands on the correct final value.
         //
         // No new deadlock: on any single record every writer now takes
-        // record-row → cell-rows in that order (cell.upsert: advisory →
-        // record → cells; record.delete: record → referencing cells; this
-        // loop: record → cells), and the backfill never holds a cell-row lock
+        // record-row → cell-rows in that order (cell.upsert: record → advisory →
+        // cells; record.delete: record → referencing cells; this loop: record →
+        // cells), and the backfill never holds a cell-row lock
         // before acquiring a record-row lock. Records are locked one at a
         // time, in the batch's ORDER BY record.id sequence, so two concurrent
         // backfills over the same table acquire records in the same ascending

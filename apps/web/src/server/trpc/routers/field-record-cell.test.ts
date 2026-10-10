@@ -313,10 +313,12 @@ describe('cellRouter', () => {
     const ch = (mockDb.db.select as any)();
     ch.limit.mockReturnValue(ch);
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
-    // Awaited reads in order: field (link), record scope, existingRecordIds.
+    // Awaited reads: router field, helper field, record scope, record lock, references.
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
       [{ tableId: 't1' }],
+      [{ id: 'r1' }], // record lock acquired before reference validation
       [{ id: 'rOther' }], // only rOther exists in t2 — rMissing is dangling
     ]);
     await expect(
@@ -334,15 +336,11 @@ describe('cellRouter', () => {
     ch.limit.mockReturnValue(ch);
     ch.for.mockClear();
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
-    // Awaited reads in order: field (link), record scope, existingRecordIds
-    // (pre-transaction fast fail), the early record-row UPDATE (locks the
-    // target of the write before any cell row), existingRecordIds again
-    // (authoritative re-check under the advisory lock), existing cell
-    // (none → insert path).
+    // Router/helper field reads, record scope/lock, references, existing cell.
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
       [{ tableId: 't1' }],
-      [{ id: 'rOk' }],
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
       [{ id: 'rOk' }], // in-transaction re-validation still sees rOk
       [], // no existing cell → insert path
@@ -364,13 +362,11 @@ describe('cellRouter', () => {
     const ch = (mockDb.db.select as any)();
     ch.limit.mockReturnValue(ch);
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
-    // The pre-transaction pass still sees the record; the in-transaction
-    // re-check (after the advisory lock) finds it gone — the lock-side verdict
-    // wins and the write is rejected (TOCTOU).
+    // The authoritative reference check runs after the record/advisory locks.
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
+      [{ id: 'f1', tableId: 't1', type: 'link', options: { targetTableId: 't2' } }],
       [{ tableId: 't1' }],
-      [{ id: 'rVanished' }], // fast-fail pass: exists
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
       [], // in-lock re-check: deleted meanwhile
     ]);
@@ -414,6 +410,7 @@ describe('cellRouter', () => {
     // materialize selects.
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
       [{ tableId: 't1' }],
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
       [{ id: 'c1', recordId: 'r1', fieldId: 'f1', value: 'old', updatedAt: new Date() }],
@@ -432,6 +429,7 @@ describe('cellRouter', () => {
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
       [{ tableId: 't1' }],
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
       [{ id: 'c1', recordId: 'r1', fieldId: 'f1', value: 'old', updatedAt: new Date() }],
@@ -448,6 +446,7 @@ describe('cellRouter', () => {
     ch.limit.mockReturnValue(ch);
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
     queueChainResults(ch, [
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
       [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
       [{ tableId: 't1' }],
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
@@ -472,6 +471,7 @@ describe('cellRouter', () => {
     // for c9.
     queueChainResults(ch, [
       [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
+      [{ id: 'f1', tableId: 't1', type: 'text', options: {} }],
       [{ tableId: 't1' }],
       [{ id: 'r1' }], // early UPDATE record returning — row still exists
       [], // no existing cell
@@ -494,22 +494,22 @@ describe('cellRouter', () => {
     (mockDb.db.transaction as any).mockImplementation((cb: any) => cb(ch));
     ch.update.mockClear();
     ch.select.mockClear();
+    ch.execute.mockClear();
     ch.then = (onfulfilled: any) =>
       Promise.resolve([{ id: 'f1', tableId: 't1', type: 'text', options: {} }]).then(onfulfilled);
     await cellRouter
       .createCaller(session())
       .upsert({ recordId: 'r1', fieldId: 'f1', value: 'hello' });
 
-    // record.delete reaches the record row last (its cell scan runs first, and
-    // the DELETE's cascade re-locks this record's cells after the record row),
-    // so upsert must reach it first — otherwise cell-then-record vs
-    // record-then-cell forms an AB-BA deadlock on the {record, cell} pair.
-    // The first in-transaction statement after the advisory lock is therefore
-    // the record UPDATE, before the existing-cell select.
+    // Ownership SELECTs precede the row lock; the cell SELECT follows it.
+    // The record lock must also precede the advisory key used by batch callers.
+    expect(ch.update.mock.invocationCallOrder[0]).toBeLessThan(
+      ch.execute.mock.invocationCallOrder[0],
+    );
     const recordUpdates = ch.update.mock.calls.filter((args: any[]) => args[0] === recordTable);
     expect(recordUpdates).toHaveLength(1);
     expect(ch.update.mock.invocationCallOrder[0]).toBeLessThan(
-      ch.select.mock.invocationCallOrder[0],
+      ch.select.mock.invocationCallOrder[2],
     );
   });
 
