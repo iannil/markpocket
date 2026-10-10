@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -99,7 +99,48 @@ export const fieldRouter = router({
         .select()
         .from(field)
         .where(eq(field.tableId, input.tableId))
-        .orderBy(field.orderIndex);
+        .orderBy(asc(field.orderIndex), asc(field.createdAt), asc(field.id));
+    }),
+
+  reorder: protectedProcedure
+    .input(
+      z.object({
+        tableId: z.string(),
+        fieldIds: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(1000)
+          .refine((ids) => new Set(ids).size === ids.length, 'Duplicate field IDs'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertTableRole(input.tableId, ctx.session.user.id, 'editor');
+      await mapBusyToConflict(
+        db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext('field-order:' || ${input.tableId}))`,
+          );
+          const rows = await tx
+            .select({ id: field.id })
+            .from(field)
+            .where(eq(field.tableId, input.tableId));
+          const allowed = new Set(rows.map((row) => row.id));
+          if (
+            rows.length !== input.fieldIds.length ||
+            input.fieldIds.some((id) => !allowed.has(id))
+          ) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Fields changed; reload before reordering',
+            });
+          }
+          for (const [orderIndex, id] of input.fieldIds.entries()) {
+            await tx.update(field).set({ orderIndex }).where(eq(field.id, id));
+          }
+        }),
+      );
+      void publishTableChange(input.tableId, ctx.session.user.id);
+      return { ok: true };
     }),
 
   create: protectedProcedure
@@ -127,6 +168,15 @@ export const fieldRouter = router({
       }
       const row = await mapBusyToConflict(
         db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext('field-order:' || ${input.tableId}))`,
+          );
+          const [last] = await tx
+            .select({ orderIndex: field.orderIndex })
+            .from(field)
+            .where(eq(field.tableId, input.tableId))
+            .orderBy(sql`${field.orderIndex} DESC`)
+            .limit(1);
           // Link validation runs in-transaction with the FOR UPDATE target-row
           // lock (see assertLinkTargetInBase) so it serializes against
           // table.delete's final transaction.
@@ -143,6 +193,7 @@ export const fieldRouter = router({
               id: randomUUID(),
               tableId: input.tableId,
               name: input.name,
+              orderIndex: (last?.orderIndex ?? -1) + 1,
               type: input.type,
               options,
             })
@@ -303,6 +354,10 @@ export const fieldRouter = router({
       // hiddenFields references don't change which rows a share exposes).
       await mapBusyToConflict(
         db.transaction(async (tx) => {
+          // Always acquire field-order before view-options to avoid deadlocks.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext('field-order:' || ${existing.tableId}))`,
+          );
           // Serialize against view.updateOptions writers on this table: under
           // READ COMMITTED an options write committing after the view scan below
           // stays invisible to this transaction — a filter referencing the dying

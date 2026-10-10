@@ -1178,6 +1178,8 @@ export function GridEditor({ baseId, tableId }: { baseId: string; tableId: strin
             onChange={(s) => patchOptions({ sort: s })}
           />
           <ViewFieldsMenu
+            tableId={tableId}
+            readOnly={isViewer}
             fields={fields}
             hiddenFields={hiddenFields}
             onChange={(ids) => patchOptions({ hiddenFields: ids })}
