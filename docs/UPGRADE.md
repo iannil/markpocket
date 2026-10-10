@@ -1,5 +1,26 @@
 # Upgrade Guide
 
+## P0–P2 candidate preparation (unreleased)
+
+The recovery baseline is prepared, but final candidate installation, upgrade, old-snapshot recovery and missing-Webhook-key acceptance remain pending. Run those checks once all F/P/I migrations and I6 are complete; see [the actual preparation evidence](release/2026-10-10-p0-p2-evidence.md#m4-recovery-preparation-final-candidate-acceptance-pending). No P0–P2 image or tag has been published.
+
+The currently generated migrations after 0013 are:
+
+| Migration | Change |
+| --- | --- |
+| `0014_clever_mantis.sql` | `airtable_import_receipt` stores the result for an imported request and references its created Base. |
+| `0015_adorable_virginia_dare.sql` | `write_receipt` stores atomic write results under `(actor_key, request_id)` and indexes receipt retention time. |
+
+Forms and integrations will add generated migrations later in this plan. Resolve their exact filenames from `apps/web/src/server/db/migrations/meta/_journal.json` after the final generation; do not guess migration numbers or treat the table above as the final release schema. Production Docker startup applies the image's pending migrations before serving traffic.
+
+Before upgrading, freeze application writes, direct SQL writers, importers and attachment writers, then use the exact two-argument [backup command](BACKUP.md#create-a-backup). Preserve the old image by immutable image ID, the checked database dump, matching `data/` archive and protected deployment configuration, including the Webhook encryption key when configured. Resume writes only after deciding the recovery point is acceptable.
+
+Validate the final image against an empty isolated database, then upgrade the disposable old baseline and compare the original record IDs and attachment bytes. Compare the image's migration journal with applied hashes; a healthy endpoint alone does not prove that migrations or data preservation passed. Restore the pre-upgrade dump and attachment archive to a second empty isolated instance using the exact old image and configuration, and compare the same record IDs and hashes.
+
+For rollback, stop writes to the upgraded instance and recover the old image with its pre-upgrade schema snapshot and matching attachment archive in a new instance. There are no down migrations. Never run the old program against the upgraded database as a rollback. Records, anonymous Form submissions and other changes after the snapshot are outside that recovery point and will be lost if you return to it. Reconcile them separately before switching traffic.
+
+After Webhooks are implemented, also test an isolated final-image instance with an encrypted subscription and pending deliveries, then remove `WEBHOOK_ENCRYPTION_KEY` and restart its web service. Confirm delivery is explicitly disabled and pending deliveries remain intact without claims or attempt increments; keep the protected original key for recovery. This negative case is pending in the preparation evidence and must pass before final M4 acceptance.
+
 ## From v0.0.0 to v1.0.0-alpha.1
 
 ### Database Migrations

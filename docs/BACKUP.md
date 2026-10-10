@@ -4,6 +4,14 @@ This procedure backs up the PostgreSQL database and the default local attachment
 
 Save `.env` authentication settings and other deployment configuration separately in a protected location. Never commit them or post them in a public issue. Backups contain business data, users, and authentication tables, so store them in an access-controlled directory. SHA-256 checks detect damage; they do not encrypt the backup or authenticate its origin.
 
+## Form and Webhook recovery configuration
+
+For the forthcoming P0–P2 Form/Webhook features, the database snapshot must include Form publications, submission audits and write receipts together with encrypted Webhook subscriptions and delivery state. Preserve any distributed Form links separately in protected storage: publication tokens are stored as hashes and cannot be reconstructed from a database dump. A rollback to an earlier snapshot loses later Form submissions and publication changes.
+
+When Webhooks are configured, separately back up the exact `WEBHOOK_ENCRYPTION_KEY` from the deployed environment, alongside the authentication settings. It is a canonical base64 encoding of 32 random bytes, independent of `BETTER_AUTH_SECRET`, and is required to decrypt stored endpoint signing secrets. Restore the same key with the matching database snapshot; generating a replacement key does not recover existing encrypted secrets. Keep the key offline or in access-controlled secret storage, never in Git, public evidence or command output. `backup-instance.sh` copies the database and `data/`; it does **not** copy `.env` or this key.
+
+The forthcoming final-image acceptance must verify that a missing key disables Webhook sending explicitly while retaining pending deliveries. That behavior is not yet runtime-verified by the [P0–P2 preparation evidence](release/2026-10-10-p0-p2-evidence.md#m4-recovery-preparation-final-candidate-acceptance-pending). Restore the protected key and restart the matching version before expecting pending deliveries to resume; validate the final implementation's reported status and queue first.
+
 ## Create a backup
 
 The instance directory must contain `docker-compose.yml` and `.env`, with PostgreSQL running. The script requires a source commit SHA and application version in its manifest. In a source checkout, it reads the SHA from Git and the version from `package.json`. For a deployed directory without those files, set `MARKPOCKET_SOURCE_COMMIT` to the exact deployed code commit and `MARKPOCKET_SOURCE_VERSION` to the deployed application version before running it. If either value is unavailable, the script fails before stopping `web`.
