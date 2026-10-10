@@ -29,6 +29,7 @@ export function BoardSettings({
   const config = draft?.config ?? saved ?? { groupFieldId: '' };
   const conflict = draft !== null && draft.baseline !== snapshot;
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const utils = trpc.useUtils();
   const save = trpc.view.updateOptions.useMutation();
   const mounted = useRef(false);
@@ -40,6 +41,7 @@ export function BoardSettings({
     };
   }, []);
   function update(next: KanbanConfig) {
+    if (submitting.current) return;
     onEditing();
     setError('');
     setDraft({ config: next, baseline: draft?.baseline ?? snapshot });
@@ -47,6 +49,7 @@ export function BoardSettings({
   async function submit() {
     if (conflict || save.isPending || submitting.current) return;
     submitting.current = true;
+    setSaving(true);
     try {
       validateKanbanFields(config, fields);
       await save.mutateAsync({ id: viewId, options: { ...options, kanban: config } });
@@ -62,6 +65,7 @@ export function BoardSettings({
       toast.error(message);
     } finally {
       submitting.current = false;
+      if (mounted.current) setSaving(false);
     }
   }
   return (
@@ -76,6 +80,7 @@ export function BoardSettings({
         Status field
         <select
           aria-label="Status field"
+          disabled={saving || save.isPending}
           className="ml-2 rounded border bg-background p-2"
           value={config.groupFieldId}
           onChange={(event) => update({ ...config, groupFieldId: event.target.value })}
@@ -94,6 +99,7 @@ export function BoardSettings({
         Title field
         <select
           aria-label="Title field"
+          disabled={saving || save.isPending}
           className="ml-2 rounded border bg-background p-2"
           value={config.titleFieldId ?? ''}
           onChange={(event) =>
@@ -113,7 +119,11 @@ export function BoardSettings({
             ))}
         </select>
       </label>
-      <Button type="submit" size="sm" disabled={save.isPending || conflict || !config.groupFieldId}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={saving || save.isPending || conflict || !config.groupFieldId}
+      >
         Save board
       </Button>
       {draft && (
@@ -121,7 +131,9 @@ export function BoardSettings({
           type="button"
           size="sm"
           variant="ghost"
+          disabled={saving || save.isPending}
           onClick={() => {
+            if (submitting.current) return;
             setDraft(null);
             setError('');
           }}
