@@ -78,6 +78,7 @@ Auth column: **P** = protectedProcedure (requires session), **Pub** = publicProc
 |-----------|------|-------|--------|-------------|
 | `list` | P | `{ tableId: string; viewId?: string; offset?: number (min 0) }` | `{ groups: RecordGroup[]; total: number }` | Lists records with pivoted cell values. Applies view filter/sort/group when `viewId` is provided. Paginated with 100-record page size. |
 | `create` | P | `{ tableId: string }` | `Record` | Creates a new empty record. Requires **editor** role. Sets `createdBy` to the current user. Publishes change. |
+| `writeBatch` | P | `{ tableId: string; requestId: UUID; rows: { recordId?: string; cells: Record<string, unknown> }[] }` | `{ recordIds: string[]; created: number; updated: number }` | Requires **editor**. Atomic create/update; same-table IDs, no duplicate record IDs or expression writes. At most 100 rows, 500 cells, 1 MiB UTF-8 JSON total and 256 KiB per cell; 30s statement timeout. IDs preserve input order. |
 | `delete` | P | `{ id: string; tableId: string }` | `{ ok: true }` | Deletes a record. Requires **editor** role. Cascade-cleans link cells referencing this record id (GIN scan on JSONB arrays). Publishes change. |
 
 ---
@@ -175,3 +176,9 @@ Injected by the `@markpocket/plugin-csv` plugin via `...pluginRouters` (ADR-0008
 |-----------|------|-------|--------|-------------|
 | `import` | P | `{ tableId: string, csvText: string (≤5MB UTF-8 bytes) }` | import report (rowCount, skippedHeaders, emptyCellRows, partial-failure marker) | Parses CSV and writes records through the core write path (expression cells materialize). Editor+ on the table. |
 | `export` | P | `{ tableId: string }` | `{ csv: string; truncated: false; exported: number }` | Exports every record within the budget (injection-neutralized). Viewer+. The 100,000-row, 8 MiB CSV, and 16 MiB raw page limits fail explicitly without a partial file. `truncated` remains for compatibility and is always `false`. CSV omits attachment files, permissions, and history; use an instance backup to preserve them. |
+
+### Atomic batch retries
+
+`record.writeBatch` commits records, cell history, expressions and the retry receipt together. Any invalid cell rejects the whole batch. Reuse the same UUID and unchanged body after a lost response: the server returns the original result, including created record IDs. Cell-map key order is ignored; row order is significant. Reusing a UUID with a different body returns `CONFLICT`. Receipt scope is the authenticated user, and authorization is checked again on replay.
+
+Receipts are retained for seven days, with bounded cleanup on subsequent writes. Clients must stop replaying after that window and reconcile records before starting a new request; replay is no longer guaranteed. This foundation exposes the protected tRPC API; Grid paste and public Form interfaces are subsequent work. Existing REST create/update endpoints keep their partial-success `cellErrors` contract.

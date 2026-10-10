@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — atomic write foundation (2026-10-10)
+
+- Added protected `record.writeBatch` for bounded atomic creates/updates, transactional expression/history writes and seven-day idempotent retry receipts (migration 0015). Existing REST partial-success `cellErrors` behavior remains supported.
+- Shared the cell transaction writer with nullable actor attribution for future anonymous submissions. Added isolated PostgreSQL tests for rollback, permissions, limits, receipt collisions/cleanup and concurrent public batch/single-cell APIs.
+- See [API contract](docs/api/routers.md#atomic-batch-retries) and [foundation evidence](docs/release/2026-10-10-p0-p2-evidence.md). This is local implementation and fixture verification, not a release; later P0–P2 features and live Airtable acceptance remain outstanding.
+
 ## Unreleased — Airtable import preview
 
 - Added an authenticated Airtable import wizard that previews field conversions and skipped fields, copies supported records and attachments into a new Base, and returns a JSON issue report. It uses read-only PAT scopes, a durable receipt for idempotent retries, and a local-file recovery journal (migration 0014).

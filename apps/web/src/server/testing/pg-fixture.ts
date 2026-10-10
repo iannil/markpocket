@@ -70,7 +70,7 @@ export async function withDbFixture<T>(run: (fixture: DbFixture) => Promise<T>):
   } finally {
     // History has no FK: remove our users’ history and anonymous history of owned cells.
     // Tests that clear anonymous cells must retain their IDs and clean history explicitly.
-    // F3 must also remove its no-FK receipts by these users' actorKey values.
+    // Receipts have no FK and are scoped to fixture users.
     await db.transaction(async (tx) => {
       const ownedCells = tx
         .select({ id: s.cell.id })
@@ -86,6 +86,12 @@ export async function withDbFixture<T>(run: (fixture: DbFixture) => Promise<T>):
             inArray(s.cellHistory.cellId, ownedCells),
           ),
         );
+      await tx.delete(s.writeReceipt).where(
+        inArray(
+          s.writeReceipt.actorKey,
+          [userId, viewerId].map((id) => `user:${id}`),
+        ),
+      );
       await tx.delete(s.base).where(eq(s.base.id, baseId));
       await tx.delete(s.user).where(inArray(s.user.id, [userId, viewerId]));
     });

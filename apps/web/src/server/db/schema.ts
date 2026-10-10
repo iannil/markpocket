@@ -268,3 +268,18 @@ export const airtableImportReceipt = pgTable('airtable_import_receipt', {
   report: jsonb('report').$type<import('../imports/airtable/types').ImportReport>().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const writeReceipt = pgTable(
+  'write_receipt',
+  {
+    actorKey: text('actor_key').notNull(),
+    requestId: uuid('request_id').notNull(),
+    bodyHash: text('body_hash').notNull(),
+    result: jsonb('result').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.actorKey, t.requestId] }),
+    createdAtIdx: index('write_receipt_created_at_idx').on(t.createdAt),
+  }),
+);

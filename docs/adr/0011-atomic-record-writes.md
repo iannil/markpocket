@@ -1,6 +1,6 @@
 # ADR-0011: Atomic record writes and retry receipts
 
-- Status: Accepted contract; F1 supplies test infrastructure, F2–F3 implement the writer and receipts.
+- Status: Accepted and implemented in foundation F1–F3; locally verified, unreleased.
 - Date: 2026-10-10
 - Related: ADR-0001, ADR-0003, ADR-0004, ADR-0005; Airtable P0–P2 foundation.
 
@@ -18,6 +18,6 @@ Anonymous form writes use actorId=null for record createdBy and history changedB
 
 ## Verification and consequences
 
-Use opt-in real PostgreSQL tests against a database named `markpocket_p0p2_*`. The shared fixture uses random user/base/table/field IDs with the default workspace, so base.list exercises the real single-tenant scope. Cleanup deletes only fixture-owned history, its random base and users; it never deletes the shared workspace. F3 must extend cleanup to no-FK receipts by fixture actorKey (and publication actor keys when form fixtures are introduced).
+Use opt-in real PostgreSQL tests against a database named `markpocket_p0p2_*`. The shared fixture uses random user/base/table/field IDs with the default workspace, so base.list exercises the real single-tenant scope. Cleanup deletes only fixture-owned history, its random base and users; it never deletes the shared workspace. Cleanup includes no-FK receipts by fixture user actorKey; publication actor keys must be included when form fixtures are introduced.
 
 This keeps the single application process plus PostgreSQL architecture and adds no queue or runtime dependency. Atomic writes require bounded transactions and consistent lock ordering across entry points. Receipts trade bounded storage for safe retries within a clearly limited retention window.

@@ -16,7 +16,12 @@ import { publishTableChange } from '../../realtime/publish';
 import { assertTableRole, baseIdFromTable } from '@/lib/roles';
 import { protectedProcedure, router } from '../init';
 
+import { batchInputSchema, writeBatch } from '../../records/write-batch';
+
 export const recordRouter = router({
+  writeBatch: protectedProcedure
+    .input(batchInputSchema)
+    .mutation(({ ctx, input }) => writeBatch(ctx.session.user.id, input)),
   list: protectedProcedure
     .input(
       z.object({
